@@ -1,0 +1,3088 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#f7f7f5" />
+  <link rel="manifest" href="/manifest.json" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="個人資產總帳" />
+  <title>個人資產總帳</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&family=Noto+Sans+TC:wght@400;500;600&display=swap" rel="stylesheet" />
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/firebase@10.12.2/firebase-app-compat.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/firebase@10.12.2/firebase-auth-compat.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/firebase@10.12.2/firebase-firestore-compat.js"></script>
+  <style>
+    :root {
+      --bg-canvas: #f7f7f5;
+      --bg-surface: #ffffff;
+      --bg-subtle: #f1f1ee;
+      --border-hairline: rgba(24, 24, 27, 0.09);
+      --ink-primary: #18181b;
+      --ink-secondary: #52525b;
+      --ink-muted: #71717a;
+      --accent-ink: #18181b;
+    }
+    body {
+      font-family: 'Inter', 'Noto Sans TC', system-ui, -apple-system, sans-serif;
+      background-color: var(--bg-canvas);
+      color: var(--ink-primary);
+    }
+    .font-mono-num {
+      font-family: 'JetBrains Mono', 'Inter', monospace;
+      font-variant-numeric: tabular-nums;
+    }
+    .tabular-nums {
+      font-variant-numeric: tabular-nums;
+    }
+    .hairline {
+      border: 1px solid var(--border-hairline);
+    }
+    .hairline-b {
+      border-bottom: 1px solid var(--border-hairline);
+    }
+    .hairline-r {
+      border-right: 1px solid var(--border-hairline);
+    }
+    .hairline-t {
+      border-top: 1px solid var(--border-hairline);
+    }
+    .tab-btn {
+      color: var(--ink-secondary);
+    }
+    .tab-btn:hover {
+      background-color: rgba(24, 24, 27, 0.04);
+      color: var(--ink-primary);
+    }
+    .tab-btn.active {
+      background-color: #ffffff;
+      color: var(--ink-primary);
+      box-shadow: 0 1px 2px rgba(24, 24, 27, 0.05);
+      border: 1px solid var(--border-hairline);
+    }
+    .modal-backdrop {
+      background-color: rgba(24, 24, 27, 0.42);
+      backdrop-filter: blur(2px);
+    }
+    .btn-focus:focus-visible {
+      outline: none;
+      box-shadow: 0 0 0 2px rgba(24, 24, 27, 0.18);
+    }
+  </style>
+</head>
+<body class="min-h-screen antialiased">
+  <div class="min-h-screen flex flex-col lg:flex-row">
+    <!-- Left App Sidebar (248px on desktop, top bar on mobile) -->
+    <aside class="lg:w-64 lg:shrink-0 bg-[#f2f2ef] hairline-b lg:border-b-0 lg:hairline-r flex flex-col justify-between lg:sticky lg:top-0 lg:h-screen">
+      <div class="p-4 lg:p-5 space-y-5">
+        <!-- Brand & Live Signature Dot -->
+        <div class="flex items-center justify-between gap-3">
+          <div class="flex items-center gap-2.5 min-w-0">
+            <div class="w-7 h-7 rounded-lg bg-zinc-900 text-white flex items-center justify-center shrink-0">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 14l4-4 4 3 5-6"/></svg>
+            </div>
+            <div class="min-w-0">
+              <h1 class="text-sm font-semibold text-zinc-900 tracking-tight truncate">個人資產總帳</h1>
+              <div class="flex items-center gap-1.5 mt-0.5">
+                <span id="status-dot" class="w-1.5 h-1.5 rounded-full bg-zinc-400 shrink-0"></span>
+                <span id="sidebar-mode-label" class="text-[11px] text-zinc-500 truncate">本機暫存</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Navigation -->
+        <nav id="main-nav" class="flex lg:flex-col gap-1 overflow-x-auto lg:overflow-visible pb-1 lg:pb-0" aria-label="主要功能頁籤">
+          <div class="hidden lg:block px-2.5 pt-1 pb-1.5 text-[11px] font-medium text-zinc-400">資產總覽</div>
+          <button type="button" data-tab="overview" class="tab-btn active btn-focus flex items-center gap-2.5 h-9 px-2.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors duration-150">
+            <svg class="w-4 h-4 shrink-0 text-zinc-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
+            <span>總覽儀表板</span>
+          </button>
+          <button type="button" data-tab="stocks" class="tab-btn btn-focus flex items-center gap-2.5 h-9 px-2.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors duration-150">
+            <svg class="w-4 h-4 shrink-0 text-zinc-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
+            <span>股票與 ETF</span>
+          </button>
+          <button type="button" data-tab="cash" class="tab-btn btn-focus flex items-center gap-2.5 h-9 px-2.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors duration-150">
+            <svg class="w-4 h-4 shrink-0 text-zinc-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+            <span>銀行現金</span>
+          </button>
+          <button type="button" data-tab="investments" class="tab-btn btn-focus flex items-center gap-2.5 h-9 px-2.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors duration-150">
+            <svg class="w-4 h-4 shrink-0 text-zinc-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"/><path d="M5 21V7l8-4v18"/><path d="M19 21V11l-6-4"/></svg>
+            <span>實體投資</span>
+          </button>
+
+          <div class="hidden lg:block px-2.5 pt-4 pb-1.5 text-[11px] font-medium text-zinc-400">現金流與紀錄</div>
+          <button type="button" data-tab="income" class="tab-btn btn-focus flex items-center gap-2.5 h-9 px-2.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors duration-150">
+            <svg class="w-4 h-4 shrink-0 text-zinc-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+            <span>固定收入</span>
+          </button>
+          <button type="button" data-tab="expenses" class="tab-btn btn-focus flex items-center gap-2.5 h-9 px-2.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors duration-150">
+            <svg class="w-4 h-4 shrink-0 text-zinc-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z"/><path d="M8 7h8"/><path d="M8 11h8"/><path d="M8 15h5"/></svg>
+            <span>支出紀錄</span>
+          </button>
+          <button type="button" data-tab="fx" class="tab-btn btn-focus flex items-center gap-2.5 h-9 px-2.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors duration-150">
+            <svg class="w-4 h-4 shrink-0 text-zinc-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M7 16V4m0 0L3 8m4-4l4 4"/><path d="M17 8v12m0 0l4-4m-4 4l-4-4"/></svg>
+            <span>外幣交易</span>
+          </button>
+          <button type="button" data-tab="history" class="tab-btn btn-focus flex items-center gap-2.5 h-9 px-2.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors duration-150">
+            <svg class="w-4 h-4 shrink-0 text-zinc-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 15"/></svg>
+            <span>歷史紀錄</span>
+          </button>
+
+          <div class="hidden lg:block px-2.5 pt-4 pb-1.5 text-[11px] font-medium text-zinc-400">系統設定</div>
+          <button type="button" data-tab="settings" class="tab-btn btn-focus flex items-center gap-2.5 h-9 px-2.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors duration-150">
+            <svg class="w-4 h-4 shrink-0 text-zinc-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+            <span>匯率與備份</span>
+          </button>
+        </nav>
+      </div>
+
+      <!-- Quiet Sidebar Footer -->
+      <div class="hidden lg:block p-4 hairline-t space-y-2">
+        <div id="sidebar-fx-summary" class="text-[11px] font-mono-num text-zinc-500">USD 33.02 · HKD 4.21 · CNY 4.95</div>
+        <div class="flex items-center gap-1.5">
+          <button id="btn-header-export-json" type="button" class="btn-focus flex-1 h-8 rounded-lg bg-white hover:bg-zinc-50 hairline text-zinc-700 text-xs font-medium transition-colors duration-150">匯出 JSON</button>
+          <button id="btn-header-export-xlsx" type="button" class="btn-focus flex-1 h-8 rounded-lg bg-white hover:bg-zinc-50 hairline text-zinc-700 text-xs font-medium transition-colors duration-150">匯出 Excel</button>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Workspace Shell -->
+    <div class="flex-1 min-w-0 flex flex-col">
+      <!-- Quiet Top Action Bar -->
+      <header class="bg-[#f7f7f5]/95 backdrop-blur-sm hairline-b sticky top-0 z-20">
+        <div class="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 h-14 flex items-center justify-between gap-3">
+          <div class="min-w-0">
+            <p id="header-sync-status" class="text-xs text-zinc-500 truncate">本機暫存模式 · 台美港股、現金、實體投資與收支總帳</p>
+          </div>
+
+          <div class="flex items-center gap-2 shrink-0">
+            <button id="btn-google-auth" type="button" class="btn-focus h-8 px-3 rounded-lg text-zinc-600 hover:text-zinc-900 hover:bg-zinc-900/[0.04] text-xs font-medium transition-colors duration-150">
+              <span id="google-auth-label">Google 登入</span>
+            </button>
+            <button id="btn-refresh-prices" type="button" class="btn-focus inline-flex items-center gap-1.5 h-8 px-3 rounded-lg bg-white hover:bg-zinc-50 text-zinc-800 hairline text-xs font-medium transition-colors duration-150">
+              <svg class="w-3.5 h-3.5 text-zinc-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></svg>
+              <span>一鍵更新股價與匯率</span>
+            </button>
+            <button id="btn-quick-snapshot" type="button" class="btn-focus inline-flex items-center gap-1.5 h-8 px-3.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-medium transition-colors duration-150">
+              <span>儲存今日快照</span>
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <!-- Main Content Container -->
+      <main class="max-w-[1440px] w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 lg:py-8 space-y-6 flex-1">
+
+        <!-- TAB 1: OVERVIEW -->
+        <section id="tab-overview" class="tab-panel space-y-6">
+          <!-- 4 Clean Stat Cards (Numbers only, no pills or decorative icons) -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+            <div class="bg-white rounded-xl p-5 hairline">
+              <div class="flex items-baseline justify-between gap-2">
+                <span class="text-xs font-medium text-zinc-500">總資產淨值</span>
+                <span class="text-[11px] font-mono-num text-zinc-400">TWD</span>
+              </div>
+              <div id="kpi-total-networth" class="mt-2 text-2xl font-semibold text-zinc-900 font-mono-num tracking-tight">NT$ 0</div>
+              <p id="kpi-fx-hint" class="mt-2 text-xs font-mono-num text-zinc-500">USD 33.02 · HKD 4.21 · CNY 4.95</p>
+            </div>
+
+            <div class="bg-white rounded-xl p-5 hairline">
+              <div class="flex items-baseline justify-between gap-2">
+                <span class="text-xs font-medium text-zinc-500">銀行與券商現金</span>
+                <span id="kpi-cash-pct" class="text-xs font-mono-num text-zinc-500">0%</span>
+              </div>
+              <div id="kpi-total-cash" class="mt-2 text-2xl font-semibold text-zinc-900 font-mono-num tracking-tight">NT$ 0</div>
+              <p id="kpi-cash-count" class="mt-2 text-xs text-zinc-500">0 個跨幣別帳戶</p>
+            </div>
+
+            <div class="bg-white rounded-xl p-5 hairline">
+              <div class="flex items-baseline justify-between gap-2">
+                <span class="text-xs font-medium text-zinc-500">股票與黃金 ETF</span>
+                <span id="kpi-stocks-pct" class="text-xs font-mono-num text-zinc-500">0%</span>
+              </div>
+              <div id="kpi-total-stocks" class="mt-2 text-2xl font-semibold text-zinc-900 font-mono-num tracking-tight">NT$ 0</div>
+              <p id="kpi-stocks-pnl" class="mt-2 text-xs font-mono-num text-zinc-500">未實現損益 --</p>
+            </div>
+
+            <div class="bg-white rounded-xl p-5 hairline">
+              <div class="flex items-baseline justify-between gap-2">
+                <span class="text-xs font-medium text-zinc-500">實體與專案投資</span>
+                <span id="kpi-inv-pct" class="text-xs font-mono-num text-zinc-500">0%</span>
+              </div>
+              <div id="kpi-total-inv" class="mt-2 text-2xl font-semibold text-zinc-900 font-mono-num tracking-tight">NT$ 0</div>
+              <p id="kpi-inv-annual" class="mt-2 text-xs font-mono-num text-zinc-600">預估年收益 --</p>
+            </div>
+          </div>
+
+          <!-- Quiet Cashflow Strip -->
+          <div class="bg-white rounded-xl px-5 py-4 hairline flex flex-wrap items-center justify-between gap-4">
+            <div class="flex flex-wrap items-center gap-x-8 gap-y-3 text-xs">
+              <div>
+                <div class="text-zinc-500">固定收入（折合台幣）</div>
+                <div id="kpi-fixed-income" class="mt-0.5 text-sm font-medium text-zinc-900 font-mono-num">每月 NT$ 0 ｜ 每年 NT$ 0</div>
+              </div>
+              <div class="hidden sm:block h-7 w-px bg-zinc-900/[0.08]"></div>
+              <div>
+                <div class="text-zinc-500">預估月現金流（固定收入＋實體投資）</div>
+                <div id="kpi-combined-cashflow" class="mt-0.5 text-sm font-medium text-emerald-700 font-mono-num">NT$ 0 ～ NT$ 0 / 月</div>
+              </div>
+              <div class="hidden sm:block h-7 w-px bg-zinc-900/[0.08]"></div>
+              <div>
+                <div class="text-zinc-500">支出總覽（固定月均 / 本月隨機）</div>
+                <div id="kpi-expense-summary" class="mt-0.5 text-sm font-medium text-rose-700 font-mono-num">固定 NT$ 0 ｜ 本月隨機 NT$ 0</div>
+              </div>
+            </div>
+            <div class="flex items-center gap-4 text-xs">
+              <button id="btn-go-income" type="button" class="btn-focus font-medium text-zinc-700 hover:text-zinc-900 transition-colors duration-150">管理固定收入來源 →</button>
+              <button id="btn-go-expenses" type="button" class="btn-focus font-medium text-zinc-700 hover:text-zinc-900 transition-colors duration-150">支出紀錄 →</button>
+            </div>
+          </div>
+
+          <!-- Asymmetric Visual Hierarchy: Hero Trend Chart (8 cols) + Allocation Breakdown List (4 cols) -->
+          <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            <div class="lg:col-span-8 bg-white rounded-xl p-6 hairline flex flex-col justify-between">
+              <div class="flex flex-wrap items-baseline justify-between gap-2 mb-4">
+                <div>
+                  <h2 class="text-sm font-semibold text-zinc-900">總資產淨值歷史趨勢</h2>
+                  <p class="text-xs text-zinc-500 mt-0.5">每次儲存快照或補登歷史月份皆會即時繪製</p>
+                </div>
+                <button id="btn-go-history" type="button" class="btn-focus text-xs font-medium text-zinc-600 hover:text-zinc-900 transition-colors duration-150">前往補登歷史紀錄 →</button>
+              </div>
+              <div class="relative h-72">
+                <canvas id="chart-trend"></canvas>
+              </div>
+            </div>
+
+            <div class="lg:col-span-4 bg-white rounded-xl p-6 hairline flex flex-col justify-between gap-5">
+              <div>
+                <div class="flex items-baseline justify-between">
+                  <h2 class="text-sm font-semibold text-zinc-900">資產類別結構</h2>
+                  <span class="text-[11px] font-mono-num text-zinc-400">佔總淨值比</span>
+                </div>
+                <div id="allocation-bars" class="mt-5 space-y-4"></div>
+              </div>
+
+              <div class="pt-4 hairline-t">
+                <div class="flex items-baseline justify-between mb-3">
+                  <h3 class="text-xs font-medium text-zinc-500">結構圓環對照</h3>
+                  <span class="text-[11px] font-mono-num text-zinc-400">TWD</span>
+                </div>
+                <div class="relative h-36">
+                  <canvas id="chart-allocation"></canvas>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Secondary Row: Currency Exposure Bar Chart -->
+          <div class="bg-white rounded-xl p-6 hairline">
+            <div class="flex items-baseline justify-between mb-4">
+              <div>
+                <h2 class="text-sm font-semibold text-zinc-900">幣別曝險分佈</h2>
+                <p class="text-xs text-zinc-500 mt-0.5">合併計算現金、股票與實體投資折合台幣金額</p>
+              </div>
+              <span class="text-[11px] font-mono-num text-zinc-400">TWD / USD / HKD / CNY</span>
+            </div>
+            <div class="relative h-60">
+              <canvas id="chart-currency"></canvas>
+            </div>
+          </div>
+        </section>
+
+        <!-- TAB 2: STOCKS & ETF -->
+        <section id="tab-stocks" class="tab-panel hidden space-y-4">
+          <div class="bg-white rounded-xl p-6 hairline space-y-5">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 class="text-base font-semibold text-zinc-900">股票與 ETF 持倉明細</h2>
+                <p id="stock-last-updated" class="text-xs text-zinc-500 mt-0.5">台灣慣用色標（紅漲綠跌），可一鍵更新或批次調整現價</p>
+              </div>
+              <div class="flex flex-wrap items-center gap-2">
+                <label class="inline-flex items-center gap-1.5 text-xs text-zinc-600 bg-[#f7f7f5] px-3 h-8 rounded-lg hairline cursor-pointer select-none">
+                  <input id="chk-exclude-ibio" type="checkbox" class="rounded border-zinc-300 text-zinc-900 focus:ring-zinc-500" />
+                  <span>損益排除 IBIO</span>
+                </label>
+                <button id="btn-batch-price" type="button" class="btn-focus h-8 px-3 rounded-lg bg-white hover:bg-zinc-50 text-zinc-800 hairline text-xs font-medium transition-colors duration-150">批次更新現價</button>
+                <button id="btn-add-stock" type="button" class="btn-focus h-8 px-3.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-medium transition-colors duration-150">新增股票</button>
+              </div>
+            </div>
+
+            <div class="flex flex-wrap items-center justify-between gap-3 pt-1">
+              <div id="stock-market-filters" class="flex items-center gap-1.5 flex-wrap">
+                <button type="button" data-market="ALL" class="stock-filter-btn h-7 px-3 rounded-md text-xs font-medium bg-zinc-900 text-white transition-colors duration-150">全部</button>
+                <button type="button" data-market="TW" class="stock-filter-btn h-7 px-3 rounded-md text-xs font-medium bg-[#f7f7f5] text-zinc-600 hover:text-zinc-900 transition-colors duration-150">台股</button>
+                <button type="button" data-market="US" class="stock-filter-btn h-7 px-3 rounded-md text-xs font-medium bg-[#f7f7f5] text-zinc-600 hover:text-zinc-900 transition-colors duration-150">美股</button>
+                <button type="button" data-market="HK" class="stock-filter-btn h-7 px-3 rounded-md text-xs font-medium bg-[#f7f7f5] text-zinc-600 hover:text-zinc-900 transition-colors duration-150">港股</button>
+              </div>
+              <div id="stock-summary-bar" class="text-xs text-zinc-600 font-mono-num"></div>
+            </div>
+
+            <div class="overflow-x-auto">
+              <table class="w-full text-left border-collapse text-xs sm:text-sm">
+                <thead>
+                  <tr class="hairline-b text-zinc-500 font-medium text-xs">
+                    <th class="py-3 px-2 font-medium">代碼 / 名稱</th>
+                    <th class="py-3 px-2 font-medium">市場 / 帳戶</th>
+                    <th class="py-3 px-2 font-medium text-right">股數</th>
+                    <th class="py-3 px-2 font-medium text-right">均價</th>
+                    <th class="py-3 px-2 font-medium text-right">現價</th>
+                    <th class="py-3 px-2 font-medium text-right">市值 (原幣)</th>
+                    <th class="py-3 px-2 font-medium text-right">市值 (台幣)</th>
+                    <th class="py-3 px-2 font-medium text-right">未實現損益</th>
+                    <th class="py-3 px-2 font-medium text-right">操作</th>
+                  </tr>
+                </thead>
+                <tbody id="stocks-tbody" class="divide-y divide-zinc-900/[0.06] font-mono-num"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- TAB 3: CASH -->
+        <section id="tab-cash" class="tab-panel hidden space-y-4">
+          <div class="bg-white rounded-xl p-6 hairline space-y-5">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 class="text-base font-semibold text-zinc-900">銀行與券商現金帳戶</h2>
+                <p class="text-xs text-zinc-500 mt-0.5">跨台幣、美金、港幣、人民幣即時換算折合台幣</p>
+              </div>
+              <button id="btn-add-cash" type="button" class="btn-focus h-8 px-3.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-medium transition-colors duration-150">新增現金帳戶</button>
+            </div>
+
+            <div id="cash-currency-pills" class="grid grid-cols-2 sm:grid-cols-4 gap-3"></div>
+
+            <div class="overflow-x-auto">
+              <table class="w-full text-left border-collapse text-xs sm:text-sm">
+                <thead>
+                  <tr class="hairline-b text-zinc-500 text-xs">
+                    <th class="py-3 px-2 font-medium">機構 / 帳戶名稱</th>
+                    <th class="py-3 px-2 font-medium">幣別</th>
+                    <th class="py-3 px-2 font-medium text-right">原幣餘額</th>
+                    <th class="py-3 px-2 font-medium text-right">折合台幣 (TWD)</th>
+                    <th class="py-3 px-2 font-medium text-right">佔現金比</th>
+                    <th class="py-3 px-2 font-medium">備註</th>
+                    <th class="py-3 px-2 font-medium text-right">操作</th>
+                  </tr>
+                </thead>
+                <tbody id="cash-tbody" class="divide-y divide-zinc-900/[0.06] font-mono-num"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- TAB 4: PRIVATE INVESTMENTS -->
+        <section id="tab-investments" class="tab-panel hidden space-y-4">
+          <div class="bg-white rounded-xl p-6 hairline space-y-5">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 class="text-base font-semibold text-zinc-900">實體與專案投資</h2>
+                <p class="text-xs text-zinc-500 mt-0.5">追蹤投入本金、結算週期與預估年化現金流，並登記實際入帳</p>
+              </div>
+              <button id="btn-add-inv" type="button" class="btn-focus h-8 px-3.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-medium transition-colors duration-150">新增投資項目</button>
+            </div>
+
+            <div id="inv-summary-cards" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"></div>
+            <div id="inv-cards-grid" class="grid grid-cols-1 md:grid-cols-3 gap-4"></div>
+          </div>
+        </section>
+
+        <!-- TAB 5: FIXED INCOME -->
+        <section id="tab-income" class="tab-panel hidden space-y-4">
+          <div class="bg-white rounded-xl p-6 hairline space-y-5">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 class="text-base font-semibold text-zinc-900">固定收入來源</h2>
+                <p class="text-xs text-zinc-500 mt-0.5">記錄薪資、租金、顧問費與利息等週期性收入，自動換算月／年現金流</p>
+              </div>
+              <button id="btn-add-income" type="button" class="btn-focus h-8 px-3.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-medium transition-colors duration-150">新增固定收入</button>
+            </div>
+
+            <div id="income-summary-cards" class="grid grid-cols-1 sm:grid-cols-3 gap-4"></div>
+
+            <div class="overflow-x-auto">
+              <table class="w-full text-left border-collapse text-xs sm:text-sm">
+                <thead>
+                  <tr class="hairline-b text-zinc-500 text-xs">
+                    <th class="py-3 px-2 font-medium">收入名稱 / 類別</th>
+                    <th class="py-3 px-2 font-medium">週期 / 入帳日</th>
+                    <th class="py-3 px-2 font-medium text-right">單期金額 (原幣)</th>
+                    <th class="py-3 px-2 font-medium text-right">折合台幣月收入</th>
+                    <th class="py-3 px-2 font-medium text-right">折合台幣年收入</th>
+                    <th class="py-3 px-2 font-medium">入帳帳戶 / 備註</th>
+                    <th class="py-3 px-2 font-medium text-right">操作</th>
+                  </tr>
+                </thead>
+                <tbody id="income-tbody" class="divide-y divide-zinc-900/[0.06] font-mono-num"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- TAB 6: EXPENSES (FIXED + RANDOM) -->
+        <section id="tab-expenses" class="tab-panel hidden space-y-6">
+          <div id="expense-summary-cards" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"></div>
+
+          <div class="bg-white rounded-xl p-6 hairline space-y-4">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 class="text-base font-semibold text-zinc-900">固定支出管理</h2>
+                <p class="text-xs text-zinc-500 mt-0.5">週期性開銷（房租、保險、水電、訂閱制與孝親費），自動分攤月均與年化</p>
+              </div>
+              <button id="btn-add-fixed-exp" type="button" class="btn-focus h-8 px-3.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-medium transition-colors duration-150">新增固定支出</button>
+            </div>
+
+            <div class="overflow-x-auto">
+              <table class="w-full text-left border-collapse text-xs sm:text-sm">
+                <thead>
+                  <tr class="hairline-b text-zinc-500 text-xs">
+                    <th class="py-3 px-2 font-medium">項目名稱 / 類別</th>
+                    <th class="py-3 px-2 font-medium">週期 / 扣款日</th>
+                    <th class="py-3 px-2 font-medium text-right">單期金額 (原幣)</th>
+                    <th class="py-3 px-2 font-medium text-right">折合台幣月均</th>
+                    <th class="py-3 px-2 font-medium text-right">折合台幣年化</th>
+                    <th class="py-3 px-2 font-medium">扣款帳戶 / 備註</th>
+                    <th class="py-3 px-2 font-medium text-right">操作</th>
+                  </tr>
+                </thead>
+                <tbody id="fixed-exp-tbody" class="divide-y divide-zinc-900/[0.06] font-mono-num"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="bg-white rounded-xl p-6 hairline space-y-4">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 class="text-base font-semibold text-zinc-900">隨機與單筆支出</h2>
+                <p class="text-xs text-zinc-500 mt-0.5">日常餐飲、購物、旅遊、醫療與臨時消費，支援月份與類別篩選</p>
+              </div>
+              <div class="flex flex-wrap items-center gap-2">
+                <input id="filter-exp-month" type="month" class="h-8 px-2.5 rounded-lg hairline text-xs bg-white text-zinc-700" />
+                <select id="filter-exp-cat" class="h-8 px-2.5 rounded-lg hairline text-xs bg-white text-zinc-700">
+                  <option value="ALL">全部類別</option>
+                  <option value="餐飲美食">餐飲美食</option>
+                  <option value="交通旅遊">交通旅遊</option>
+                  <option value="購物消費">購物消費</option>
+                  <option value="醫療保健">醫療保健</option>
+                  <option value="休閒娛樂">休閒娛樂</option>
+                  <option value="居家修繕">居家修繕</option>
+                  <option value="社交禮金">社交禮金</option>
+                  <option value="其他隨機支出">其他隨機支出</option>
+                </select>
+                <button id="btn-clear-exp-filter" type="button" class="btn-focus h-8 px-2.5 rounded-lg bg-[#f7f7f5] hover:bg-zinc-200/70 text-zinc-600 text-xs font-medium transition-colors duration-150">全部期間</button>
+                <button id="btn-add-random-exp" type="button" class="btn-focus h-8 px-3.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-medium transition-colors duration-150">新增隨機支出</button>
+              </div>
+            </div>
+
+            <div id="random-exp-bar" class="text-xs text-zinc-600 font-mono-num"></div>
+
+            <div class="overflow-x-auto">
+              <table class="w-full text-left border-collapse text-xs sm:text-sm">
+                <thead>
+                  <tr class="hairline-b text-zinc-500 text-xs">
+                    <th class="py-3 px-2 font-medium">日期</th>
+                    <th class="py-3 px-2 font-medium">類別</th>
+                    <th class="py-3 px-2 font-medium">支出項目</th>
+                    <th class="py-3 px-2 font-medium text-right">原幣金額</th>
+                    <th class="py-3 px-2 font-medium text-right">折合台幣 (TWD)</th>
+                    <th class="py-3 px-2 font-medium">支付方式 / 備註</th>
+                    <th class="py-3 px-2 font-medium text-right">操作</th>
+                  </tr>
+                </thead>
+                <tbody id="random-exp-tbody" class="divide-y divide-zinc-900/[0.06] font-mono-num"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- TAB: FX TRADING & SPREAD CALCULATOR -->
+        <section id="tab-fx" class="tab-panel hidden space-y-6">
+          <div id="fx-summary-cards" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"></div>
+
+          <!-- Instant FX Spread / Profit Simulator -->
+          <div class="bg-white rounded-xl p-6 hairline space-y-4">
+            <div class="flex flex-wrap items-baseline justify-between gap-2">
+              <div>
+                <h2 class="text-base font-semibold text-zinc-900">即時換匯與匯差試算器</h2>
+                <p class="text-xs text-zinc-500 mt-0.5">輸入買入與預計賣出匯率，即時試算淨匯差損益、報酬率與損益兩平賣出價</p>
+              </div>
+              <button id="btn-fx-calc-fill-avg" type="button" class="btn-focus h-7 px-3 rounded-lg bg-[#f7f7f5] hover:bg-zinc-200/70 text-zinc-700 text-xs font-medium transition-colors duration-150">帶入該幣別目前均價與現價</button>
+            </div>
+
+            <div class="grid grid-cols-2 sm:grid-cols-5 gap-3">
+              <div>
+                <label for="fx-calc-cur" class="block text-xs font-medium text-zinc-600 mb-1">交易幣別</label>
+                <select id="fx-calc-cur" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white">
+                  <option value="USD">美金 USD</option>
+                  <option value="JPY">日圓 JPY</option>
+                  <option value="HKD">港幣 HKD</option>
+                  <option value="CNY">人民幣 CNY</option>
+                </select>
+              </div>
+              <div>
+                <label for="fx-calc-amt" class="block text-xs font-medium text-zinc-600 mb-1">外幣金額</label>
+                <input id="fx-calc-amt" type="number" step="0.01" min="0" value="1000" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" />
+              </div>
+              <div>
+                <label for="fx-calc-buy" class="block text-xs font-medium text-zinc-600 mb-1">買入匯率 (對台幣)</label>
+                <input id="fx-calc-buy" type="number" step="0.0001" min="0.0001" value="32.5000" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" />
+              </div>
+              <div>
+                <label for="fx-calc-sell" class="block text-xs font-medium text-zinc-600 mb-1">賣出 / 參考匯率</label>
+                <input id="fx-calc-sell" type="number" step="0.0001" min="0.0001" value="33.0220" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" />
+              </div>
+              <div>
+                <label for="fx-calc-fee" class="block text-xs font-medium text-zinc-600 mb-1">來回手續費 (TWD)</label>
+                <input id="fx-calc-fee" type="number" step="1" min="0" value="0" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" />
+              </div>
+            </div>
+
+            <div id="fx-calc-result" class="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-1"></div>
+          </div>
+
+          <!-- Per-Currency Position & Unrealized FX Gain/Loss -->
+          <div class="bg-white rounded-xl p-6 hairline space-y-4">
+            <div>
+              <h2 class="text-base font-semibold text-zinc-900">各外幣持倉均價與未實現匯差</h2>
+              <p class="text-xs text-zinc-500 mt-0.5">依買賣紀錄自動以「移動加權平均成本法」計算持倉均價、未實現與已實現匯差</p>
+            </div>
+            <div class="overflow-x-auto">
+              <table class="w-full text-left border-collapse text-xs sm:text-sm">
+                <thead>
+                  <tr class="hairline-b text-zinc-500 text-xs">
+                    <th class="py-3 px-2 font-medium">幣別</th>
+                    <th class="py-3 px-2 font-medium text-right">淨持有部位 (原幣)</th>
+                    <th class="py-3 px-2 font-medium text-right">加權平均買入匯率</th>
+                    <th class="py-3 px-2 font-medium text-right">目前即時匯率</th>
+                    <th class="py-3 px-2 font-medium text-right">未實現匯差 (TWD)</th>
+                    <th class="py-3 px-2 font-medium text-right">已實現匯差 (TWD)</th>
+                  </tr>
+                </thead>
+                <tbody id="fx-positions-tbody" class="divide-y divide-zinc-900/[0.06] font-mono-num"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- FX Trade Ledger -->
+          <div class="bg-white rounded-xl p-6 hairline space-y-4">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 class="text-base font-semibold text-zinc-900">外幣買賣交易紀錄</h2>
+                <p class="text-xs text-zinc-500 mt-0.5">登錄每筆換匯買入或賣出成交匯率與手續費，賣出時自動計算該筆已實現匯差</p>
+              </div>
+              <div class="flex flex-wrap items-center gap-2">
+                <select id="filter-fx-cur" class="h-8 px-2.5 rounded-lg hairline text-xs bg-white text-zinc-700">
+                  <option value="ALL">全部幣別</option>
+                  <option value="USD">USD</option>
+                  <option value="JPY">JPY</option>
+                  <option value="HKD">HKD</option>
+                  <option value="CNY">CNY</option>
+                </select>
+                <button id="btn-add-fx-trade" type="button" class="btn-focus h-8 px-3.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-medium transition-colors duration-150">新增外幣交易</button>
+              </div>
+            </div>
+
+            <div class="overflow-x-auto">
+              <table class="w-full text-left border-collapse text-xs sm:text-sm">
+                <thead>
+                  <tr class="hairline-b text-zinc-500 text-xs">
+                    <th class="py-3 px-2 font-medium">日期</th>
+                    <th class="py-3 px-2 font-medium">方向 / 幣別</th>
+                    <th class="py-3 px-2 font-medium text-right">外幣金額</th>
+                    <th class="py-3 px-2 font-medium text-right">成交匯率</th>
+                    <th class="py-3 px-2 font-medium text-right">折合台幣</th>
+                    <th class="py-3 px-2 font-medium text-right">手續費</th>
+                    <th class="py-3 px-2 font-medium text-right">已實現匯差</th>
+                    <th class="py-3 px-2 font-medium">帳戶 / 備註</th>
+                    <th class="py-3 px-2 font-medium text-right">操作</th>
+                  </tr>
+                </thead>
+                <tbody id="fx-trades-tbody" class="divide-y divide-zinc-900/[0.06] font-mono-num"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- TAB 7: HISTORY & SNAPSHOTS -->
+        <section id="tab-history" class="tab-panel hidden space-y-6">
+          <div class="bg-white rounded-xl p-6 hairline space-y-4">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 class="text-base font-semibold text-zinc-900">資產淨值歷史快照</h2>
+                <p class="text-xs text-zinc-500 mt-0.5">支援補登過去月份與追蹤未來變化，即時連動總覽趨勢圖</p>
+              </div>
+              <div class="flex items-center gap-2">
+                <button id="btn-history-save-today" type="button" class="btn-focus h-8 px-3 rounded-lg bg-white hover:bg-zinc-50 text-zinc-800 hairline text-xs font-medium transition-colors duration-150">儲存今日現況</button>
+                <button id="btn-add-snapshot" type="button" class="btn-focus h-8 px-3.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-medium transition-colors duration-150">手動補登歷史</button>
+              </div>
+            </div>
+
+            <div class="overflow-x-auto">
+              <table class="w-full text-left border-collapse text-xs sm:text-sm">
+                <thead>
+                  <tr class="hairline-b text-zinc-500 text-xs">
+                    <th class="py-3 px-2 font-medium">日期</th>
+                    <th class="py-3 px-2 font-medium text-right">現金 (TWD)</th>
+                    <th class="py-3 px-2 font-medium text-right">股票 ETF (TWD)</th>
+                    <th class="py-3 px-2 font-medium text-right">實體投資 (TWD)</th>
+                    <th class="py-3 px-2 font-medium text-right">總資產淨值 (TWD)</th>
+                    <th class="py-3 px-2 font-medium">備註</th>
+                    <th class="py-3 px-2 font-medium text-right">操作</th>
+                  </tr>
+                </thead>
+                <tbody id="snapshots-tbody" class="divide-y divide-zinc-900/[0.06] font-mono-num"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="bg-white rounded-xl p-6 hairline space-y-4">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 class="text-base font-semibold text-zinc-900">配息、結算分紅與收支流水</h2>
+                <p class="text-xs text-zinc-500 mt-0.5">記錄專案分紅入帳、股票股利、固定扣款或大額資金異動</p>
+              </div>
+              <button id="btn-add-ledger" type="button" class="btn-focus h-8 px-3.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-medium transition-colors duration-150">新增流水紀錄</button>
+            </div>
+
+            <div class="overflow-x-auto">
+              <table class="w-full text-left border-collapse text-xs sm:text-sm">
+                <thead>
+                  <tr class="hairline-b text-zinc-500 text-xs">
+                    <th class="py-3 px-2 font-medium">日期</th>
+                    <th class="py-3 px-2 font-medium">類型</th>
+                    <th class="py-3 px-2 font-medium">項目名稱</th>
+                    <th class="py-3 px-2 font-medium text-right">金額 (TWD)</th>
+                    <th class="py-3 px-2 font-medium">備註</th>
+                    <th class="py-3 px-2 font-medium text-right">操作</th>
+                  </tr>
+                </thead>
+                <tbody id="ledger-tbody" class="divide-y divide-zinc-900/[0.06] font-mono-num"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- TAB 8: SETTINGS, CLOUD SYNC & BACKUP -->
+        <section id="tab-settings" class="tab-panel hidden space-y-6">
+          <!-- Live Quote Feed -->
+          <div class="bg-white rounded-xl p-6 hairline space-y-4">
+            <div>
+              <h2 class="text-base font-semibold text-zinc-900">一鍵更新股價與匯率來源</h2>
+              <p class="text-xs text-zinc-500 mt-0.5">匯率已內建公開即時接口；股票支援綁定 Google 試算表發布 CSV（支援台美港股）或 Finnhub 美股 API Key</p>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div class="p-4 rounded-lg bg-[#f7f7f5] hairline space-y-2">
+                <label for="cfg-gsheet-csv" class="block text-xs font-medium text-zinc-700">Google 試算表報價 CSV 連結（推薦）</label>
+                <input id="cfg-gsheet-csv" type="url" placeholder="https://docs.google.com/spreadsheets/d/.../pub?output=csv" class="w-full h-9 px-3 rounded-lg hairline bg-white text-xs font-mono-num" />
+                <p class="text-xs text-zinc-500">將「網頁報價連動」分頁發布為 CSV 並貼上此處，即可一鍵同步台美港股價</p>
+              </div>
+              <div class="p-4 rounded-lg bg-[#f7f7f5] hairline space-y-2">
+                <label for="cfg-finnhub-key" class="block text-xs font-medium text-zinc-700">Finnhub 美股 API Key（選填）</label>
+                <input id="cfg-finnhub-key" type="text" placeholder="輸入 Finnhub API Key" class="w-full h-9 px-3 rounded-lg hairline bg-white text-xs font-mono-num" />
+                <p class="text-xs text-zinc-500">填入後自動更新所有美股最新成交價</p>
+              </div>
+            </div>
+            <div class="flex flex-wrap items-center justify-between gap-3 pt-1">
+              <div class="flex flex-wrap items-center gap-3 text-xs text-zinc-700">
+                <label class="inline-flex items-center gap-1.5 cursor-pointer select-none">
+                  <input id="cfg-auto-refresh" type="checkbox" checked class="rounded border-zinc-300 text-zinc-900" />
+                  <span>開啟網頁自動更新股價與匯率（跨裝置同步設定）</span>
+                </label>
+                <select id="cfg-refresh-interval" class="h-8 px-2.5 rounded-lg hairline bg-white text-xs text-zinc-700">
+                  <option value="0">僅開啟時更新</option>
+                  <option value="1">每 1 分鐘自動更新</option>
+                  <option value="5" selected>每 5 分鐘自動更新</option>
+                  <option value="15">每 15 分鐘自動更新</option>
+                </select>
+              </div>
+              <div class="flex items-center gap-2">
+                <button id="btn-save-quote-cfg" type="button" class="btn-focus h-8 px-3.5 rounded-lg bg-white hover:bg-zinc-50 text-zinc-800 hairline text-xs font-medium transition-colors duration-150">儲存報價來源</button>
+                <button id="btn-test-refresh" type="button" class="btn-focus h-8 px-3.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-medium transition-colors duration-150">立即測試更新</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Firebase Google Auth -->
+          <div class="bg-white rounded-xl p-6 hairline space-y-4">
+            <div class="flex flex-wrap items-start justify-between gap-2">
+              <div>
+                <h2 class="text-base font-semibold text-zinc-900">Google 帳號登入與多用戶雲端儲存（Firebase）</h2>
+                <p class="text-xs text-zinc-500 mt-0.5">貼上 Firebase 專案設定後，每位使用者登入 Google 帳號皆獨立儲存於 <code class="font-mono-num text-zinc-700">wealth_users/{uid}</code>，彼此資料完全隔離</p>
+              </div>
+              <span id="cloud-badge" class="text-xs font-mono-num text-zinc-500">尚未綁定雲端</span>
+            </div>
+
+            <div class="space-y-1.5">
+              <label for="cfg-firebase-json" class="block text-xs font-medium text-zinc-700">Firebase Config JSON</label>
+              <textarea id="cfg-firebase-json" rows="3" placeholder='{"apiKey":"...","authDomain":"...","projectId":"...","appId":"..."}' class="w-full px-3 py-2 rounded-lg hairline bg-[#f7f7f5] text-xs font-mono-num"></textarea>
+            </div>
+
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <div class="flex flex-wrap gap-2">
+                <button id="btn-save-firebase" type="button" class="btn-focus h-8 px-3.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-medium transition-colors duration-150">啟用 Google 登入</button>
+                <button id="btn-cloud-push" type="button" class="btn-focus h-8 px-3.5 rounded-lg bg-white hover:bg-zinc-50 text-zinc-800 hairline text-xs font-medium transition-colors duration-150">立即同步至雲端</button>
+                <button id="btn-cloud-pull" type="button" class="btn-focus h-8 px-3.5 rounded-lg bg-white hover:bg-zinc-50 text-zinc-800 hairline text-xs font-medium transition-colors duration-150">從雲端拉取資料</button>
+              </div>
+              <button id="btn-export-clean-share" type="button" class="btn-focus h-8 px-3 rounded-lg bg-[#f7f7f5] hover:bg-zinc-200/70 text-zinc-700 text-xs font-medium transition-colors duration-150">匯出空白範本 JSON（給別人用）</button>
+            </div>
+          </div>
+
+          <!-- FX Rates -->
+          <div class="bg-white rounded-xl p-6 hairline space-y-4">
+            <div>
+              <h2 class="text-base font-semibold text-zinc-900">匯率設定（對台幣 TWD）</h2>
+              <p class="text-xs text-zinc-500 mt-0.5">手動微調後套用，或按「一鍵更新股價與匯率」自動更新</p>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div class="p-4 rounded-lg bg-[#f7f7f5] hairline">
+                <label for="fx-usd" class="block text-xs font-medium text-zinc-600 mb-1.5">美金 USD → 台幣 TWD</label>
+                <input id="fx-usd" type="number" step="0.0001" min="0.0001" class="w-full h-9 px-3 rounded-lg hairline bg-white text-sm font-medium font-mono-num" />
+              </div>
+              <div class="p-4 rounded-lg bg-[#f7f7f5] hairline">
+                <label for="fx-jpy" class="block text-xs font-medium text-zinc-600 mb-1.5">日圓 JPY → 台幣 TWD</label>
+                <input id="fx-jpy" type="number" step="0.0001" min="0.0001" class="w-full h-9 px-3 rounded-lg hairline bg-white text-sm font-medium font-mono-num" />
+              </div>
+              <div class="p-4 rounded-lg bg-[#f7f7f5] hairline">
+                <label for="fx-hkd" class="block text-xs font-medium text-zinc-600 mb-1.5">港幣 HKD → 台幣 TWD</label>
+                <input id="fx-hkd" type="number" step="0.0001" min="0.0001" class="w-full h-9 px-3 rounded-lg hairline bg-white text-sm font-medium font-mono-num" />
+              </div>
+              <div class="p-4 rounded-lg bg-[#f7f7f5] hairline">
+                <label for="fx-cny" class="block text-xs font-medium text-zinc-600 mb-1.5">人民幣 CNY → 台幣 TWD</label>
+                <input id="fx-cny" type="number" step="0.0001" min="0.0001" class="w-full h-9 px-3 rounded-lg hairline bg-white text-sm font-medium font-mono-num" />
+              </div>
+            </div>
+            <div class="flex justify-end">
+              <button id="btn-save-fx" type="button" class="btn-focus h-8 px-4 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-medium transition-colors duration-150">套用最新匯率</button>
+            </div>
+          </div>
+
+          <!-- JSON & Excel Backup -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="bg-white rounded-xl p-6 hairline space-y-4">
+              <div>
+                <h3 class="text-sm font-semibold text-zinc-900">JSON 完整備份與還原</h3>
+                <p class="text-xs text-zinc-500 mt-1">保留所有持股、現金、實體投資、固定收支、隨機支出與歷史快照，網頁升級無需重填</p>
+              </div>
+              <div class="flex flex-wrap gap-2">
+                <button id="btn-export-json" type="button" class="btn-focus h-8 px-3.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-medium transition-colors duration-150">下載 JSON 備份檔</button>
+                <label class="h-8 px-3.5 rounded-lg bg-white hover:bg-zinc-50 text-zinc-800 hairline text-xs font-medium inline-flex items-center cursor-pointer transition-colors duration-150">
+                  <span>匯入 JSON 檔案</span>
+                  <input id="input-import-json" type="file" accept=".json,application/json" class="hidden" />
+                </label>
+              </div>
+            </div>
+
+            <div class="bg-white rounded-xl p-6 hairline space-y-4">
+              <div>
+                <h3 class="text-sm font-semibold text-zinc-900">Excel (.xlsx) / Google 試算表同步</h3>
+                <p class="text-xs text-zinc-500 mt-1">匯出多分頁工作簿，可直接上傳至 Google 試算表編輯後再下載匯回</p>
+              </div>
+              <div class="flex flex-wrap gap-2">
+                <button id="btn-export-xlsx" type="button" class="btn-focus h-8 px-3.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-medium transition-colors duration-150">下載 Excel (.xlsx)</button>
+                <label class="h-8 px-3.5 rounded-lg bg-white hover:bg-zinc-50 text-zinc-800 hairline text-xs font-medium inline-flex items-center cursor-pointer transition-colors duration-150">
+                  <span>匯入 Excel (.xlsx)</span>
+                  <input id="input-import-xlsx" type="file" accept=".xlsx,.xls" class="hidden" />
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <!-- Reset Zone -->
+          <div class="bg-white rounded-xl p-5 hairline flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h3 class="text-sm font-medium text-zinc-900">資料重設</h3>
+              <p class="text-xs text-zinc-500 mt-0.5">清空為空白帳本供他人使用，或還原至 2026/11/20 初始建檔資料</p>
+            </div>
+            <div class="flex flex-wrap gap-2">
+              <button id="btn-clear-blank" type="button" class="btn-focus h-8 px-3.5 rounded-lg bg-white hover:bg-zinc-50 text-zinc-700 hairline text-xs font-medium transition-colors duration-150">清空為空白帳本</button>
+              <button id="btn-reset-data" type="button" class="btn-focus h-8 px-3.5 rounded-lg bg-white hover:bg-rose-50 text-rose-700 border border-rose-200 text-xs font-medium transition-colors duration-150">重設初始資料</button>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <!-- Generic Form Modal -->
+  <div id="form-modal" class="fixed inset-0 z-50 hidden items-center justify-center p-4 modal-backdrop">
+    <div class="bg-white rounded-xl max-w-lg w-full shadow-lg hairline overflow-hidden max-h-[90vh] flex flex-col">
+      <div class="px-5 py-4 hairline-b flex items-center justify-between">
+        <h3 id="modal-title" class="text-sm font-semibold text-zinc-900">編輯項目</h3>
+        <button id="btn-modal-close" type="button" class="text-zinc-400 hover:text-zinc-700 text-lg leading-none">&times;</button>
+      </div>
+      <form id="modal-form" class="p-5 space-y-4 overflow-y-auto">
+        <div id="modal-fields" class="space-y-3"></div>
+        <div class="pt-2 flex items-center justify-end gap-2">
+          <button id="btn-modal-cancel" type="button" class="btn-focus h-8 px-3.5 rounded-lg bg-[#f7f7f5] hover:bg-zinc-200/70 text-zinc-700 text-xs font-medium">取消</button>
+          <button type="submit" class="btn-focus h-8 px-4 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-medium">儲存</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Confirmation Modal -->
+  <div id="confirm-modal" class="fixed inset-0 z-50 hidden items-center justify-center p-4 modal-backdrop">
+    <div class="bg-white rounded-xl max-w-sm w-full shadow-lg hairline p-5 space-y-4">
+      <h3 id="confirm-title" class="text-sm font-semibold text-zinc-900">確認操作</h3>
+      <p id="confirm-message" class="text-xs text-zinc-600 leading-relaxed"></p>
+      <div class="flex items-center justify-end gap-2">
+        <button id="btn-confirm-cancel" type="button" class="btn-focus h-8 px-3.5 rounded-lg bg-[#f7f7f5] hover:bg-zinc-200/70 text-zinc-700 text-xs font-medium">取消</button>
+        <button id="btn-confirm-ok" type="button" class="btn-focus h-8 px-4 rounded-lg bg-rose-700 hover:bg-rose-800 text-white text-xs font-medium">確認</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification -->
+  <div id="toast" class="fixed bottom-5 right-5 z-50 hidden px-4 py-2.5 rounded-lg bg-zinc-900 text-white text-xs font-medium shadow-md max-w-md"></div>
+
+  <script>
+    (function () {
+      'use strict';
+
+      const STORAGE_KEY = 'personal_wealth_dashboard_v1';
+      const CFG_KEY = 'personal_wealth_dashboard_cfg_v1';
+
+      function createDefaultData() {
+        return createBlankData();
+      }
+
+      function createBlankData() {
+        return {
+          version: '1.4',
+          fx: { TWD: 1, USD: 33.022, JPY: 0.2069, HKD: 4.2097, CNY: 4.9525 },
+          cash: [],
+          stocks: [],
+          investments: [],
+          fixedIncomes: [],
+          fixedExpenses: [],
+          randomExpenses: [],
+          fxTrades: [],
+          snapshots: [],
+          ledger: []
+        };
+      }
+
+      function safeNum(v, fallback = 0) {
+        const n = Number(v);
+        return Number.isFinite(n) ? n : fallback;
+      }
+
+      function todayISO() {
+        const d = new Date();
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}`;
+      }
+
+      function computeTotals(data) {
+        const fx = data.fx || { TWD: 1, USD: 33.022, HKD: 4.2097, CNY: 4.9525 };
+        const rateOf = (cur) => (cur === 'TWD' ? 1 : safeNum(fx[cur], 1));
+
+        let cashTWD = 0;
+        const cashByCurrency = { TWD: 0, USD: 0, HKD: 0, CNY: 0 };
+        const totalByCurrencyTWD = { TWD: 0, USD: 0, HKD: 0, CNY: 0 };
+
+        (data.cash || []).forEach((c) => {
+          const amt = safeNum(c.amount);
+          const twd = amt * rateOf(c.currency);
+          cashTWD += twd;
+          cashByCurrency[c.currency] = (cashByCurrency[c.currency] || 0) + amt;
+          totalByCurrencyTWD[c.currency] = (totalByCurrencyTWD[c.currency] || 0) + twd;
+        });
+
+        let stocksTWD = 0;
+        let stocksPnlTWD = 0;
+        let stocksPnlExIbioTWD = 0;
+        (data.stocks || []).forEach((s) => {
+          const shares = safeNum(s.shares);
+          const price = safeNum(s.currentPrice);
+          const cost = safeNum(s.avgCost);
+          const r = rateOf(s.currency);
+          const mvTWD = shares * price * r;
+          const pnlTWD = shares * (price - cost) * r;
+          stocksTWD += mvTWD;
+          stocksPnlTWD += pnlTWD;
+          if (String(s.symbol).toUpperCase() !== 'IBIO') {
+            stocksPnlExIbioTWD += pnlTWD;
+          }
+          totalByCurrencyTWD[s.currency] = (totalByCurrencyTWD[s.currency] || 0) + mvTWD;
+        });
+
+        let investmentsTWD = 0;
+        let nonRecoverableInvTWD = 0;
+        let annualIncomeMin = 0;
+        let annualIncomeMax = 0;
+        (data.investments || []).forEach((inv) => {
+          const p = safeNum(inv.principal);
+          const cyc = Math.max(1, safeNum(inv.cycleMonths, 12));
+          const minR = safeNum(inv.minRate);
+          const maxR = safeNum(inv.maxRate);
+          const recoverable = inv.principalRecoverable !== false;
+          if (recoverable) {
+            investmentsTWD += p;
+            totalByCurrencyTWD.TWD += p;
+          } else {
+            nonRecoverableInvTWD += p;
+          }
+          annualIncomeMin += p * (minR / 100) * (12 / cyc);
+          annualIncomeMax += p * (maxR / 100) * (12 / cyc);
+        });
+
+        let fixedIncomeAnnualTWD = 0;
+        (data.fixedIncomes || []).forEach((inc) => {
+          const amt = safeNum(inc.amount);
+          const cyc = Math.max(1, safeNum(inc.cycleMonths, 1));
+          fixedIncomeAnnualTWD += amt * rateOf(inc.currency || 'TWD') * (12 / cyc);
+        });
+        const fixedIncomeMonthlyTWD = fixedIncomeAnnualTWD / 12;
+
+        let fixedExpenseAnnualTWD = 0;
+        (data.fixedExpenses || []).forEach((exp) => {
+          const amt = safeNum(exp.amount);
+          const cyc = Math.max(1, safeNum(exp.cycleMonths, 1));
+          fixedExpenseAnnualTWD += amt * rateOf(exp.currency || 'TWD') * (12 / cyc);
+        });
+        const fixedExpenseMonthlyTWD = fixedExpenseAnnualTWD / 12;
+
+        const curYm = todayISO().slice(0, 7);
+        let randomExpenseThisMonthTWD = 0;
+        let randomExpenseTotalTWD = 0;
+        (data.randomExpenses || []).forEach((exp) => {
+          const twd = safeNum(exp.amount) * rateOf(exp.currency || 'TWD');
+          randomExpenseTotalTWD += twd;
+          if (String(exp.date || '').startsWith(curYm)) {
+            randomExpenseThisMonthTWD += twd;
+          }
+        });
+
+        const netWorthTWD = cashTWD + stocksTWD + investmentsTWD;
+        return {
+          cashTWD,
+          stocksTWD,
+          stocksPnlTWD,
+          stocksPnlExIbioTWD,
+          investmentsTWD,
+          nonRecoverableInvTWD,
+          annualIncomeMin,
+          annualIncomeMax,
+          fixedIncomeMonthlyTWD,
+          fixedIncomeAnnualTWD,
+          fixedExpenseMonthlyTWD,
+          fixedExpenseAnnualTWD,
+          randomExpenseThisMonthTWD,
+          randomExpenseTotalTWD,
+          netWorthTWD,
+          cashByCurrency,
+          totalByCurrencyTWD
+        };
+      }
+
+      function loadState() {
+        try {
+          const raw = localStorage.getItem(STORAGE_KEY);
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            if (parsed && Array.isArray(parsed.cash) && Array.isArray(parsed.stocks) && Array.isArray(parsed.investments)) {
+              if (!Array.isArray(parsed.fixedIncomes)) parsed.fixedIncomes = [];
+              if (!Array.isArray(parsed.fixedExpenses)) parsed.fixedExpenses = [];
+              if (!Array.isArray(parsed.randomExpenses)) parsed.randomExpenses = [];
+              if (!Array.isArray(parsed.fxTrades)) parsed.fxTrades = [];
+              if (!parsed.fx) parsed.fx = { TWD: 1, USD: 33.022, JPY: 0.2069, HKD: 4.2097, CNY: 4.9525 };
+              if (!parsed.fx.JPY) parsed.fx.JPY = 0.2069;
+              return parsed;
+            }
+          }
+        } catch (e) {
+          // ignore
+        }
+        return createDefaultData();
+      }
+
+      function loadConfig() {
+        try {
+          const raw = localStorage.getItem(CFG_KEY);
+          if (raw) return JSON.parse(raw);
+        } catch (e) {
+          // ignore
+        }
+        return { gsheetCsvUrl: '', finnhubKey: '', firebaseConfigText: "{\"apiKey\": \"AIzaSyCDv2Xn_XLJ0irvq2W_TdTlPNI8exIndYM\", \"authDomain\": \"wealth-ledger-5ee42.firebaseapp.com\", \"projectId\": \"wealth-ledger-5ee42\", \"storageBucket\": \"wealth-ledger-5ee42.firebasestorage.app\", \"messagingSenderId\": \"471814830424\", \"appId\": \"1:471814830424:web:c846e513fe45c368840d2d\", \"measurementId\": \"G-TM0L5K4KBP\"}", autoRefresh: true, refreshIntervalMin: 5 };
+      }
+
+      function saveConfig() {
+        try {
+          localStorage.setItem(CFG_KEY, JSON.stringify(appConfig));
+        } catch (e) {
+          // ignore
+        }
+      }
+
+      let state = loadState();
+      let appConfig = loadConfig();
+      let activeTab = 'overview';
+      let stockMarketFilter = 'ALL';
+      let excludeIbio = false;
+      let expMonthFilter = '';
+      let expCatFilter = 'ALL';
+      let fxFilterCur = 'ALL';
+      let chartAllocation = null;
+      let chartCurrency = null;
+      let chartTrend = null;
+      let currentModalSubmit = null;
+      let currentConfirmAction = null;
+      let toastTimer = null;
+      let autoRefreshTimer = null;
+
+      let fbApp = null;
+      let fbAuth = null;
+      let fbDb = null;
+      let currentUser = null;
+
+      function saveState(autoPushCloud = true) {
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        } catch (e) {
+          // ignore
+        }
+        if (autoPushCloud && currentUser && fbDb) {
+          pushToCloud(true);
+        }
+      }
+
+      function fmtTWD(val) {
+        return 'NT$ ' + Math.round(safeNum(val)).toLocaleString('zh-TW');
+      }
+
+      function fmtNum(val, decimals = 2) {
+        const n = safeNum(val);
+        return n.toLocaleString('zh-TW', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+      }
+
+      function fmtCompactWan(val) {
+        return (safeNum(val) / 10000).toFixed(1) + ' 萬';
+      }
+
+      function showToast(msg) {
+        const el = document.getElementById('toast');
+        el.textContent = msg;
+        el.classList.remove('hidden');
+        if (toastTimer) clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => el.classList.add('hidden'), 3400);
+      }
+
+      function uid(prefix) {
+        return prefix + '_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 6);
+      }
+
+      function escapeHtml(str) {
+        return String(str ?? '')
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;');
+      }
+
+      // Firebase Cloud Sync
+      function initFirebaseFromConfig(silent = false) {
+        if (!appConfig.firebaseConfigText || typeof firebase === 'undefined') {
+          updateCloudStatusUI();
+          return false;
+        }
+        try {
+          const cfg = JSON.parse(appConfig.firebaseConfigText);
+          if (!cfg.apiKey || !cfg.projectId) {
+            if (!silent) showToast('Firebase 設定缺少 apiKey 或 projectId');
+            return false;
+          }
+          fbApp = !firebase.apps.length ? firebase.initializeApp(cfg) : firebase.app();
+          fbAuth = firebase.auth();
+          fbDb = firebase.firestore();
+          fbAuth.onAuthStateChanged((user) => {
+            currentUser = user || null;
+            updateCloudStatusUI();
+            if (currentUser) pullFromCloud(true);
+          });
+          updateCloudStatusUI();
+          if (!silent) showToast('已啟用 Google 登入設定');
+          return true;
+        } catch (err) {
+          if (!silent) showToast('Firebase JSON 格式錯誤');
+          return false;
+        }
+      }
+
+      function updateCloudStatusUI() {
+        const authLabel = document.getElementById('google-auth-label');
+        const statusEl = document.getElementById('header-sync-status');
+        const badge = document.getElementById('cloud-badge');
+        const dot = document.getElementById('status-dot');
+        const modeLabel = document.getElementById('sidebar-mode-label');
+
+        if (currentUser) {
+          authLabel.textContent = `${currentUser.displayName || currentUser.email}（登出）`;
+          statusEl.textContent = `雲端已同步 · ${currentUser.email}`;
+          badge.textContent = '已連線雲端';
+          badge.className = 'text-xs font-mono-num text-emerald-700';
+          dot.className = 'w-1.5 h-1.5 rounded-full bg-emerald-600 shrink-0';
+          modeLabel.textContent = '雲端同步中';
+        } else if (fbAuth) {
+          authLabel.textContent = 'Google 登入';
+          statusEl.textContent = '雲端已就緒 · 點右側 Google 登入同步私人帳本';
+          badge.textContent = '待登入';
+          badge.className = 'text-xs font-mono-num text-zinc-700';
+          dot.className = 'w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0';
+          modeLabel.textContent = '待登入雲端';
+        } else {
+          authLabel.textContent = 'Google 登入';
+          statusEl.textContent = '本機暫存模式 · 台美港股、現金、實體投資與收支總帳';
+          badge.textContent = '尚未綁定雲端';
+          badge.className = 'text-xs font-mono-num text-zinc-500';
+          dot.className = 'w-1.5 h-1.5 rounded-full bg-zinc-400 shrink-0';
+          modeLabel.textContent = '本機暫存';
+        }
+      }
+
+      async function handleGoogleAuthClick() {
+        if (!fbAuth) {
+          switchTab('settings');
+          showToast('請先在「匯率與備份」貼上免費 Firebase 設定以啟用 Google 登入');
+          return;
+        }
+        try {
+          if (currentUser) {
+            await fbAuth.signOut();
+            showToast('已登出 Google 帳號');
+          } else {
+            const provider = new firebase.auth.GoogleAuthProvider();
+            try {
+              await fbAuth.signInWithPopup(provider);
+              showToast('Google 帳號登入成功');
+            } catch (popErr) {
+              if (popErr && (popErr.code === 'auth/popup-blocked' || popErr.code === 'auth/operation-not-supported-in-this-environment')) {
+                await fbAuth.signInWithRedirect(provider);
+              } else {
+                throw popErr;
+              }
+            }
+          }
+        } catch (err) {
+          showToast('Google 登入失敗：請確認 Firebase 已開啟 Google 登入並授權此網域');
+        }
+      }
+
+      async function pushToCloud(silent = false) {
+        if (!currentUser || !fbDb) {
+          if (!silent) showToast('請先完成 Google 帳號登入');
+          return;
+        }
+        try {
+          await fbDb.collection('wealth_users').doc(currentUser.uid).set({
+            updatedAt: new Date().toISOString(),
+            email: currentUser.email || '',
+            payload: JSON.stringify(state)
+          });
+          if (!silent) showToast('已同步至 Google 雲端');
+        } catch (err) {
+          if (!silent) showToast('雲端寫入失敗，請檢查 Firestore 權限');
+        }
+      }
+
+      async function pullFromCloud(silent = false) {
+        if (!currentUser || !fbDb) {
+          if (!silent) showToast('請先完成 Google 帳號登入');
+          return;
+        }
+        try {
+          const doc = await fbDb.collection('wealth_users').doc(currentUser.uid).get();
+          if (doc.exists && doc.data() && doc.data().payload) {
+            const parsed = JSON.parse(doc.data().payload);
+            if (parsed && Array.isArray(parsed.stocks)) {
+              if (!Array.isArray(parsed.fixedIncomes)) parsed.fixedIncomes = [];
+              if (!Array.isArray(parsed.fixedExpenses)) parsed.fixedExpenses = [];
+              if (!Array.isArray(parsed.randomExpenses)) parsed.randomExpenses = [];
+              if (!Array.isArray(parsed.fxTrades)) parsed.fxTrades = [];
+              if (!parsed.fx) parsed.fx = { TWD: 1, USD: 33.022, JPY: 0.2069, HKD: 4.2097, CNY: 4.9525 };
+              if (!parsed.fx.JPY) parsed.fx.JPY = 0.2069;
+              state = parsed;
+              if (state.quoteSettings) {
+                if (state.quoteSettings.gsheetCsvUrl !== undefined) appConfig.gsheetCsvUrl = state.quoteSettings.gsheetCsvUrl;
+                if (state.quoteSettings.finnhubKey !== undefined) appConfig.finnhubKey = state.quoteSettings.finnhubKey;
+                if (state.quoteSettings.autoRefresh !== undefined) appConfig.autoRefresh = Boolean(state.quoteSettings.autoRefresh);
+                if (state.quoteSettings.refreshIntervalMin !== undefined) appConfig.refreshIntervalMin = safeNum(state.quoteSettings.refreshIntervalMin, 5);
+                saveConfig();
+              }
+              saveState(false);
+              renderAll();
+              scheduleAutoRefresh();
+              if (appConfig.autoRefresh !== false) refreshLivePricesAndFX(true);
+              if (!silent) showToast('已從雲端還原資料');
+            }
+          } else if (!silent) {
+            showToast('雲端尚無此帳號資料');
+          }
+        } catch (err) {
+          if (!silent) showToast('雲端讀取失敗');
+        }
+      }
+
+      // Live Refresh
+      function scheduleAutoRefresh() {
+        if (autoRefreshTimer) {
+          clearInterval(autoRefreshTimer);
+          autoRefreshTimer = null;
+        }
+        const mins = safeNum(appConfig.refreshIntervalMin, 5);
+        if (appConfig.autoRefresh !== false && mins > 0) {
+          autoRefreshTimer = setInterval(() => {
+            refreshLivePricesAndFX(true);
+          }, mins * 60 * 1000);
+        }
+      }
+
+      async function refreshLivePricesAndFX(silent = false) {
+        const btn = document.getElementById('btn-refresh-prices');
+        const originalHtml = btn.innerHTML;
+        if (!silent) {
+          btn.disabled = true;
+          btn.textContent = '更新中...';
+        }
+
+        let fxUpdated = false;
+        let stockUpdatedCount = 0;
+
+        try {
+          const res = await fetch('https://open.er-api.com/v6/latest/TWD');
+          if (res.ok) {
+            const json = await res.json();
+            if (json && json.rates) {
+              if (json.rates.USD > 0) state.fx.USD = Number((1 / json.rates.USD).toFixed(4));
+              if (json.rates.HKD > 0) state.fx.HKD = Number((1 / json.rates.HKD).toFixed(4));
+              if (json.rates.CNY > 0) state.fx.CNY = Number((1 / json.rates.CNY).toFixed(4));
+              if (json.rates.JPY > 0) state.fx.JPY = Number((1 / json.rates.JPY).toFixed(4));
+              fxUpdated = true;
+            }
+          }
+        } catch (err) {
+          // fallback
+        }
+
+        // Built-in Cloudflare Pages _worker.js backend (/api/quotes) — zero-config for all users
+        if (window.location && (window.location.protocol === 'https:' || window.location.protocol === 'http:') && state.stocks.length > 0) {
+          try {
+            const uniqueKeys = [...new Set(state.stocks.map((st) => `${st.market}:${String(st.symbol).trim().toUpperCase()}`))];
+            const apiRes = await fetch(`/api/quotes?items=${encodeURIComponent(uniqueKeys.join(','))}`);
+            if (apiRes.ok) {
+              const apiJson = await apiRes.json();
+              if (apiJson && apiJson.prices) {
+                state.stocks.forEach((st) => {
+                  const k = `${st.market}:${String(st.symbol).trim().toUpperCase()}`;
+                  const pVal = Number(apiJson.prices[k]);
+                  if (Number.isFinite(pVal) && pVal > 0) {
+                    st.currentPrice = pVal;
+                    stockUpdatedCount++;
+                  }
+                });
+              }
+            }
+          } catch (err) {
+            // fallback to optional CSV or Finnhub
+          }
+        }
+
+        if (stockUpdatedCount === 0 && appConfig.gsheetCsvUrl) {
+          try {
+            const res = await fetch(appConfig.gsheetCsvUrl);
+            if (res.ok) {
+              const csvText = await res.text();
+              const priceMap = {};
+              csvText.split(/\r?\n/).forEach((line) => {
+                const cols = line.split(',').map((x) => x.replace(/^"|"$/g, '').trim());
+                if (cols.length >= 2) {
+                  const sym = cols[0].toUpperCase();
+                  const p = Number(cols[1]);
+                  if (sym && Number.isFinite(p) && p > 0) priceMap[sym] = p;
+                }
+              });
+              state.stocks.forEach((s) => {
+                const key = String(s.symbol).toUpperCase();
+                if (priceMap[key]) {
+                  s.currentPrice = priceMap[key];
+                  stockUpdatedCount++;
+                }
+              });
+            }
+          } catch (err) {
+            // fallback
+          }
+        }
+
+        if (appConfig.finnhubKey) {
+          const uniqueSymbols = [...new Set(state.stocks.filter((s) => s.market === 'US').map((s) => String(s.symbol).toUpperCase()))];
+          const fetchedMap = {};
+          for (const sym of uniqueSymbols) {
+            try {
+              const res = await fetch(`https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(sym)}&token=${encodeURIComponent(appConfig.finnhubKey)}`);
+              if (res.ok) {
+                const q = await res.json();
+                if (q && Number.isFinite(q.c) && q.c > 0) fetchedMap[sym] = q.c;
+              }
+            } catch (err) {
+              // skip
+            }
+          }
+          state.stocks.forEach((s) => {
+            const key = String(s.symbol).toUpperCase();
+            if (s.market === 'US' && fetchedMap[key]) {
+              s.currentPrice = fetchedMap[key];
+              stockUpdatedCount++;
+            }
+          });
+        }
+
+        if (!silent) {
+          btn.disabled = false;
+          btn.innerHTML = originalHtml;
+        }
+        if (stockUpdatedCount > 0 || fxUpdated) {
+          saveState();
+          renderAll();
+        }
+
+        const nowStr = new Date().toLocaleTimeString('zh-TW', { hour12: false });
+        if (stockUpdatedCount > 0) {
+          document.getElementById('stock-last-updated').textContent = `${silent ? '自動更新' : '最後更新'} ${nowStr} · 已同步 ${stockUpdatedCount} 筆股價${fxUpdated ? '與即時匯率' : ''}`;
+          if (!silent) showToast(`已更新 ${stockUpdatedCount} 筆股價${fxUpdated ? '與最新匯率' : ''}`);
+        } else if (fxUpdated) {
+          if (!silent) showToast('已更新最新匯率；若要同步股價，請至「匯率與備份」綁定試算表報價連結');
+        } else if (!silent) {
+          showToast('無法連線外部報價，已開啟批次更新面板');
+          openBatchPriceModal();
+        }
+      }
+
+      function openBatchPriceModal() {
+        const html = `
+          <p class="text-xs text-zinc-500">修改現價後按下儲存即可立即重算總資產</p>
+          <div class="space-y-2 max-h-72 overflow-y-auto pr-1">
+            ${state.stocks.map((s) => `
+              <div class="flex items-center justify-between gap-3 py-1.5 hairline-b">
+                <div class="min-w-0">
+                  <div class="text-xs font-medium text-zinc-900 truncate">${escapeHtml(s.symbol)} ${escapeHtml(s.name)}</div>
+                  <div class="text-[11px] font-mono-num text-zinc-400">${escapeHtml(s.currency)} · 目前 ${safeNum(s.currentPrice)}</div>
+                </div>
+                <input name="price_${escapeHtml(s.id)}" type="number" step="0.0001" min="0" value="${safeNum(s.currentPrice)}" class="w-28 h-8 px-2.5 rounded-lg hairline text-xs text-right font-mono-num" />
+              </div>
+            `).join('')}
+          </div>
+        `;
+        openFormModal('批次更新股票現價', html, (fd) => {
+          let changed = 0;
+          state.stocks.forEach((s) => {
+            const val = fd.get('price_' + s.id);
+            if (val !== null && val !== '') {
+              const next = safeNum(val, s.currentPrice);
+              if (next !== s.currentPrice) {
+                s.currentPrice = next;
+                changed++;
+              }
+            }
+          });
+          saveState();
+          renderAll();
+          showToast(`已批次更新 ${changed} 檔股票現價`);
+        });
+      }
+
+      function switchTab(tabName) {
+        activeTab = tabName;
+        document.querySelectorAll('.tab-panel').forEach((p) => p.classList.add('hidden'));
+        const target = document.getElementById('tab-' + tabName);
+        if (target) target.classList.remove('hidden');
+
+        document.querySelectorAll('.tab-btn').forEach((btn) => {
+          btn.classList.toggle('active', btn.dataset.tab === tabName);
+        });
+
+        renderAll();
+      }
+
+      // Overview Rendering
+      function renderOverview(totals) {
+        const nw = totals.netWorthTWD || 1;
+        const fxText = `USD ${safeNum(state.fx.USD).toFixed(2)} · HKD ${safeNum(state.fx.HKD).toFixed(2)} · CNY ${safeNum(state.fx.CNY).toFixed(2)}`;
+        document.getElementById('kpi-total-networth').textContent = fmtTWD(totals.netWorthTWD);
+        document.getElementById('kpi-fx-hint').textContent = fxText;
+        document.getElementById('sidebar-fx-summary').textContent = fxText;
+
+        document.getElementById('kpi-total-cash').textContent = fmtTWD(totals.cashTWD);
+        document.getElementById('kpi-cash-pct').textContent = ((totals.cashTWD / nw) * 100).toFixed(1) + '%';
+        document.getElementById('kpi-cash-count').textContent = `${state.cash.length} 個跨幣別帳戶`;
+
+        document.getElementById('kpi-total-stocks').textContent = fmtTWD(totals.stocksTWD);
+        document.getElementById('kpi-stocks-pct').textContent = ((totals.stocksTWD / nw) * 100).toFixed(1) + '%';
+        const pnl = excludeIbio ? totals.stocksPnlExIbioTWD : totals.stocksPnlTWD;
+        const pnlEl = document.getElementById('kpi-stocks-pnl');
+        pnlEl.textContent = `未實現損益 ${pnl >= 0 ? '+' : ''}${fmtTWD(pnl)}${excludeIbio ? '（不含IBIO）' : ''}`;
+        pnlEl.className = 'mt-2 text-xs font-mono-num ' + (pnl >= 0 ? 'text-rose-700' : 'text-emerald-700');
+
+        document.getElementById('kpi-total-inv').textContent = fmtTWD(totals.investmentsTWD);
+        document.getElementById('kpi-inv-pct').textContent = ((totals.investmentsTWD / nw) * 100).toFixed(1) + '%';
+        const nonRecNote = totals.nonRecoverableInvTWD > 0 ? ` · 另有 ${fmtCompactWan(totals.nonRecoverableInvTWD)} 不可收回本金不計淨值` : '';
+        document.getElementById('kpi-inv-annual').textContent = `預估年收益 ${fmtCompactWan(totals.annualIncomeMin)} ～ ${fmtCompactWan(totals.annualIncomeMax)}${nonRecNote}`;
+
+        document.getElementById('kpi-fixed-income').textContent = `每月 ${fmtTWD(totals.fixedIncomeMonthlyTWD)} ｜ 每年 ${fmtCompactWan(totals.fixedIncomeAnnualTWD)}`;
+        const combMin = totals.fixedIncomeMonthlyTWD + totals.annualIncomeMin / 12;
+        const combMax = totals.fixedIncomeMonthlyTWD + totals.annualIncomeMax / 12;
+        document.getElementById('kpi-combined-cashflow').textContent = `${fmtTWD(combMin)} ～ ${fmtTWD(combMax)} / 月`;
+        document.getElementById('kpi-expense-summary').textContent = `固定 ${fmtTWD(totals.fixedExpenseMonthlyTWD)} ｜ 本月隨機 ${fmtTWD(totals.randomExpenseThisMonthTWD)}`;
+
+        // Ranked Horizontal Bars for Allocation
+        const allocItems = [
+          { label: '實體與專案投資', val: totals.investmentsTWD, color: '#18181b' },
+          { label: '銀行與券商現金', val: totals.cashTWD, color: '#52525b' },
+          { label: '股票與黃金 ETF', val: totals.stocksTWD, color: '#a1a1aa' }
+        ].sort((a, b) => b.val - a.val);
+
+        document.getElementById('allocation-bars').innerHTML = allocItems.map((item) => {
+          const pct = totals.netWorthTWD > 0 ? (item.val / totals.netWorthTWD) * 100 : 0;
+          return `
+            <div class="space-y-1.5">
+              <div class="flex items-baseline justify-between text-xs">
+                <span class="text-zinc-700 font-medium">${item.label}</span>
+                <span class="font-mono-num text-zinc-900">${fmtCompactWan(item.val)} <span class="text-zinc-400">(${pct.toFixed(1)}%)</span></span>
+              </div>
+              <div class="h-1.5 w-full rounded-full bg-zinc-900/[0.06] overflow-hidden">
+                <div class="h-full rounded-full" style="width:${Math.max(2, pct).toFixed(1)}%;background-color:${item.color}"></div>
+              </div>
+            </div>
+          `;
+        }).join('');
+
+        if (activeTab !== 'overview' || typeof Chart === 'undefined') return;
+
+        const gridColor = 'rgba(24, 24, 27, 0.06)';
+        const tickFont = { family: "'JetBrains Mono', monospace", size: 11 };
+
+        // Hero Trend Chart (Single primary accent ink + quiet neutral comparison lines)
+        const ctxTrend = document.getElementById('chart-trend').getContext('2d');
+        if (chartTrend) chartTrend.destroy();
+        const sortedSnaps = [...(state.snapshots || [])].sort((a, b) => String(a.date).localeCompare(String(b.date)));
+        chartTrend = new Chart(ctxTrend, {
+          type: 'line',
+          data: {
+            labels: sortedSnaps.map((s) => s.date),
+            datasets: [
+              {
+                label: '總資產淨值',
+                data: sortedSnaps.map((s) => safeNum(s.totalTWD)),
+                borderColor: '#18181b',
+                backgroundColor: 'rgba(24, 24, 27, 0.05)',
+                borderWidth: 2,
+                fill: true,
+                tension: 0.2,
+                pointRadius: 4,
+                pointBackgroundColor: '#18181b'
+              },
+              {
+                label: '銀行現金',
+                data: sortedSnaps.map((s) => safeNum(s.cashTWD)),
+                borderColor: '#71717a',
+                borderWidth: 1.5,
+                borderDash: [4, 4],
+                tension: 0.2,
+                pointRadius: 2.5
+              },
+              {
+                label: '股票 ETF',
+                data: sortedSnaps.map((s) => safeNum(s.stocksTWD)),
+                borderColor: '#a1a1aa',
+                borderWidth: 1.5,
+                borderDash: [2, 3],
+                tension: 0.2,
+                pointRadius: 2.5
+              }
+            ]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { position: 'bottom', align: 'start', labels: { usePointStyle: true, boxWidth: 6, color: '#52525b', font: { size: 11 } } },
+              tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${fmtTWD(ctx.parsed.y)}` } }
+            },
+            scales: {
+              x: { grid: { display: false }, ticks: { color: '#71717a', font: tickFont } },
+              y: { grid: { color: gridColor }, border: { display: false }, ticks: { color: '#71717a', font: tickFont, callback: (v) => (v / 10000).toFixed(0) + '萬' } }
+            }
+          }
+        });
+
+        // Compact Doughnut
+        const ctxAlloc = document.getElementById('chart-allocation').getContext('2d');
+        if (chartAllocation) chartAllocation.destroy();
+        chartAllocation = new Chart(ctxAlloc, {
+          type: 'doughnut',
+          data: {
+            labels: ['實體與專案投資', '銀行與券商現金', '股票與黃金 ETF'],
+            datasets: [{
+              data: [Math.round(totals.investmentsTWD), Math.round(totals.cashTWD), Math.round(totals.stocksTWD)],
+              backgroundColor: ['#18181b', '#52525b', '#a1a1aa'],
+              borderWidth: 2,
+              borderColor: '#ffffff'
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            cutout: '68%',
+            plugins: {
+              legend: { display: false },
+              tooltip: {
+                callbacks: {
+                  label: (ctx) => {
+                    const val = ctx.parsed || 0;
+                    const pct = totals.netWorthTWD > 0 ? ((val / totals.netWorthTWD) * 100).toFixed(1) : '0.0';
+                    return `${ctx.label}: ${fmtTWD(val)} (${pct}%)`;
+                  }
+                }
+              }
+            }
+          }
+        });
+
+        // Restrained Currency Exposure Bar Chart (Lead bar ink, others quiet neutral)
+        const ctxCur = document.getElementById('chart-currency').getContext('2d');
+        if (chartCurrency) chartCurrency.destroy();
+        const curKeys = ['TWD', 'USD', 'HKD', 'CNY'];
+        const curLabels = ['台幣 TWD', '美金 USD', '港幣 HKD', '人民幣 CNY'];
+        const curValues = curKeys.map((k) => Math.round(totals.totalByCurrencyTWD[k] || 0));
+        const maxCur = Math.max(...curValues, 1);
+        chartCurrency = new Chart(ctxCur, {
+          type: 'bar',
+          data: {
+            labels: curLabels,
+            datasets: [{
+              label: '折合台幣 (TWD)',
+              data: curValues,
+              backgroundColor: curValues.map((v) => (v === maxCur ? '#18181b' : '#d4d4d8')),
+              borderRadius: 6,
+              maxBarThickness: 52
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { display: false },
+              tooltip: { callbacks: { label: (ctx) => fmtTWD(ctx.parsed.y) } }
+            },
+            scales: {
+              x: { grid: { display: false }, ticks: { color: '#52525b', font: { size: 12 } } },
+              y: { grid: { color: gridColor }, border: { display: false }, ticks: { color: '#71717a', font: tickFont, callback: (v) => (v / 10000).toFixed(0) + '萬' } }
+            }
+          }
+        });
+      }
+
+      // Stocks Rendering
+      function renderStocks() {
+        const rateOf = (cur) => (cur === 'TWD' ? 1 : safeNum(state.fx[cur], 1));
+        const filtered = state.stocks.filter((s) => stockMarketFilter === 'ALL' || s.market === stockMarketFilter);
+
+        let sumTWD = 0;
+        let sumPnlTWD = 0;
+        filtered.forEach((s) => {
+          const r = rateOf(s.currency);
+          sumTWD += safeNum(s.shares) * safeNum(s.currentPrice) * r;
+          if (!excludeIbio || String(s.symbol).toUpperCase() !== 'IBIO') {
+            sumPnlTWD += safeNum(s.shares) * (safeNum(s.currentPrice) - safeNum(s.avgCost)) * r;
+          }
+        });
+
+        const pnlClass = sumPnlTWD >= 0 ? 'text-rose-700' : 'text-emerald-700';
+        document.getElementById('stock-summary-bar').innerHTML =
+          `篩選市值 <span class="text-zinc-900 font-medium">${fmtTWD(sumTWD)}</span> · 未實現損益 <span class="${pnlClass} font-medium">${sumPnlTWD >= 0 ? '+' : ''}${fmtTWD(sumPnlTWD)}</span>`;
+
+        const marketName = { TW: '台股', US: '美股', HK: '港股' };
+        const tbody = document.getElementById('stocks-tbody');
+        if (filtered.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="9" class="py-8 text-center text-zinc-400">目前沒有符合條件的持股</td></tr>';
+          return;
+        }
+
+        tbody.innerHTML = filtered.map((s) => {
+          const shares = safeNum(s.shares);
+          const avg = safeNum(s.avgCost);
+          const price = safeNum(s.currentPrice);
+          const mvNative = shares * price;
+          const costNative = shares * avg;
+          const pnlNative = mvNative - costNative;
+          const pnlPct = costNative > 0 ? (pnlNative / costNative) * 100 : (mvNative > 0 ? 100 : 0);
+          const mvTWD = mvNative * rateOf(s.currency);
+          const isGain = pnlNative >= 0;
+          const colorCls = isGain ? 'text-rose-700' : 'text-emerald-700';
+          return `
+            <tr class="hover:bg-[#f7f7f5] transition-colors duration-150">
+              <td class="py-3 px-2 font-sans">
+                <div class="font-medium text-zinc-900">${escapeHtml(s.symbol)}</div>
+                <div class="text-xs text-zinc-500">${escapeHtml(s.name)}</div>
+              </td>
+              <td class="py-3 px-2 font-sans">
+                <div class="text-xs text-zinc-700">${marketName[s.market] || escapeHtml(s.market)}</div>
+                <div class="text-[11px] text-zinc-400">${escapeHtml(s.account || '')}</div>
+              </td>
+              <td class="py-3 px-2 text-right text-zinc-800">${shares.toLocaleString('zh-TW', { maximumFractionDigits: 4 })}</td>
+              <td class="py-3 px-2 text-right text-zinc-500">${fmtNum(avg, 2)}</td>
+              <td class="py-3 px-2 text-right text-zinc-900">${fmtNum(price, 2)}</td>
+              <td class="py-3 px-2 text-right text-zinc-600">${s.currency} ${fmtNum(mvNative, 2)}</td>
+              <td class="py-3 px-2 text-right font-medium text-zinc-900">${fmtTWD(mvTWD)}</td>
+              <td class="py-3 px-2 text-right ${colorCls}">
+                <div>${isGain ? '+' : ''}${fmtNum(pnlNative, 2)} ${s.currency}</div>
+                <div class="text-[11px]">${costNative > 0 ? (isGain ? '+' : '') + pnlPct.toFixed(1) + '%' : '零成本'}</div>
+              </td>
+              <td class="py-3 px-2 text-right whitespace-nowrap font-sans">
+                <button type="button" data-action="edit-stock" data-id="${escapeHtml(s.id)}" class="text-zinc-600 hover:text-zinc-900 text-xs font-medium mr-2.5">編輯</button>
+                <button type="button" data-action="del-stock" data-id="${escapeHtml(s.id)}" class="text-zinc-400 hover:text-rose-700 text-xs font-medium">刪除</button>
+              </td>
+            </tr>
+          `;
+        }).join('');
+      }
+
+      // Cash Rendering
+      function renderCash(totals) {
+        const rateOf = (cur) => (cur === 'TWD' ? 1 : safeNum(state.fx[cur], 1));
+        const curList = [
+          { code: 'TWD', label: '台幣' },
+          { code: 'USD', label: '美金' },
+          { code: 'HKD', label: '港幣' },
+          { code: 'CNY', label: '人民幣' }
+        ];
+        document.getElementById('cash-currency-pills').innerHTML = curList.map((c) => {
+          const nativeAmt = totals.cashByCurrency[c.code] || 0;
+          const twdAmt = nativeAmt * rateOf(c.code);
+          return `
+            <div class="p-4 rounded-lg bg-[#f7f7f5] hairline">
+              <div class="text-xs text-zinc-500">${c.label} · ${c.code}</div>
+              <div class="mt-1 text-base font-semibold text-zinc-900 font-mono-num">${nativeAmt.toLocaleString('zh-TW', { maximumFractionDigits: 2 })}</div>
+              <div class="text-[11px] text-zinc-500 font-mono-num mt-0.5">≈ ${fmtTWD(twdAmt)}</div>
+            </div>
+          `;
+        }).join('');
+
+        const tbody = document.getElementById('cash-tbody');
+        if (state.cash.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="7" class="py-8 text-center text-zinc-400 font-sans">尚無銀行現金帳戶</td></tr>';
+          return;
+        }
+        const totalCash = totals.cashTWD || 1;
+        tbody.innerHTML = state.cash.map((c) => {
+          const amt = safeNum(c.amount);
+          const twd = amt * rateOf(c.currency);
+          const pct = (twd / totalCash) * 100;
+          return `
+            <tr class="hover:bg-[#f7f7f5] transition-colors duration-150">
+              <td class="py-3 px-2 font-sans font-medium text-zinc-900">${escapeHtml(c.bank)}</td>
+              <td class="py-3 px-2 text-xs text-zinc-500">${escapeHtml(c.currency)}</td>
+              <td class="py-3 px-2 text-right text-zinc-800">${amt.toLocaleString('zh-TW', { maximumFractionDigits: 2 })}</td>
+              <td class="py-3 px-2 text-right font-medium text-zinc-900">${fmtTWD(twd)}</td>
+              <td class="py-3 px-2 text-right text-zinc-500">${pct.toFixed(1)}%</td>
+              <td class="py-3 px-2 font-sans text-zinc-500 text-xs">${escapeHtml(c.note || '')}</td>
+              <td class="py-3 px-2 text-right whitespace-nowrap font-sans">
+                <button type="button" data-action="edit-cash" data-id="${escapeHtml(c.id)}" class="text-zinc-600 hover:text-zinc-900 text-xs font-medium mr-2.5">編輯</button>
+                <button type="button" data-action="del-cash" data-id="${escapeHtml(c.id)}" class="text-zinc-400 hover:text-rose-700 text-xs font-medium">刪除</button>
+              </td>
+            </tr>
+          `;
+        }).join('');
+      }
+
+      // Investments Rendering
+      function renderInvestments(totals) {
+        const monthlyMin = totals.annualIncomeMin / 12;
+        const monthlyMax = totals.annualIncomeMax / 12;
+        document.getElementById('inv-summary-cards').innerHTML = `
+          <div class="p-4 rounded-lg bg-[#f7f7f5] hairline">
+            <div class="text-xs text-zinc-500">可收回本金（計入總資產）</div>
+            <div class="mt-1 text-lg font-semibold text-zinc-900 font-mono-num">${fmtTWD(totals.investmentsTWD)}</div>
+          </div>
+          <div class="p-4 rounded-lg bg-[#f7f7f5] hairline">
+            <div class="text-xs text-zinc-500">無法收回投入（不計淨值）</div>
+            <div class="mt-1 text-lg font-semibold text-zinc-600 font-mono-num">${fmtTWD(totals.nonRecoverableInvTWD)}</div>
+          </div>
+          <div class="p-4 rounded-lg bg-[#f7f7f5] hairline">
+            <div class="text-xs text-zinc-500">預估平均月現金流</div>
+            <div class="mt-1 text-lg font-semibold text-zinc-900 font-mono-num">${fmtTWD(monthlyMin)} ～ ${fmtTWD(monthlyMax)}</div>
+          </div>
+          <div class="p-4 rounded-lg bg-[#f7f7f5] hairline">
+            <div class="text-xs text-zinc-500">預估年化總收益</div>
+            <div class="mt-1 text-lg font-semibold text-emerald-700 font-mono-num">${fmtCompactWan(totals.annualIncomeMin)} ～ ${fmtCompactWan(totals.annualIncomeMax)}</div>
+          </div>
+        `;
+
+        const cycleLabel = (m) => {
+          const n = safeNum(m, 12);
+          if (n === 1) return '每 1 個月一結';
+          if (n === 12) return '每 1 年一結';
+          return `每 ${n} 個月一結`;
+        };
+
+        const grid = document.getElementById('inv-cards-grid');
+        if (state.investments.length === 0) {
+          grid.innerHTML = '<div class="col-span-full py-8 text-center text-zinc-400 text-sm">尚無實體投資項目</div>';
+          return;
+        }
+        grid.innerHTML = state.investments.map((inv) => {
+          const p = safeNum(inv.principal);
+          const cyc = Math.max(1, safeNum(inv.cycleMonths, 12));
+          const minR = safeNum(inv.minRate);
+          const maxR = safeNum(inv.maxRate);
+          const perMin = p * (minR / 100);
+          const perMax = p * (maxR / 100);
+          const annMin = perMin * (12 / cyc);
+          const annMax = perMax * (12 / cyc);
+          const avgPer = Math.round((perMin + perMax) / 2);
+          const recoverable = inv.principalRecoverable !== false;
+          const avgMonthly = (annMin + annMax) / 24;
+          const paybackMonths = (!recoverable && avgMonthly > 0) ? (p / avgMonthly) : null;
+
+          return `
+            <div class="rounded-xl hairline p-5 bg-white flex flex-col justify-between gap-4">
+              <div>
+                <div class="flex items-start justify-between gap-2">
+                  <div>
+                    <div class="flex items-center gap-1.5 flex-wrap">
+                      <h3 class="font-semibold text-zinc-900 text-sm">${escapeHtml(inv.name)}</h3>
+                      <span class="text-[11px] px-1.5 py-0.5 rounded ${recoverable ? 'bg-zinc-100 text-zinc-600' : 'bg-amber-50 text-amber-800'}">${recoverable ? '可收回本金' : '不可收回本金'}</span>
+                    </div>
+                    <div class="mt-0.5 text-xs text-zinc-500">${cycleLabel(cyc)}${!recoverable ? ' · 不計入總資產淨值' : ''}</div>
+                  </div>
+                  <div class="text-right shrink-0">
+                    <button type="button" data-action="edit-inv" data-id="${escapeHtml(inv.id)}" class="text-zinc-600 hover:text-zinc-900 text-xs font-medium mr-2">編輯</button>
+                    <button type="button" data-action="del-inv" data-id="${escapeHtml(inv.id)}" class="text-zinc-400 hover:text-rose-700 text-xs font-medium">刪除</button>
+                  </div>
+                </div>
+                <div class="mt-4 space-y-2 text-xs font-mono-num">
+                  <div class="flex justify-between"><span class="font-sans text-zinc-500">投入本金</span><span class="font-medium text-zinc-900">${fmtTWD(p)}</span></div>
+                  <div class="flex justify-between"><span class="font-sans text-zinc-500">單期報酬率</span><span class="font-medium text-rose-700">${minR}% ～ ${maxR}%</span></div>
+                  <div class="flex justify-between"><span class="font-sans text-zinc-500">單期預估收益</span><span class="text-zinc-700">${fmtTWD(perMin)} ～ ${fmtTWD(perMax)}</span></div>
+                  <div class="flex justify-between"><span class="font-sans text-zinc-500">年化預估收益</span><span class="font-medium text-emerald-700">${fmtCompactWan(annMin)} ～ ${fmtCompactWan(annMax)}</span></div>
+                  ${paybackMonths ? `<div class="flex justify-between"><span class="font-sans text-zinc-500">預估回本期間</span><span class="font-medium text-amber-700">約 ${paybackMonths.toFixed(1)} 個月</span></div>` : ''}
+                </div>
+                ${inv.note ? `<p class="mt-3 text-xs text-zinc-500 hairline-t pt-2.5">${escapeHtml(inv.note)}</p>` : ''}
+              </div>
+              <button type="button" data-action="record-payout" data-id="${escapeHtml(inv.id)}" data-default-amt="${avgPer}" class="btn-focus w-full h-8 rounded-lg bg-[#f7f7f5] hover:bg-zinc-200/70 hairline text-zinc-800 text-xs font-medium transition-colors duration-150">
+                記錄本期結算入帳
+              </button>
+            </div>
+          `;
+        }).join('');
+      }
+
+      // Fixed Incomes Rendering
+      function renderFixedIncomes(totals) {
+        const rateOf = (cur) => (cur === 'TWD' ? 1 : safeNum(state.fx[cur], 1));
+        const combMin = totals.fixedIncomeMonthlyTWD + totals.annualIncomeMin / 12;
+        const combMax = totals.fixedIncomeMonthlyTWD + totals.annualIncomeMax / 12;
+
+        document.getElementById('income-summary-cards').innerHTML = `
+          <div class="p-4 rounded-lg bg-[#f7f7f5] hairline">
+            <div class="text-xs text-zinc-500">固定收入月均總額</div>
+            <div class="mt-1 text-lg font-semibold text-zinc-900 font-mono-num">${fmtTWD(totals.fixedIncomeMonthlyTWD)}</div>
+          </div>
+          <div class="p-4 rounded-lg bg-[#f7f7f5] hairline">
+            <div class="text-xs text-zinc-500">固定收入年化總額</div>
+            <div class="mt-1 text-lg font-semibold text-zinc-900 font-mono-num">${fmtTWD(totals.fixedIncomeAnnualTWD)}</div>
+          </div>
+          <div class="p-4 rounded-lg bg-[#f7f7f5] hairline">
+            <div class="text-xs text-zinc-500">含實體投資預估月現金流</div>
+            <div class="mt-1 text-lg font-semibold text-emerald-700 font-mono-num">${fmtTWD(combMin)} ～ ${fmtTWD(combMax)}</div>
+          </div>
+        `;
+
+        const list = state.fixedIncomes || [];
+        const tbody = document.getElementById('income-tbody');
+        if (list.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="7" class="py-8 text-center text-zinc-400 font-sans">尚未新增固定收入，點右上角「新增固定收入」建立薪資、租金或利息來源</td></tr>';
+          return;
+        }
+
+        const cycleText = (m) => {
+          const n = safeNum(m, 1);
+          if (n === 1) return '每月';
+          if (n === 2) return '每 2 個月';
+          if (n === 3) return '每季';
+          if (n === 6) return '每半年';
+          if (n === 12) return '每年';
+          return `每 ${n} 個月`;
+        };
+
+        tbody.innerHTML = list.map((inc) => {
+          const amt = safeNum(inc.amount);
+          const cyc = Math.max(1, safeNum(inc.cycleMonths, 1));
+          const cur = inc.currency || 'TWD';
+          const twdPer = amt * rateOf(cur);
+          const twdAnnual = twdPer * (12 / cyc);
+          const twdMonthly = twdAnnual / 12;
+          return `
+            <tr class="hover:bg-[#f7f7f5] transition-colors duration-150">
+              <td class="py-3 px-2 font-sans">
+                <div class="font-medium text-zinc-900">${escapeHtml(inc.name)}</div>
+                <div class="text-[11px] text-zinc-500">${escapeHtml(inc.category || '固定收入')}</div>
+              </td>
+              <td class="py-3 px-2 font-sans">
+                <div class="text-zinc-800">${cycleText(cyc)}</div>
+                <div class="text-[11px] text-zinc-400">${inc.payday ? '入帳日 ' + escapeHtml(inc.payday) : ''}</div>
+              </td>
+              <td class="py-3 px-2 text-right text-zinc-700">${cur} ${amt.toLocaleString('zh-TW', { maximumFractionDigits: 2 })}</td>
+              <td class="py-3 px-2 text-right font-medium text-zinc-900">${fmtTWD(twdMonthly)}</td>
+              <td class="py-3 px-2 text-right font-medium text-emerald-700">${fmtTWD(twdAnnual)}</td>
+              <td class="py-3 px-2 font-sans">
+                <div class="text-zinc-700 text-xs">${escapeHtml(inc.account || '')}</div>
+                <div class="text-[11px] text-zinc-400">${escapeHtml(inc.note || '')}</div>
+              </td>
+              <td class="py-3 px-2 text-right whitespace-nowrap font-sans">
+                <button type="button" data-action="record-income" data-id="${escapeHtml(inc.id)}" data-default-amt="${Math.round(twdPer)}" class="text-emerald-700 hover:text-emerald-900 text-xs font-medium mr-2.5">登記入帳</button>
+                <button type="button" data-action="edit-income" data-id="${escapeHtml(inc.id)}" class="text-zinc-600 hover:text-zinc-900 text-xs font-medium mr-2.5">編輯</button>
+                <button type="button" data-action="del-income" data-id="${escapeHtml(inc.id)}" class="text-zinc-400 hover:text-rose-700 text-xs font-medium">刪除</button>
+              </td>
+            </tr>
+          `;
+        }).join('');
+      }
+
+      // Expenses Rendering
+      function renderExpenses(totals) {
+        const rateOf = (cur) => (cur === 'TWD' ? 1 : safeNum(state.fx[cur], 1));
+        const netSurplusMin = (totals.fixedIncomeMonthlyTWD + totals.annualIncomeMin / 12) - totals.fixedExpenseMonthlyTWD - totals.randomExpenseThisMonthTWD;
+
+        document.getElementById('expense-summary-cards').innerHTML = `
+          <div class="p-5 rounded-xl bg-white hairline">
+            <div class="text-xs text-zinc-500">固定支出月均</div>
+            <div class="mt-1.5 text-xl font-semibold text-rose-700 font-mono-num">${fmtTWD(totals.fixedExpenseMonthlyTWD)}</div>
+            <div class="text-[11px] font-mono-num text-zinc-400 mt-1">年化約 ${fmtCompactWan(totals.fixedExpenseAnnualTWD)}</div>
+          </div>
+          <div class="p-5 rounded-xl bg-white hairline">
+            <div class="text-xs text-zinc-500">本月隨機支出</div>
+            <div class="mt-1.5 text-xl font-semibold text-zinc-900 font-mono-num">${fmtTWD(totals.randomExpenseThisMonthTWD)}</div>
+            <div class="text-[11px] font-mono-num text-zinc-400 mt-1">累計 ${fmtTWD(totals.randomExpenseTotalTWD)}</div>
+          </div>
+          <div class="p-5 rounded-xl bg-white hairline">
+            <div class="text-xs text-zinc-500">本月總支出估算</div>
+            <div class="mt-1.5 text-xl font-semibold text-zinc-900 font-mono-num">${fmtTWD(totals.fixedExpenseMonthlyTWD + totals.randomExpenseThisMonthTWD)}</div>
+            <div class="text-[11px] text-zinc-400 mt-1">固定月均＋本月隨機</div>
+          </div>
+          <div class="p-5 rounded-xl bg-white hairline">
+            <div class="text-xs text-zinc-500">本月預估淨結餘（低標）</div>
+            <div class="mt-1.5 text-xl font-semibold ${netSurplusMin >= 0 ? 'text-emerald-700' : 'text-rose-700'} font-mono-num">${netSurplusMin >= 0 ? '+' : ''}${fmtTWD(netSurplusMin)}</div>
+            <div class="text-[11px] text-zinc-400 mt-1">收入＋投資收益－總支出</div>
+          </div>
+        `;
+
+        const cycleText = (m) => {
+          const n = safeNum(m, 1);
+          if (n === 1) return '每月';
+          if (n === 2) return '每 2 個月';
+          if (n === 3) return '每季';
+          if (n === 6) return '每半年';
+          if (n === 12) return '每年';
+          return `每 ${n} 個月`;
+        };
+
+        const fixedList = state.fixedExpenses || [];
+        const fixedTbody = document.getElementById('fixed-exp-tbody');
+        if (fixedList.length === 0) {
+          fixedTbody.innerHTML = '<tr><td colspan="7" class="py-6 text-center text-zinc-400 font-sans">尚未新增固定支出，點右上角「新增固定支出」記錄房租、保險或訂閱開銷</td></tr>';
+        } else {
+          fixedTbody.innerHTML = fixedList.map((e) => {
+            const amt = safeNum(e.amount);
+            const cyc = Math.max(1, safeNum(e.cycleMonths, 1));
+            const cur = e.currency || 'TWD';
+            const twdPer = amt * rateOf(cur);
+            const twdAnnual = twdPer * (12 / cyc);
+            const twdMonthly = twdAnnual / 12;
+            return `
+              <tr class="hover:bg-[#f7f7f5] transition-colors duration-150">
+                <td class="py-3 px-2 font-sans">
+                  <div class="flex items-center gap-1.5">
+                    <span class="font-medium text-zinc-900">${escapeHtml(e.name)}</span>
+                    <span class="text-[11px] px-1.5 py-0.5 rounded ${(e.deductStatus === 'paid') ? 'bg-zinc-100 text-zinc-500' : 'bg-amber-50 text-amber-700'}">${(e.deductStatus === 'paid') ? '已扣款' : '未扣款'}</span>
+                  </div>
+                  <div class="text-[11px] text-zinc-500">${escapeHtml(e.category || '固定支出')}</div>
+                </td>
+                <td class="py-3 px-2 font-sans">
+                  <div class="text-zinc-800">${cycleText(cyc)}</div>
+                  <div class="text-[11px] text-zinc-400">${e.payday ? '扣款日 ' + escapeHtml(e.payday) : ''}</div>
+                </td>
+                <td class="py-3 px-2 text-right text-zinc-700">${cur} ${amt.toLocaleString('zh-TW', { maximumFractionDigits: 2 })}</td>
+                <td class="py-3 px-2 text-right font-medium text-rose-700">${fmtTWD(twdMonthly)}</td>
+                <td class="py-3 px-2 text-right text-zinc-600">${fmtTWD(twdAnnual)}</td>
+                <td class="py-3 px-2 font-sans">
+                  <div class="text-zinc-700 text-xs">${escapeHtml(e.account || '')}</div>
+                  <div class="text-[11px] text-zinc-400">${escapeHtml(e.note || '')}</div>
+                </td>
+                <td class="py-3 px-2 text-right whitespace-nowrap font-sans">
+                  <button type="button" data-action="record-fixed-exp" data-id="${escapeHtml(e.id)}" data-default-amt="${Math.round(twdPer)}" class="text-amber-700 hover:text-amber-900 text-xs font-medium mr-2.5">${(e.deductStatus === 'paid') ? '再記一期' : '執行扣款'}</button>
+                  <button type="button" data-action="edit-fixed-exp" data-id="${escapeHtml(e.id)}" class="text-zinc-600 hover:text-zinc-900 text-xs font-medium mr-2.5">編輯</button>
+                  <button type="button" data-action="del-fixed-exp" data-id="${escapeHtml(e.id)}" class="text-zinc-400 hover:text-rose-700 text-xs font-medium">刪除</button>
+                </td>
+              </tr>
+            `;
+          }).join('');
+        }
+
+        const randList = [...(state.randomExpenses || [])]
+          .filter((r) => (!expMonthFilter || String(r.date || '').startsWith(expMonthFilter)) && (expCatFilter === 'ALL' || r.category === expCatFilter))
+          .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+
+        let filteredSumTWD = 0;
+        randList.forEach((r) => { filteredSumTWD += safeNum(r.amount) * rateOf(r.currency || 'TWD'); });
+        document.getElementById('random-exp-bar').innerHTML =
+          `篩選筆數 <span class="text-zinc-900 font-medium">${randList.length} 筆</span> · 合計 <span class="text-rose-700 font-medium">${fmtTWD(filteredSumTWD)}</span>`;
+
+        const randTbody = document.getElementById('random-exp-tbody');
+        if (randList.length === 0) {
+          randTbody.innerHTML = '<tr><td colspan="7" class="py-6 text-center text-zinc-400 font-sans">目前條件下尚無隨機支出紀錄</td></tr>';
+        } else {
+          randTbody.innerHTML = randList.map((r) => {
+            const amt = safeNum(r.amount);
+            const cur = r.currency || 'TWD';
+            const twd = amt * rateOf(cur);
+            return `
+              <tr class="hover:bg-[#f7f7f5] transition-colors duration-150">
+                <td class="py-3 px-2 text-zinc-700">${escapeHtml(r.date)}</td>
+                <td class="py-3 px-2 font-sans text-xs text-zinc-500">${escapeHtml(r.category || '其他')}</td>
+                <td class="py-3 px-2 font-sans">
+                  <div class="flex items-center gap-1.5">
+                    <span class="font-medium text-zinc-900">${escapeHtml(r.title)}</span>
+                    <span class="text-[11px] px-1.5 py-0.5 rounded ${(r.deductStatus === 'paid') ? 'bg-zinc-100 text-zinc-500' : 'bg-amber-50 text-amber-700'}">${(r.deductStatus === 'paid') ? '已扣款' : '未扣款'}</span>
+                  </div>
+                </td>
+                <td class="py-3 px-2 text-right text-zinc-600">${cur} ${amt.toLocaleString('zh-TW', { maximumFractionDigits: 2 })}</td>
+                <td class="py-3 px-2 text-right font-medium text-rose-700">${fmtTWD(twd)}</td>
+                <td class="py-3 px-2 font-sans">
+                  <div class="text-zinc-700 text-xs">${escapeHtml(r.account || '')}</div>
+                  <div class="text-[11px] text-zinc-400">${escapeHtml(r.note || '')}</div>
+                </td>
+                <td class="py-3 px-2 text-right whitespace-nowrap font-sans">
+                  ${(r.deductStatus !== 'paid') ? `<button type="button" data-action="pay-random-exp" data-id="${escapeHtml(r.id)}" class="text-amber-700 hover:text-amber-900 text-xs font-medium mr-2.5">執行扣款</button>` : ''}
+                  <button type="button" data-action="edit-random-exp" data-id="${escapeHtml(r.id)}" class="text-zinc-600 hover:text-zinc-900 text-xs font-medium mr-2.5">編輯</button>
+                  <button type="button" data-action="del-random-exp" data-id="${escapeHtml(r.id)}" class="text-zinc-400 hover:text-rose-700 text-xs font-medium">刪除</button>
+                </td>
+              </tr>
+            `;
+          }).join('');
+        }
+      }
+
+      // FX Trading Calculations (Weighted Average Cost per Currency)
+      function computeFxStats(trades, fxRates) {
+        const currencies = ['USD', 'JPY', 'HKD', 'CNY'];
+        const pos = {};
+        currencies.forEach((c) => {
+          pos[c] = { currency: c, qty: 0, costTWD: 0, avgRate: 0, realizedTWD: 0, unrealizedTWD: 0, feesTWD: 0 };
+        });
+
+        const chronological = [...(trades || [])].sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
+        const realizedByTradeId = {};
+
+        chronological.forEach((t) => {
+          const cur = t.currency || 'USD';
+          if (!pos[cur]) pos[cur] = { currency: cur, qty: 0, costTWD: 0, avgRate: 0, realizedTWD: 0, unrealizedTWD: 0, feesTWD: 0 };
+          const p = pos[cur];
+          const amt = safeNum(t.amount);
+          const rate = safeNum(t.rate);
+          const fee = safeNum(t.feeTWD);
+          p.feesTWD += fee;
+
+          if (t.side === 'BUY') {
+            p.qty += amt;
+            p.costTWD += amt * rate + fee;
+            p.avgRate = p.qty > 0 ? p.costTWD / p.qty : 0;
+            realizedByTradeId[t.id] = null;
+          } else {
+            const avgBefore = p.qty > 0 ? p.costTWD / p.qty : rate;
+            const realized = (rate - avgBefore) * amt - fee;
+            p.realizedTWD += realized;
+            realizedByTradeId[t.id] = realized;
+            const remainQty = Math.max(0, p.qty - amt);
+            p.costTWD = remainQty > 0 ? remainQty * avgBefore : 0;
+            p.qty = remainQty;
+            p.avgRate = p.qty > 0 ? p.costTWD / p.qty : 0;
+          }
+        });
+
+        let totalRealizedTWD = 0;
+        let totalUnrealizedTWD = 0;
+        let totalFeesTWD = 0;
+        let totalHoldValueTWD = 0;
+
+        Object.values(pos).forEach((p) => {
+          const curRate = safeNum(fxRates[p.currency], 0);
+          const mvTWD = p.qty * curRate;
+          p.unrealizedTWD = p.qty > 0 ? mvTWD - p.costTWD : 0;
+          totalRealizedTWD += p.realizedTWD;
+          totalUnrealizedTWD += p.unrealizedTWD;
+          totalFeesTWD += p.feesTWD;
+          totalHoldValueTWD += mvTWD;
+        });
+
+        return { pos, realizedByTradeId, totalRealizedTWD, totalUnrealizedTWD, totalFeesTWD, totalHoldValueTWD };
+      }
+
+      function renderFxCalculator() {
+        const amt = safeNum(document.getElementById('fx-calc-amt').value);
+        const buy = safeNum(document.getElementById('fx-calc-buy').value);
+        const sell = safeNum(document.getElementById('fx-calc-sell').value);
+        const fee = safeNum(document.getElementById('fx-calc-fee').value);
+
+        const buyTWD = amt * buy;
+        const sellTWD = amt * sell;
+        const netGainTWD = sellTWD - buyTWD - fee;
+        const roiPct = buyTWD > 0 ? (netGainTWD / buyTWD) * 100 : 0;
+        const breakEvenRate = amt > 0 ? (buyTWD + fee) / amt : buy;
+        const gainCls = netGainTWD >= 0 ? 'text-rose-700' : 'text-emerald-700';
+
+        document.getElementById('fx-calc-result').innerHTML = `
+          <div class="p-3.5 rounded-lg bg-[#f7f7f5] hairline">
+            <div class="text-[11px] text-zinc-500">買入成本 / 賣出可得</div>
+            <div class="mt-1 text-xs font-medium text-zinc-900 font-mono-num">${fmtTWD(buyTWD)} → ${fmtTWD(sellTWD)}</div>
+          </div>
+          <div class="p-3.5 rounded-lg bg-[#f7f7f5] hairline">
+            <div class="text-[11px] text-zinc-500">預估淨匯差損益</div>
+            <div class="mt-1 text-base font-semibold ${gainCls} font-mono-num">${netGainTWD >= 0 ? '+' : ''}${fmtTWD(netGainTWD)}</div>
+          </div>
+          <div class="p-3.5 rounded-lg bg-[#f7f7f5] hairline">
+            <div class="text-[11px] text-zinc-500">匯差報酬率</div>
+            <div class="mt-1 text-base font-semibold ${gainCls} font-mono-num">${roiPct >= 0 ? '+' : ''}${roiPct.toFixed(2)}%</div>
+          </div>
+          <div class="p-3.5 rounded-lg bg-[#f7f7f5] hairline">
+            <div class="text-[11px] text-zinc-500">損益兩平賣出匯率</div>
+            <div class="mt-1 text-base font-semibold text-zinc-900 font-mono-num">${breakEvenRate.toFixed(4)}</div>
+          </div>
+        `;
+      }
+
+      function renderFxTab() {
+        const stats = computeFxStats(state.fxTrades, state.fx);
+        const realCls = stats.totalRealizedTWD >= 0 ? 'text-rose-700' : 'text-emerald-700';
+        const unrealCls = stats.totalUnrealizedTWD >= 0 ? 'text-rose-700' : 'text-emerald-700';
+
+        document.getElementById('fx-summary-cards').innerHTML = `
+          <div class="p-5 rounded-xl bg-white hairline">
+            <div class="text-xs text-zinc-500">交易部位現值</div>
+            <div class="mt-1.5 text-xl font-semibold text-zinc-900 font-mono-num">${fmtTWD(stats.totalHoldValueTWD)}</div>
+            <div class="text-[11px] text-zinc-400 mt-1">依外幣交易帳本淨持有計算</div>
+          </div>
+          <div class="p-5 rounded-xl bg-white hairline">
+            <div class="text-xs text-zinc-500">未實現匯差損益</div>
+            <div class="mt-1.5 text-xl font-semibold ${unrealCls} font-mono-num">${stats.totalUnrealizedTWD >= 0 ? '+' : ''}${fmtTWD(stats.totalUnrealizedTWD)}</div>
+            <div class="text-[11px] text-zinc-400 mt-1">對照目前即時匯率</div>
+          </div>
+          <div class="p-5 rounded-xl bg-white hairline">
+            <div class="text-xs text-zinc-500">已實現匯差損益</div>
+            <div class="mt-1.5 text-xl font-semibold ${realCls} font-mono-num">${stats.totalRealizedTWD >= 0 ? '+' : ''}${fmtTWD(stats.totalRealizedTWD)}</div>
+            <div class="text-[11px] text-zinc-400 mt-1">已扣除各筆交易手續費</div>
+          </div>
+          <div class="p-5 rounded-xl bg-white hairline">
+            <div class="text-xs text-zinc-500">累計換匯手續費</div>
+            <div class="mt-1.5 text-xl font-semibold text-zinc-900 font-mono-num">${fmtTWD(stats.totalFeesTWD)}</div>
+            <div class="text-[11px] text-zinc-400 mt-1">共 ${(state.fxTrades || []).length} 筆交易紀錄</div>
+          </div>
+        `;
+
+        const posRows = Object.values(stats.pos);
+        document.getElementById('fx-positions-tbody').innerHTML = posRows.map((p) => {
+          const liveRate = safeNum(state.fx[p.currency], 0);
+          const uCls = p.unrealizedTWD >= 0 ? 'text-rose-700' : 'text-emerald-700';
+          const rCls = p.realizedTWD >= 0 ? 'text-rose-700' : 'text-emerald-700';
+          return `
+            <tr class="hover:bg-[#f7f7f5] transition-colors duration-150">
+              <td class="py-3 px-2 font-sans font-medium text-zinc-900">${escapeHtml(p.currency)}</td>
+              <td class="py-3 px-2 text-right text-zinc-800">${p.qty.toLocaleString('zh-TW', { maximumFractionDigits: 2 })}</td>
+              <td class="py-3 px-2 text-right text-zinc-600">${p.avgRate > 0 ? p.avgRate.toFixed(4) : '--'}</td>
+              <td class="py-3 px-2 text-right font-medium text-zinc-900">${liveRate.toFixed(4)}</td>
+              <td class="py-3 px-2 text-right font-medium ${p.qty > 0 ? uCls : 'text-zinc-400'}">${p.qty > 0 ? (p.unrealizedTWD >= 0 ? '+' : '') + fmtTWD(p.unrealizedTWD) : '--'}</td>
+              <td class="py-3 px-2 text-right font-medium ${p.realizedTWD !== 0 ? rCls : 'text-zinc-400'}">${p.realizedTWD !== 0 ? (p.realizedTWD >= 0 ? '+' : '') + fmtTWD(p.realizedTWD) : '--'}</td>
+            </tr>
+          `;
+        }).join('');
+
+        const list = [...(state.fxTrades || [])]
+          .filter((t) => fxFilterCur === 'ALL' || t.currency === fxFilterCur)
+          .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+
+        const tbody = document.getElementById('fx-trades-tbody');
+        if (list.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="9" class="py-6 text-center text-zinc-400 font-sans">尚無外幣交易紀錄，點右上角「新增外幣交易」開始追蹤買賣均價與匯差</td></tr>';
+        } else {
+          tbody.innerHTML = list.map((t) => {
+            const amt = safeNum(t.amount);
+            const rate = safeNum(t.rate);
+            const fee = safeNum(t.feeTWD);
+            const twd = amt * rate;
+            const isBuy = t.side === 'BUY';
+            const realized = stats.realizedByTradeId[t.id];
+            const realizedHtml = realized === null || realized === undefined
+              ? '<span class="text-zinc-400">--</span>'
+              : `<span class="${realized >= 0 ? 'text-rose-700' : 'text-emerald-700'} font-medium">${realized >= 0 ? '+' : ''}${fmtTWD(realized)}</span>`;
+            return `
+              <tr class="hover:bg-[#f7f7f5] transition-colors duration-150">
+                <td class="py-3 px-2 text-zinc-700">${escapeHtml(t.date)}</td>
+                <td class="py-3 px-2 font-sans">
+                  <span class="font-medium ${isBuy ? 'text-zinc-900' : 'text-amber-700'}">${isBuy ? '買入' : '賣出'} ${escapeHtml(t.currency)}</span>
+                </td>
+                <td class="py-3 px-2 text-right text-zinc-800">${amt.toLocaleString('zh-TW', { maximumFractionDigits: 2 })}</td>
+                <td class="py-3 px-2 text-right text-zinc-900">${rate.toFixed(4)}</td>
+                <td class="py-3 px-2 text-right font-medium text-zinc-900">${fmtTWD(twd)}</td>
+                <td class="py-3 px-2 text-right text-zinc-500">${fmtTWD(fee)}</td>
+                <td class="py-3 px-2 text-right">${realizedHtml}</td>
+                <td class="py-3 px-2 font-sans">
+                  <div class="text-xs text-zinc-700">${escapeHtml(t.account || '')}</div>
+                  <div class="text-[11px] text-zinc-400">${escapeHtml(t.note || '')}</div>
+                </td>
+                <td class="py-3 px-2 text-right whitespace-nowrap font-sans">
+                  <button type="button" data-action="edit-fx-trade" data-id="${escapeHtml(t.id)}" class="text-zinc-600 hover:text-zinc-900 text-xs font-medium mr-2.5">編輯</button>
+                  <button type="button" data-action="del-fx-trade" data-id="${escapeHtml(t.id)}" class="text-zinc-400 hover:text-rose-700 text-xs font-medium">刪除</button>
+                </td>
+              </tr>
+            `;
+          }).join('');
+        }
+
+        renderFxCalculator();
+      }
+
+      // History Rendering
+      function renderHistory() {
+        const sortedSnaps = [...(state.snapshots || [])].sort((a, b) => String(b.date).localeCompare(String(a.date)));
+        const snapsTbody = document.getElementById('snapshots-tbody');
+        if (sortedSnaps.length === 0) {
+          snapsTbody.innerHTML = '<tr><td colspan="7" class="py-6 text-center text-zinc-400 font-sans">尚無歷史快照</td></tr>';
+        } else {
+          snapsTbody.innerHTML = sortedSnaps.map((s) => `
+            <tr class="hover:bg-[#f7f7f5] transition-colors duration-150">
+              <td class="py-3 px-2 font-medium text-zinc-900">${escapeHtml(s.date)}</td>
+              <td class="py-3 px-2 text-right text-zinc-700">${fmtTWD(s.cashTWD)}</td>
+              <td class="py-3 px-2 text-right text-zinc-700">${fmtTWD(s.stocksTWD)}</td>
+              <td class="py-3 px-2 text-right text-zinc-700">${fmtTWD(s.investmentsTWD)}</td>
+              <td class="py-3 px-2 text-right font-semibold text-zinc-900">${fmtTWD(s.totalTWD)}</td>
+              <td class="py-3 px-2 font-sans text-xs text-zinc-500">${escapeHtml(s.note || '')}</td>
+              <td class="py-3 px-2 text-right whitespace-nowrap font-sans">
+                <button type="button" data-action="edit-snap" data-id="${escapeHtml(s.id)}" class="text-zinc-600 hover:text-zinc-900 text-xs font-medium mr-2.5">編輯</button>
+                <button type="button" data-action="del-snap" data-id="${escapeHtml(s.id)}" class="text-zinc-400 hover:text-rose-700 text-xs font-medium">刪除</button>
+              </td>
+            </tr>
+          `).join('');
+        }
+
+        const sortedLedger = [...(state.ledger || [])].sort((a, b) => String(b.date).localeCompare(String(a.date)));
+        const ledgerTbody = document.getElementById('ledger-tbody');
+        if (sortedLedger.length === 0) {
+          ledgerTbody.innerHTML = '<tr><td colspan="6" class="py-6 text-center text-zinc-400 font-sans">尚無收支流水紀錄</td></tr>';
+        } else {
+          ledgerTbody.innerHTML = sortedLedger.map((l) => {
+            const amt = safeNum(l.amountTWD);
+            const isIncome = amt >= 0;
+            return `
+              <tr class="hover:bg-[#f7f7f5] transition-colors duration-150">
+                <td class="py-3 px-2 text-zinc-700">${escapeHtml(l.date)}</td>
+                <td class="py-3 px-2 font-sans text-xs text-zinc-500">${escapeHtml(l.type)}</td>
+                <td class="py-3 px-2 font-sans font-medium text-zinc-900">${escapeHtml(l.title)}</td>
+                <td class="py-3 px-2 text-right font-medium ${isIncome ? 'text-rose-700' : 'text-emerald-700'}">${isIncome ? '+' : ''}${fmtTWD(amt)}</td>
+                <td class="py-3 px-2 font-sans text-xs text-zinc-500">${escapeHtml(l.note || '')}</td>
+                <td class="py-3 px-2 text-right whitespace-nowrap font-sans">
+                  <button type="button" data-action="del-ledger" data-id="${escapeHtml(l.id)}" class="text-zinc-400 hover:text-rose-700 text-xs font-medium">刪除</button>
+                </td>
+              </tr>
+            `;
+          }).join('');
+        }
+      }
+
+      function renderSettings() {
+        document.getElementById('fx-usd').value = safeNum(state.fx.USD, 33.022);
+        document.getElementById('fx-jpy').value = safeNum(state.fx.JPY, 0.2069);
+        document.getElementById('fx-hkd').value = safeNum(state.fx.HKD, 4.2097);
+        document.getElementById('fx-cny').value = safeNum(state.fx.CNY, 4.9525);
+        document.getElementById('cfg-gsheet-csv').value = appConfig.gsheetCsvUrl || '';
+        document.getElementById('cfg-finnhub-key').value = appConfig.finnhubKey || '';
+        document.getElementById('cfg-firebase-json').value = appConfig.firebaseConfigText || '';
+        document.getElementById('cfg-auto-refresh').checked = appConfig.autoRefresh !== false;
+        document.getElementById('cfg-refresh-interval').value = String(safeNum(appConfig.refreshIntervalMin, 5));
+        updateCloudStatusUI();
+      }
+
+      function renderAll() {
+        const totals = computeTotals(state);
+        renderOverview(totals);
+        renderStocks();
+        renderCash(totals);
+        renderInvestments(totals);
+        renderFixedIncomes(totals);
+        renderExpenses(totals);
+        renderFxTab();
+        renderHistory();
+        renderSettings();
+      }
+
+      // Modal Helpers
+      function openFormModal(title, fieldsHtml, onSubmit) {
+        document.getElementById('modal-title').textContent = title;
+        document.getElementById('modal-fields').innerHTML = fieldsHtml;
+        currentModalSubmit = onSubmit;
+        const modal = document.getElementById('form-modal');
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+      }
+
+      function closeFormModal() {
+        const modal = document.getElementById('form-modal');
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+        currentModalSubmit = null;
+      }
+
+      function openConfirmModal(title, message, onOk) {
+        document.getElementById('confirm-title').textContent = title;
+        document.getElementById('confirm-message').textContent = message;
+        currentConfirmAction = onOk;
+        const modal = document.getElementById('confirm-modal');
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+      }
+
+      function closeConfirmModal() {
+        const modal = document.getElementById('confirm-modal');
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+        currentConfirmAction = null;
+      }
+
+      // Dynamic Account Selector Helper (filters created cash accounts by currency + Cash + Credit Card)
+      function buildAccountOptionsHtml(currency, selectedValue) {
+        const cur = currency || 'TWD';
+        const matchingBanks = (state.cash || [])
+          .filter((c) => c.currency === cur)
+          .map((c) => c.bank);
+        const options = [
+          `現金（${cur}）`,
+          ...matchingBanks,
+          '信用卡'
+        ];
+        const unique = [...new Set(options)];
+        const hasSelected = selectedValue && unique.includes(selectedValue);
+        const isCustom = Boolean(selectedValue && !hasSelected);
+        return unique.map((opt) =>
+          `<option value="${escapeHtml(opt)}" ${opt === selectedValue ? 'selected' : ''}>${escapeHtml(opt)}</option>`
+        ).join('') + `<option value="__CUSTOM__" ${isCustom ? 'selected' : ''}>其他（手動輸入）</option>`;
+      }
+
+      function wireCurrencyAccountSelect(initialAccount) {
+        const form = document.getElementById('modal-form');
+        const curSel = form.querySelector('select[name="currency"]');
+        const accSel = form.querySelector('select[name="accountSelect"]');
+        const customInput = form.querySelector('input[name="accountCustom"]');
+        if (!curSel || !accSel || !customInput) return;
+
+        const syncCustomVisibility = () => {
+          const showCustom = accSel.value === '__CUSTOM__';
+          customInput.classList.toggle('hidden', !showCustom);
+          customInput.required = showCustom;
+        };
+
+        curSel.addEventListener('change', () => {
+          const prev = accSel.value === '__CUSTOM__' ? customInput.value : accSel.value;
+          accSel.innerHTML = buildAccountOptionsHtml(curSel.value, prev);
+          if (accSel.value === '__CUSTOM__' && !customInput.value) {
+            accSel.selectedIndex = 0;
+          }
+          syncCustomVisibility();
+        });
+
+        accSel.addEventListener('change', syncCustomVisibility);
+
+        if (initialAccount && accSel.value === '__CUSTOM__') {
+          customInput.value = initialAccount;
+        }
+        syncCustomVisibility();
+      }
+
+      function resolveModalAccount(fd) {
+        const sel = String(fd.get('accountSelect') || '');
+        if (sel === '__CUSTOM__') {
+          return String(fd.get('accountCustom') || '').trim();
+        }
+        return sel.trim();
+      }
+
+      // CRUD Modals
+      function openStockModal(item = null) {
+        const isEdit = Boolean(item);
+        const s = item || { symbol: '', name: '', market: 'US', account: '美股複委託', currency: 'USD', shares: 0, avgCost: 0, currentPrice: 0 };
+        const html = `
+          <div class="grid grid-cols-2 gap-3">
+            <div><label class="block text-xs font-medium text-zinc-600 mb-1">股票代碼</label><input name="symbol" required value="${escapeHtml(s.symbol)}" class="w-full h-9 px-3 rounded-lg hairline text-sm" /></div>
+            <div><label class="block text-xs font-medium text-zinc-600 mb-1">股票名稱</label><input name="name" required value="${escapeHtml(s.name)}" class="w-full h-9 px-3 rounded-lg hairline text-sm" /></div>
+          </div>
+          <div class="grid grid-cols-3 gap-3">
+            <div><label class="block text-xs font-medium text-zinc-600 mb-1">市場</label><select name="market" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white"><option value="TW" ${s.market === 'TW' ? 'selected' : ''}>台股</option><option value="US" ${s.market === 'US' ? 'selected' : ''}>美股</option><option value="HK" ${s.market === 'HK' ? 'selected' : ''}>港股</option></select></div>
+            <div><label class="block text-xs font-medium text-zinc-600 mb-1">幣別</label><select name="currency" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white"><option value="TWD" ${s.currency === 'TWD' ? 'selected' : ''}>TWD</option><option value="USD" ${s.currency === 'USD' ? 'selected' : ''}>USD</option><option value="HKD" ${s.currency === 'HKD' ? 'selected' : ''}>HKD</option></select></div>
+            <div><label class="block text-xs font-medium text-zinc-600 mb-1">帳戶</label><input name="account" value="${escapeHtml(s.account)}" class="w-full h-9 px-3 rounded-lg hairline text-sm" /></div>
+          </div>
+          <div class="grid grid-cols-3 gap-3">
+            <div><label class="block text-xs font-medium text-zinc-600 mb-1">持有股數</label><input name="shares" type="number" step="0.0001" min="0" required value="${safeNum(s.shares)}" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" /></div>
+            <div><label class="block text-xs font-medium text-zinc-600 mb-1">平均成本</label><input name="avgCost" type="number" step="0.0001" min="0" required value="${safeNum(s.avgCost)}" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" /></div>
+            <div><label class="block text-xs font-medium text-zinc-600 mb-1">最新現價</label><input name="currentPrice" type="number" step="0.0001" min="0" required value="${safeNum(s.currentPrice)}" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" /></div>
+          </div>
+        `;
+        openFormModal(isEdit ? '編輯股票持倉' : '新增股票持倉', html, (fd) => {
+          const record = {
+            id: isEdit ? s.id : uid('s'),
+            symbol: String(fd.get('symbol')).trim(),
+            name: String(fd.get('name')).trim(),
+            market: String(fd.get('market')),
+            currency: String(fd.get('currency')),
+            account: String(fd.get('account')).trim(),
+            shares: safeNum(fd.get('shares')),
+            avgCost: safeNum(fd.get('avgCost')),
+            currentPrice: safeNum(fd.get('currentPrice'))
+          };
+          state.stocks = isEdit ? state.stocks.map((x) => (x.id === s.id ? record : x)) : [...state.stocks, record];
+          saveState();
+          renderAll();
+          showToast(isEdit ? '已更新股票持倉' : '已新增股票持倉');
+        });
+      }
+
+      function openCashModal(item = null) {
+        const isEdit = Boolean(item);
+        const c = item || { bank: '', currency: 'TWD', amount: 0, note: '' };
+        const html = `
+          <div><label class="block text-xs font-medium text-zinc-600 mb-1">銀行 / 帳戶名稱</label><input name="bank" required value="${escapeHtml(c.bank)}" class="w-full h-9 px-3 rounded-lg hairline text-sm" /></div>
+          <div class="grid grid-cols-2 gap-3">
+            <div><label class="block text-xs font-medium text-zinc-600 mb-1">幣別</label><select name="currency" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white"><option value="TWD" ${c.currency === 'TWD' ? 'selected' : ''}>TWD</option><option value="USD" ${c.currency === 'USD' ? 'selected' : ''}>USD</option><option value="HKD" ${c.currency === 'HKD' ? 'selected' : ''}>HKD</option><option value="CNY" ${c.currency === 'CNY' ? 'selected' : ''}>CNY</option><option value="JPY" ${c.currency === 'JPY' ? 'selected' : ''}>JPY</option></select></div>
+            <div><label class="block text-xs font-medium text-zinc-600 mb-1">原幣餘額</label><input name="amount" type="number" step="0.01" required value="${safeNum(c.amount)}" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" /></div>
+          </div>
+          <div><label class="block text-xs font-medium text-zinc-600 mb-1">備註</label><input name="note" value="${escapeHtml(c.note)}" class="w-full h-9 px-3 rounded-lg hairline text-sm" /></div>
+        `;
+        openFormModal(isEdit ? '編輯銀行現金' : '新增銀行現金', html, (fd) => {
+          const record = {
+            id: isEdit ? c.id : uid('c'),
+            bank: String(fd.get('bank')).trim(),
+            currency: String(fd.get('currency')),
+            amount: safeNum(fd.get('amount')),
+            note: String(fd.get('note')).trim()
+          };
+          state.cash = isEdit ? state.cash.map((x) => (x.id === c.id ? record : x)) : [...state.cash, record];
+          saveState();
+          renderAll();
+          showToast(isEdit ? '已更新現金帳戶' : '已新增現金帳戶');
+        });
+      }
+
+      function openInvModal(item = null) {
+        const isEdit = Boolean(item);
+        const inv = item || { name: '', principal: 0, cycleMonths: 1, minRate: 3, maxRate: 5, principalRecoverable: true, note: '' };
+        const html = `
+          <div><label class="block text-xs font-medium text-zinc-600 mb-1">投資項目名稱</label><input name="name" required value="${escapeHtml(inv.name)}" class="w-full h-9 px-3 rounded-lg hairline text-sm" /></div>
+          <div class="grid grid-cols-2 gap-3">
+            <div><label class="block text-xs font-medium text-zinc-600 mb-1">投入本金 (台幣)</label><input name="principal" type="number" step="1" min="0" required value="${safeNum(inv.principal)}" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" /></div>
+            <div><label class="block text-xs font-medium text-zinc-600 mb-1">結算週期 (月)</label><input name="cycleMonths" type="number" step="1" min="1" max="60" required value="${safeNum(inv.cycleMonths, 1)}" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" /></div>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div><label class="block text-xs font-medium text-zinc-600 mb-1">單期低標報酬 (%)</label><input name="minRate" type="number" step="0.1" required value="${safeNum(inv.minRate)}" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" /></div>
+            <div><label class="block text-xs font-medium text-zinc-600 mb-1">單期高標報酬 (%)</label><input name="maxRate" type="number" step="0.1" required value="${safeNum(inv.maxRate)}" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" /></div>
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-zinc-600 mb-1">本金回收屬性（影響總資產淨值計算）</label>
+            <select name="principalRecoverable" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white">
+              <option value="true" ${inv.principalRecoverable !== false ? 'selected' : ''}>可收回本金（計入總資產淨值，如房地產／可退股權）</option>
+              <option value="false" ${inv.principalRecoverable === false ? 'selected' : ''}>無法收回本金（不計入淨值，僅計入現金流與回本試算）</option>
+            </select>
+          </div>
+          <div><label class="block text-xs font-medium text-zinc-600 mb-1">備註</label><input name="note" value="${escapeHtml(inv.note)}" class="w-full h-9 px-3 rounded-lg hairline text-sm" /></div>
+        `;
+        openFormModal(isEdit ? '編輯實體投資' : '新增實體投資', html, (fd) => {
+          const record = {
+            id: isEdit ? inv.id : uid('i'),
+            name: String(fd.get('name')).trim(),
+            principal: safeNum(fd.get('principal')),
+            cycleMonths: Math.max(1, safeNum(fd.get('cycleMonths'), 1)),
+            minRate: safeNum(fd.get('minRate')),
+            maxRate: safeNum(fd.get('maxRate')),
+            principalRecoverable: String(fd.get('principalRecoverable')) !== 'false',
+            note: String(fd.get('note')).trim()
+          };
+          state.investments = isEdit ? state.investments.map((x) => (x.id === inv.id ? record : x)) : [...state.investments, record];
+          saveState();
+          renderAll();
+          showToast(isEdit ? '已更新投資項目' : '已新增投資項目');
+        });
+      }
+
+      function openFixedIncomeModal(item = null) {
+        const isEdit = Boolean(item);
+        const inc = item || { name: '', category: '薪資收入', currency: 'TWD', amount: 0, cycleMonths: 1, payday: '每月 5 號', account: '國泰銀行', note: '' };
+        const html = `
+          <div class="grid grid-cols-2 gap-3">
+            <div><label class="block text-xs font-medium text-zinc-600 mb-1">收入名稱</label><input name="name" required value="${escapeHtml(inc.name)}" class="w-full h-9 px-3 rounded-lg hairline text-sm" /></div>
+            <div><label class="block text-xs font-medium text-zinc-600 mb-1">類別</label><select name="category" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white"><option value="薪資收入" ${inc.category === '薪資收入' ? 'selected' : ''}>薪資收入</option><option value="租金收入" ${inc.category === '租金收入' ? 'selected' : ''}>租金收入</option><option value="定存與債息" ${inc.category === '定存與債息' ? 'selected' : ''}>定存與債息</option><option value="副業與顧問" ${inc.category === '副業與顧問' ? 'selected' : ''}>副業與顧問</option><option value="其他固定收入" ${inc.category === '其他固定收入' ? 'selected' : ''}>其他固定收入</option></select></div>
+          </div>
+          <div class="grid grid-cols-3 gap-3">
+            <div><label class="block text-xs font-medium text-zinc-600 mb-1">幣別</label><select name="currency" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white"><option value="TWD" ${inc.currency === 'TWD' ? 'selected' : ''}>TWD</option><option value="USD" ${inc.currency === 'USD' ? 'selected' : ''}>USD</option><option value="HKD" ${inc.currency === 'HKD' ? 'selected' : ''}>HKD</option><option value="CNY" ${inc.currency === 'CNY' ? 'selected' : ''}>CNY</option><option value="JPY" ${inc.currency === 'JPY' ? 'selected' : ''}>JPY</option></select></div>
+            <div><label class="block text-xs font-medium text-zinc-600 mb-1">單期金額</label><input name="amount" type="number" step="0.01" min="0" required value="${safeNum(inc.amount)}" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" /></div>
+            <div><label class="block text-xs font-medium text-zinc-600 mb-1">發放週期</label><select name="cycleMonths" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white"><option value="1" ${safeNum(inc.cycleMonths, 1) === 1 ? 'selected' : ''}>每月</option><option value="2" ${safeNum(inc.cycleMonths) === 2 ? 'selected' : ''}>每2個月</option><option value="3" ${safeNum(inc.cycleMonths) === 3 ? 'selected' : ''}>每季</option><option value="6" ${safeNum(inc.cycleMonths) === 6 ? 'selected' : ''}>每半年</option><option value="12" ${safeNum(inc.cycleMonths) === 12 ? 'selected' : ''}>每年</option></select></div>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div><label class="block text-xs font-medium text-zinc-600 mb-1">入帳日</label><input name="payday" value="${escapeHtml(inc.payday)}" class="w-full h-9 px-3 rounded-lg hairline text-sm" /></div>
+            <div><label class="block text-xs font-medium text-zinc-600 mb-1">入帳帳戶</label><input name="account" value="${escapeHtml(inc.account)}" class="w-full h-9 px-3 rounded-lg hairline text-sm" /></div>
+          </div>
+          <div><label class="block text-xs font-medium text-zinc-600 mb-1">備註</label><input name="note" value="${escapeHtml(inc.note)}" class="w-full h-9 px-3 rounded-lg hairline text-sm" /></div>
+        `;
+        openFormModal(isEdit ? '編輯固定收入來源' : '新增固定收入來源', html, (fd) => {
+          const record = {
+            id: isEdit ? inc.id : uid('inc'),
+            name: String(fd.get('name')).trim(),
+            category: String(fd.get('category')),
+            currency: String(fd.get('currency')),
+            amount: safeNum(fd.get('amount')),
+            cycleMonths: Math.max(1, safeNum(fd.get('cycleMonths'), 1)),
+            payday: String(fd.get('payday')).trim(),
+            account: String(fd.get('account')).trim(),
+            note: String(fd.get('note')).trim()
+          };
+          if (!Array.isArray(state.fixedIncomes)) state.fixedIncomes = [];
+          state.fixedIncomes = isEdit ? state.fixedIncomes.map((x) => (x.id === inc.id ? record : x)) : [...state.fixedIncomes, record];
+          saveState();
+          renderAll();
+          showToast(isEdit ? '已更新固定收入來源' : '已新增固定收入來源');
+        });
+      }
+
+      function openFixedExpenseModal(item = null) {
+        const isEdit = Boolean(item);
+        const e = item || { name: '', category: '居住與房貸', currency: 'TWD', amount: 0, cycleMonths: 1, payday: '每月 1 號', account: '現金（TWD）', deductStatus: 'unpaid', note: '' };
+        const html = `
+          <div class="grid grid-cols-2 gap-3">
+            <div><label class="block text-xs font-medium text-zinc-600 mb-1">固定支出名稱</label><input name="name" required value="${escapeHtml(e.name)}" class="w-full h-9 px-3 rounded-lg hairline text-sm" /></div>
+            <div><label class="block text-xs font-medium text-zinc-600 mb-1">類別</label><select name="category" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white"><option value="居住與房貸" ${e.category === '居住與房貸' ? 'selected' : ''}>居住與房貸</option><option value="保險與醫療" ${e.category === '保險與醫療' ? 'selected' : ''}>保險與醫療</option><option value="水電與通訊" ${e.category === '水電與通訊' ? 'selected' : ''}>水電與通訊</option><option value="訂閱與會員" ${e.category === '訂閱與會員' ? 'selected' : ''}>訂閱與會員</option><option value="家庭與孝親" ${e.category === '家庭與孝親' ? 'selected' : ''}>家庭與孝親</option><option value="交通與車貸" ${e.category === '交通與車貸' ? 'selected' : ''}>交通與車貸</option><option value="其他固定支出" ${e.category === '其他固定支出' ? 'selected' : ''}>其他固定支出</option></select></div>
+          </div>
+          <div class="grid grid-cols-3 gap-3">
+            <div><label class="block text-xs font-medium text-zinc-600 mb-1">幣別（連動帳戶）</label><select name="currency" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white"><option value="TWD" ${e.currency === 'TWD' ? 'selected' : ''}>TWD</option><option value="USD" ${e.currency === 'USD' ? 'selected' : ''}>USD</option><option value="HKD" ${e.currency === 'HKD' ? 'selected' : ''}>HKD</option><option value="CNY" ${e.currency === 'CNY' ? 'selected' : ''}>CNY</option><option value="JPY" ${e.currency === 'JPY' ? 'selected' : ''}>JPY</option></select></div>
+            <div><label class="block text-xs font-medium text-zinc-600 mb-1">單期金額</label><input name="amount" type="number" step="0.01" min="0" required value="${safeNum(e.amount)}" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" /></div>
+            <div><label class="block text-xs font-medium text-zinc-600 mb-1">扣款週期</label><select name="cycleMonths" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white"><option value="1" ${safeNum(e.cycleMonths, 1) === 1 ? 'selected' : ''}>每月</option><option value="2" ${safeNum(e.cycleMonths) === 2 ? 'selected' : ''}>每2個月</option><option value="3" ${safeNum(e.cycleMonths) === 3 ? 'selected' : ''}>每季</option><option value="6" ${safeNum(e.cycleMonths) === 6 ? 'selected' : ''}>每半年</option><option value="12" ${safeNum(e.cycleMonths) === 12 ? 'selected' : ''}>每年</option></select></div>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div><label class="block text-xs font-medium text-zinc-600 mb-1">扣款日</label><input name="payday" value="${escapeHtml(e.payday)}" class="w-full h-9 px-3 rounded-lg hairline text-sm" /></div>
+            <div>
+              <label class="block text-xs font-medium text-zinc-600 mb-1">扣款帳戶（現金／同幣別銀行）</label>
+              <select name="accountSelect" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white">${buildAccountOptionsHtml(e.currency, e.account)}</select>
+              <input name="accountCustom" placeholder="輸入自訂帳戶名稱" class="hidden mt-2 w-full h-9 px-3 rounded-lg hairline text-sm" />
+            </div>
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-zinc-600 mb-1">扣款狀態（補登歷史支出請選已扣款）</label>
+            <select name="deductStatus" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white">
+              <option value="unpaid" ${(e.deductStatus || 'unpaid') === 'unpaid' ? 'selected' : ''}>未扣款（待扣款，之後可一鍵扣銀行餘額）</option>
+              <option value="paid" ${e.deductStatus === 'paid' ? 'selected' : ''}>已扣款（歷史紀錄，不重複扣除現有餘額）</option>
+            </select>
+          </div>
+          <div><label class="block text-xs font-medium text-zinc-600 mb-1">備註</label><input name="note" value="${escapeHtml(e.note)}" class="w-full h-9 px-3 rounded-lg hairline text-sm" /></div>
+        `;
+        openFormModal(isEdit ? '編輯固定支出' : '新增固定支出', html, (fd) => {
+          const record = {
+            id: isEdit ? e.id : uid('fexp'),
+            name: String(fd.get('name')).trim(),
+            category: String(fd.get('category')),
+            currency: String(fd.get('currency')),
+            amount: safeNum(fd.get('amount')),
+            cycleMonths: Math.max(1, safeNum(fd.get('cycleMonths'), 1)),
+            payday: String(fd.get('payday')).trim(),
+            account: resolveModalAccount(fd),
+            deductStatus: String(fd.get('deductStatus') || 'unpaid'),
+            note: String(fd.get('note')).trim()
+          };
+          if (!Array.isArray(state.fixedExpenses)) state.fixedExpenses = [];
+          state.fixedExpenses = isEdit ? state.fixedExpenses.map((x) => (x.id === e.id ? record : x)) : [...state.fixedExpenses, record];
+          saveState();
+          renderAll();
+          showToast(isEdit ? '已更新固定支出' : '已新增固定支出');
+        });
+        wireCurrencyAccountSelect(e.account);
+      }
+
+      function openRandomExpenseModal(item = null) {
+        const isEdit = Boolean(item);
+        const r = item || { date: todayISO(), category: '餐飲美食', title: '', currency: 'TWD', amount: 0, account: '現金（TWD）', deductStatus: 'unpaid', note: '' };
+        const html = `
+          <div class="grid grid-cols-2 gap-3">
+            <div><label class="block text-xs font-medium text-zinc-600 mb-1">消費日期</label><input name="date" type="date" required value="${escapeHtml(r.date)}" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" /></div>
+            <div><label class="block text-xs font-medium text-zinc-600 mb-1">類別</label><select name="category" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white"><option value="餐飲美食" ${r.category === '餐飲美食' ? 'selected' : ''}>餐飲美食</option><option value="交通旅遊" ${r.category === '交通旅遊' ? 'selected' : ''}>交通旅遊</option><option value="購物消費" ${r.category === '購物消費' ? 'selected' : ''}>購物消費</option><option value="醫療保健" ${r.category === '醫療保健' ? 'selected' : ''}>醫療保健</option><option value="休閒娛樂" ${r.category === '休閒娛樂' ? 'selected' : ''}>休閒娛樂</option><option value="居家修繕" ${r.category === '居家修繕' ? 'selected' : ''}>居家修繕</option><option value="社交禮金" ${r.category === '社交禮金' ? 'selected' : ''}>社交禮金</option><option value="其他隨機支出" ${r.category === '其他隨機支出' ? 'selected' : ''}>其他隨機支出</option></select></div>
+          </div>
+          <div><label class="block text-xs font-medium text-zinc-600 mb-1">支出項目名稱</label><input name="title" required value="${escapeHtml(r.title)}" class="w-full h-9 px-3 rounded-lg hairline text-sm" /></div>
+          <div class="grid grid-cols-2 gap-3">
+            <div><label class="block text-xs font-medium text-zinc-600 mb-1">幣別（連動帳戶）</label><select name="currency" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white"><option value="TWD" ${r.currency === 'TWD' ? 'selected' : ''}>TWD</option><option value="USD" ${r.currency === 'USD' ? 'selected' : ''}>USD</option><option value="HKD" ${r.currency === 'HKD' ? 'selected' : ''}>HKD</option><option value="CNY" ${r.currency === 'CNY' ? 'selected' : ''}>CNY</option><option value="JPY" ${r.currency === 'JPY' ? 'selected' : ''}>JPY</option></select></div>
+            <div><label class="block text-xs font-medium text-zinc-600 mb-1">消費金額</label><input name="amount" type="number" step="0.01" min="0" required value="${safeNum(r.amount)}" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" /></div>
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-zinc-600 mb-1">支付帳戶（現金／同幣別銀行）</label>
+            <select name="accountSelect" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white">${buildAccountOptionsHtml(r.currency, r.account)}</select>
+            <input name="accountCustom" placeholder="輸入自訂帳戶名稱" class="hidden mt-2 w-full h-9 px-3 rounded-lg hairline text-sm" />
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-zinc-600 mb-1">扣款狀態（補登歷史支出請選已扣款）</label>
+            <select name="deductStatus" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white">
+              <option value="unpaid" ${(r.deductStatus || 'unpaid') === 'unpaid' ? 'selected' : ''}>未扣款（待扣款，之後可一鍵扣銀行餘額）</option>
+              <option value="paid" ${r.deductStatus === 'paid' ? 'selected' : ''}>已扣款（歷史紀錄，不重複扣除現有餘額）</option>
+            </select>
+          </div>
+          <div><label class="block text-xs font-medium text-zinc-600 mb-1">備註</label><input name="note" value="${escapeHtml(r.note)}" class="w-full h-9 px-3 rounded-lg hairline text-sm" /></div>
+        `;
+        openFormModal(isEdit ? '編輯隨機支出' : '新增隨機支出', html, (fd) => {
+          const record = {
+            id: isEdit ? r.id : uid('rexp'),
+            date: String(fd.get('date')),
+            category: String(fd.get('category')),
+            title: String(fd.get('title')).trim(),
+            currency: String(fd.get('currency')),
+            amount: safeNum(fd.get('amount')),
+            account: resolveModalAccount(fd),
+            deductStatus: String(fd.get('deductStatus') || 'unpaid'),
+            note: String(fd.get('note')).trim()
+          };
+          if (!Array.isArray(state.randomExpenses)) state.randomExpenses = [];
+          state.randomExpenses = isEdit ? state.randomExpenses.map((x) => (x.id === r.id ? record : x)) : [...state.randomExpenses, record];
+          saveState();
+          renderAll();
+          showToast(isEdit ? '已更新隨機支出' : '已新增隨機支出');
+        });
+        wireCurrencyAccountSelect(r.account);
+      }
+
+      function openFxTradeModal(item = null) {
+        const isEdit = Boolean(item);
+        const t = item || { date: todayISO(), side: 'BUY', currency: 'USD', amount: 1000, rate: safeNum(state.fx.USD, 33.022), feeTWD: 0, account: '現金（USD）', note: '' };
+        const html = `
+          <div class="grid grid-cols-3 gap-3">
+            <div><label class="block text-xs font-medium text-zinc-600 mb-1">交易日期</label><input name="date" type="date" required value="${escapeHtml(t.date)}" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" /></div>
+            <div><label class="block text-xs font-medium text-zinc-600 mb-1">買賣方向</label><select name="side" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white"><option value="BUY" ${t.side === 'BUY' ? 'selected' : ''}>買入外幣</option><option value="SELL" ${t.side === 'SELL' ? 'selected' : ''}>賣出外幣</option></select></div>
+            <div><label class="block text-xs font-medium text-zinc-600 mb-1">幣別（連動帳戶）</label><select name="currency" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white"><option value="USD" ${t.currency === 'USD' ? 'selected' : ''}>USD</option><option value="JPY" ${t.currency === 'JPY' ? 'selected' : ''}>JPY</option><option value="HKD" ${t.currency === 'HKD' ? 'selected' : ''}>HKD</option><option value="CNY" ${t.currency === 'CNY' ? 'selected' : ''}>CNY</option></select></div>
+          </div>
+          <div class="grid grid-cols-3 gap-3">
+            <div><label class="block text-xs font-medium text-zinc-600 mb-1">外幣金額</label><input name="amount" type="number" step="0.01" min="0.01" required value="${safeNum(t.amount)}" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" /></div>
+            <div><label class="block text-xs font-medium text-zinc-600 mb-1">成交匯率 (對台幣)</label><input name="rate" type="number" step="0.0001" min="0.0001" required value="${safeNum(t.rate)}" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" /></div>
+            <div><label class="block text-xs font-medium text-zinc-600 mb-1">手續費 (TWD)</label><input name="feeTWD" type="number" step="1" min="0" value="${safeNum(t.feeTWD)}" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" /></div>
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-zinc-600 mb-1">外幣帳戶（現金／同幣別銀行）</label>
+            <select name="accountSelect" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white">${buildAccountOptionsHtml(t.currency, t.account)}</select>
+            <input name="accountCustom" placeholder="輸入自訂帳戶名稱" class="hidden mt-2 w-full h-9 px-3 rounded-lg hairline text-sm" />
+          </div>
+          ${!isEdit ? `<label class="inline-flex items-center gap-2 text-xs text-zinc-600 cursor-pointer select-none"><input name="syncBank" type="checkbox" class="rounded border-zinc-300 text-zinc-900" /><span>同時加減所選同幣別銀行的外幣餘額</span></label>` : ''}
+          <div><label class="block text-xs font-medium text-zinc-600 mb-1">備註</label><input name="note" value="${escapeHtml(t.note)}" placeholder="例如 網銀換匯 / 旅費結匯" class="w-full h-9 px-3 rounded-lg hairline text-sm" /></div>
+        `;
+        openFormModal(isEdit ? '編輯外幣交易' : '新增外幣交易', html, (fd) => {
+          const cur = String(fd.get('currency'));
+          const side = String(fd.get('side'));
+          const amt = safeNum(fd.get('amount'));
+          const acc = resolveModalAccount(fd);
+          const record = {
+            id: isEdit ? t.id : uid('fx'),
+            date: String(fd.get('date')),
+            side,
+            currency: cur,
+            amount: amt,
+            rate: safeNum(fd.get('rate')),
+            feeTWD: safeNum(fd.get('feeTWD')),
+            account: acc,
+            note: String(fd.get('note')).trim()
+          };
+          if (!Array.isArray(state.fxTrades)) state.fxTrades = [];
+          state.fxTrades = isEdit ? state.fxTrades.map((x) => (x.id === t.id ? record : x)) : [...state.fxTrades, record];
+
+          if (!isEdit && fd.get('syncBank')) {
+            const targetBank = state.cash.find((c) => c.bank === acc && c.currency === cur);
+            if (targetBank) {
+              targetBank.amount = Number((safeNum(targetBank.amount) + (side === 'BUY' ? amt : -amt)).toFixed(2));
+            }
+          }
+          saveState();
+          renderAll();
+          showToast(isEdit ? '已更新外幣交易' : '已新增外幣交易');
+        });
+        wireCurrencyAccountSelect(t.account);
+        const form = document.getElementById('modal-form');
+        const curSel = form.querySelector('select[name="currency"]');
+        const rateInput = form.querySelector('input[name="rate"]');
+        if (curSel && rateInput && !isEdit) {
+          curSel.addEventListener('change', () => {
+            const live = safeNum(state.fx[curSel.value]);
+            if (live > 0) rateInput.value = live.toFixed(4);
+          });
+        }
+      }
+
+      function openSnapshotModal(item = null) {
+        const isEdit = Boolean(item);
+        const totals = computeTotals(state);
+        const s = item || { date: todayISO(), cashTWD: Math.round(totals.cashTWD), stocksTWD: Math.round(totals.stocksTWD), investmentsTWD: Math.round(totals.investmentsTWD), note: '' };
+        const html = `
+          <div><label class="block text-xs font-medium text-zinc-600 mb-1">紀錄日期</label><input name="date" type="date" required value="${escapeHtml(s.date)}" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" /></div>
+          <div class="grid grid-cols-3 gap-3">
+            <div><label class="block text-xs font-medium text-zinc-600 mb-1">現金 (TWD)</label><input name="cashTWD" type="number" step="1" required value="${safeNum(s.cashTWD)}" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" /></div>
+            <div><label class="block text-xs font-medium text-zinc-600 mb-1">股票 (TWD)</label><input name="stocksTWD" type="number" step="1" required value="${safeNum(s.stocksTWD)}" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" /></div>
+            <div><label class="block text-xs font-medium text-zinc-600 mb-1">投資 (TWD)</label><input name="investmentsTWD" type="number" step="1" required value="${safeNum(s.investmentsTWD)}" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" /></div>
+          </div>
+          <div><label class="block text-xs font-medium text-zinc-600 mb-1">備註</label><input name="note" value="${escapeHtml(s.note)}" class="w-full h-9 px-3 rounded-lg hairline text-sm" /></div>
+        `;
+        openFormModal(isEdit ? '編輯歷史快照' : '手動補登歷史快照', html, (fd) => {
+          const cashTWD = safeNum(fd.get('cashTWD'));
+          const stocksTWD = safeNum(fd.get('stocksTWD'));
+          const investmentsTWD = safeNum(fd.get('investmentsTWD'));
+          const record = { id: isEdit ? s.id : uid('snap'), date: String(fd.get('date')), cashTWD, stocksTWD, investmentsTWD, totalTWD: cashTWD + stocksTWD + investmentsTWD, note: String(fd.get('note')).trim() };
+          state.snapshots = isEdit ? state.snapshots.map((x) => (x.id === s.id ? record : x)) : [...state.snapshots, record];
+          saveState();
+          renderAll();
+          showToast(isEdit ? '已更新歷史快照' : '已新增歷史快照');
+        });
+      }
+
+      function openLedgerModal(preset = null) {
+        const p = preset || { date: todayISO(), type: '投資分紅', title: '', amountTWD: 0, note: '' };
+        const html = `
+          <div class="grid grid-cols-2 gap-3">
+            <div><label class="block text-xs font-medium text-zinc-600 mb-1">日期</label><input name="date" type="date" required value="${escapeHtml(p.date)}" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" /></div>
+            <div><label class="block text-xs font-medium text-zinc-600 mb-1">類型</label><select name="type" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white"><option value="投資分紅" ${p.type === '投資分紅' ? 'selected' : ''}>投資分紅</option><option value="股票股利" ${p.type === '股票股利' ? 'selected' : ''}>股票股利</option><option value="薪資存入" ${p.type === '薪資存入' ? 'selected' : ''}>薪資存入</option><option value="資金提領" ${p.type === '資金提領' ? 'selected' : ''}>資金提領（負數）</option><option value="其他收支" ${p.type === '其他收支' ? 'selected' : ''}>其他收支</option></select></div>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div><label class="block text-xs font-medium text-zinc-600 mb-1">項目名稱</label><input name="title" required value="${escapeHtml(p.title)}" class="w-full h-9 px-3 rounded-lg hairline text-sm" /></div>
+            <div><label class="block text-xs font-medium text-zinc-600 mb-1">金額 (TWD)</label><input name="amountTWD" type="number" step="1" required value="${safeNum(p.amountTWD)}" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" /></div>
+          </div>
+          <div><label class="block text-xs font-medium text-zinc-600 mb-1">備註</label><input name="note" value="${escapeHtml(p.note)}" class="w-full h-9 px-3 rounded-lg hairline text-sm" /></div>
+        `;
+        openFormModal('新增收支流水紀錄', html, (fd) => {
+          state.ledger.push({ id: uid('led'), date: String(fd.get('date')), type: String(fd.get('type')), title: String(fd.get('title')).trim(), amountTWD: safeNum(fd.get('amountTWD')), note: String(fd.get('note')).trim() });
+          saveState();
+          renderAll();
+          showToast('已新增流水紀錄');
+        });
+      }
+
+      function saveTodaySnapshot() {
+        const totals = computeTotals(state);
+        const date = todayISO();
+        const snap = { id: uid('snap'), date, cashTWD: Math.round(totals.cashTWD), stocksTWD: Math.round(totals.stocksTWD), investmentsTWD: Math.round(totals.investmentsTWD), totalTWD: Math.round(totals.netWorthTWD), note: '一鍵儲存現況快照' };
+        const existingIdx = state.snapshots.findIndex((x) => x.date === date);
+        if (existingIdx >= 0) {
+          snap.id = state.snapshots[existingIdx].id;
+          state.snapshots[existingIdx] = snap;
+          showToast(`已更新今日 (${date}) 快照`);
+        } else {
+          state.snapshots.push(snap);
+          showToast(`已儲存今日 (${date}) 快照`);
+        }
+        saveState();
+        renderAll();
+      }
+
+      // JSON / Excel IO
+      function downloadJson(obj, filename) {
+        const blob = new Blob([JSON.stringify(obj, null, 2)], { type: 'application/json;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+      }
+
+      function exportJSON() {
+        downloadJson({ ...state, exportedAt: new Date().toISOString() }, `wealth_backup_${todayISO()}.json`);
+        showToast('已下載 JSON 備份檔');
+      }
+
+      function exportBlankTemplateJSON() {
+        downloadJson({ ...createBlankData(), exportedAt: new Date().toISOString() }, `wealth_blank_template.json`);
+        showToast('已下載空白範本 JSON');
+      }
+
+      function importJSONFile(file) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          try {
+            const parsed = JSON.parse(e.target.result);
+            if (!parsed || !Array.isArray(parsed.cash) || !Array.isArray(parsed.stocks) || !Array.isArray(parsed.investments)) {
+              showToast('JSON 格式不符');
+              return;
+            }
+            state = {
+              version: parsed.version || '1.4',
+              fx: parsed.fx || { TWD: 1, USD: 33.022, HKD: 4.2097, CNY: 4.9525 },
+              cash: parsed.cash,
+              stocks: parsed.stocks,
+              investments: parsed.investments,
+              fixedIncomes: Array.isArray(parsed.fixedIncomes) ? parsed.fixedIncomes : [],
+              fixedExpenses: Array.isArray(parsed.fixedExpenses) ? parsed.fixedExpenses : [],
+              randomExpenses: Array.isArray(parsed.randomExpenses) ? parsed.randomExpenses : [],
+              fxTrades: Array.isArray(parsed.fxTrades) ? parsed.fxTrades : [],
+              snapshots: Array.isArray(parsed.snapshots) ? parsed.snapshots : [],
+              ledger: Array.isArray(parsed.ledger) ? parsed.ledger : []
+            };
+            saveState();
+            renderAll();
+            showToast('成功匯入 JSON 備份');
+          } catch (err) {
+            showToast('JSON 解析失敗');
+          }
+        };
+        reader.readAsText(file);
+      }
+
+      function exportExcel() {
+        if (typeof XLSX === 'undefined') {
+          showToast('Excel 元件載入中');
+          return;
+        }
+        const wb = XLSX.utils.book_new();
+        const totals = computeTotals(state);
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([
+          { 項目: '總資產淨值 (TWD)', 金額: Math.round(totals.netWorthTWD) },
+          { 項目: '銀行與券商現金 (TWD)', 金額: Math.round(totals.cashTWD) },
+          { 項目: '股票與黃金ETF市值 (TWD)', 金額: Math.round(totals.stocksTWD) },
+          { 項目: '實體與專案投資本金 (TWD)', 金額: Math.round(totals.investmentsTWD) },
+          { 項目: '固定收入月均 (TWD)', 金額: Math.round(totals.fixedIncomeMonthlyTWD) },
+          { 項目: '固定支出月均 (TWD)', 金額: Math.round(totals.fixedExpenseMonthlyTWD) }
+        ]), '總覽摘要');
+
+        const sRows = state.stocks.map((s) => ({ id: s.id, symbol: s.symbol, name: s.name, market: s.market, account: s.account, currency: s.currency, shares: s.shares, avgCost: s.avgCost, currentPrice: s.currentPrice }));
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sRows.length ? sRows : [{ id: '', symbol: '', name: '', market: '', account: '', currency: '', shares: 0, avgCost: 0, currentPrice: 0 }]), '股票持倉');
+
+        const cRows = state.cash.map((c) => ({ id: c.id, bank: c.bank, currency: c.currency, amount: c.amount, note: c.note || '' }));
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(cRows.length ? cRows : [{ id: '', bank: '', currency: 'TWD', amount: 0, note: '' }]), '銀行現金');
+
+        const iRows = state.investments.map((i) => ({ id: i.id, name: i.name, principal: i.principal, cycleMonths: i.cycleMonths, minRate: i.minRate, maxRate: i.maxRate, principalRecoverable: i.principalRecoverable !== false ? '可收回' : '不可收回', note: i.note || '' }));
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(iRows.length ? iRows : [{ id: '', name: '', principal: 0, cycleMonths: 12, minRate: 0, maxRate: 0, note: '' }]), '實體投資');
+
+        const incRows = (state.fixedIncomes || []).map((f) => ({ id: f.id, name: f.name, category: f.category, currency: f.currency, amount: f.amount, cycleMonths: f.cycleMonths, payday: f.payday || '', account: f.account || '', deductStatus: f.deductStatus || 'unpaid', note: f.note || '' }));
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(incRows.length ? incRows : [{ id: '', name: '', category: '薪資收入', currency: 'TWD', amount: 0, cycleMonths: 1, payday: '', account: '', note: '' }]), '固定收入');
+
+        const fExpRows = (state.fixedExpenses || []).map((f) => ({ id: f.id, name: f.name, category: f.category, currency: f.currency, amount: f.amount, cycleMonths: f.cycleMonths, payday: f.payday || '', account: f.account || '', note: f.note || '' }));
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(fExpRows.length ? fExpRows : [{ id: '', name: '', category: '居住與房貸', currency: 'TWD', amount: 0, cycleMonths: 1, payday: '', account: '', note: '' }]), '固定支出');
+
+        const rExpRows = (state.randomExpenses || []).map((r) => ({ id: r.id, date: r.date, category: r.category, title: r.title, currency: r.currency, amount: r.amount, account: r.account || '', deductStatus: r.deductStatus || 'unpaid', note: r.note || '' }));
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rExpRows.length ? rExpRows : [{ id: '', date: '', category: '餐飲美食', title: '', currency: 'TWD', amount: 0, account: '', note: '' }]), '隨機支出');
+
+        const fxTradeRows = (state.fxTrades || []).map((t) => ({ id: t.id, date: t.date, side: t.side, currency: t.currency, amount: t.amount, rate: t.rate, feeTWD: t.feeTWD || 0, account: t.account || '', note: t.note || '' }));
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(fxTradeRows.length ? fxTradeRows : [{ id: '', date: '', side: 'BUY', currency: 'USD', amount: 0, rate: 0, feeTWD: 0, account: '', note: '' }]), '外幣交易');
+
+        const snapRows = (state.snapshots || []).map((s) => ({ id: s.id, date: s.date, cashTWD: s.cashTWD, stocksTWD: s.stocksTWD, investmentsTWD: s.investmentsTWD, totalTWD: s.totalTWD, note: s.note || '' }));
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(snapRows.length ? snapRows : [{ id: '', date: '', cashTWD: 0, stocksTWD: 0, investmentsTWD: 0, totalTWD: 0, note: '' }]), '歷史快照');
+
+        const ledRows = (state.ledger || []).map((l) => ({ id: l.id, date: l.date, type: l.type, title: l.title, amountTWD: l.amountTWD, note: l.note || '' }));
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(ledRows.length ? ledRows : [{ id: '', date: '', type: '', title: '', amountTWD: 0, note: '' }]), '收支流水');
+
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([
+          { currency: 'USD', rateToTWD: state.fx.USD },
+          { currency: 'JPY', rateToTWD: state.fx.JPY || 0.2069 },
+          { currency: 'HKD', rateToTWD: state.fx.HKD },
+          { currency: 'CNY', rateToTWD: state.fx.CNY }
+        ]), '匯率設定');
+
+        XLSX.writeFile(wb, `wealth_portfolio_${todayISO()}.xlsx`);
+        showToast('已下載多工作表 Excel 檔');
+      }
+
+      function importExcelFile(file) {
+        if (typeof XLSX === 'undefined') {
+          showToast('Excel 元件載入中');
+          return;
+        }
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          try {
+            const wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
+            const readSheet = (name) => (wb.Sheets[name] ? XLSX.utils.sheet_to_json(wb.Sheets[name]) : null);
+
+            const stockSheet = readSheet('股票持倉');
+            const cashSheet = readSheet('銀行現金');
+            const invSheet = readSheet('實體投資');
+            const incSheet = readSheet('固定收入') || readSheet('固定收入來源');
+            const fExpSheet = readSheet('固定支出');
+            const rExpSheet = readSheet('隨機支出');
+            const fxTradeSheet = readSheet('外幣交易');
+            const snapSheet = readSheet('歷史快照');
+            const ledgerSheet = readSheet('收支流水');
+            const fxSheet = readSheet('匯率設定');
+
+            if (!stockSheet && !cashSheet && !invSheet) {
+              showToast('找不到相容工作表');
+              return;
+            }
+            if (stockSheet) state.stocks = stockSheet.filter((r) => r.symbol).map((r) => ({ id: r.id || uid('s'), symbol: String(r.symbol), name: String(r.name || r.symbol), market: String(r.market || 'US'), account: String(r.account || ''), currency: String(r.currency || 'USD'), shares: safeNum(r.shares), avgCost: safeNum(r.avgCost), currentPrice: safeNum(r.currentPrice) }));
+            if (cashSheet) state.cash = cashSheet.filter((r) => r.bank).map((r) => ({ id: r.id || uid('c'), bank: String(r.bank), currency: String(r.currency || 'TWD'), amount: safeNum(r.amount), note: String(r.note || '') }));
+            if (invSheet) state.investments = invSheet.filter((r) => r.name).map((r) => ({ id: r.id || uid('i'), name: String(r.name), principal: safeNum(r.principal), cycleMonths: Math.max(1, safeNum(r.cycleMonths, 12)), minRate: safeNum(r.minRate), maxRate: safeNum(r.maxRate), principalRecoverable: !(r.principalRecoverable === false || String(r.principalRecoverable) === 'false' || String(r.principalRecoverable) === '不可收回'), note: String(r.note || '') }));
+            if (incSheet) state.fixedIncomes = incSheet.filter((r) => r.name || r['收入名稱']).map((r) => ({ id: r.id || uid('inc'), name: String(r.name || r['收入名稱']), category: String(r.category || r['類別'] || '固定收入'), currency: String(r.currency || r['幣別'] || 'TWD'), amount: safeNum(r.amount ?? r['單期金額']), cycleMonths: Math.max(1, safeNum(r.cycleMonths ?? r['發放週期(月)'], 1)), payday: String(r.payday || r['每月發放日'] || ''), account: String(r.account || r['入帳帳戶'] || ''), note: String(r.note || r['備註'] || '') }));
+            if (fExpSheet) state.fixedExpenses = fExpSheet.filter((r) => r.name || r['項目名稱']).map((r) => ({ id: r.id || uid('fexp'), name: String(r.name || r['項目名稱']), category: String(r.category || r['類別'] || '固定支出'), currency: String(r.currency || r['幣別'] || 'TWD'), amount: safeNum(r.amount ?? r['單期金額']), cycleMonths: Math.max(1, safeNum(r.cycleMonths ?? r['扣款週期(月)'], 1)), payday: String(r.payday || r['扣款日'] || ''), account: String(r.account || r['扣款帳戶'] || ''), deductStatus: String(r.deductStatus || r['扣款狀態'] || 'unpaid'), note: String(r.note || r['備註'] || '') }));
+            if (rExpSheet) state.randomExpenses = rExpSheet.filter((r) => r.title || r['支出項目']).map((r) => ({ id: r.id || uid('rexp'), date: String(r.date || r['日期'] || todayISO()), category: String(r.category || r['類別'] || '其他隨機支出'), title: String(r.title || r['支出項目']), currency: String(r.currency || r['幣別'] || 'TWD'), amount: safeNum(r.amount ?? r['原幣金額']), account: String(r.account || r['支付帳戶'] || ''), deductStatus: String(r.deductStatus || r['扣款狀態'] || 'unpaid'), note: String(r.note || r['備註'] || '') }));
+            if (fxTradeSheet) state.fxTrades = fxTradeSheet.filter((r) => r.date && safeNum(r.amount) > 0).map((r) => ({ id: r.id || uid('fx'), date: String(r.date), side: String(r.side || 'BUY').toUpperCase(), currency: String(r.currency || 'USD'), amount: safeNum(r.amount), rate: safeNum(r.rate), feeTWD: safeNum(r.feeTWD), account: String(r.account || ''), note: String(r.note || '') }));
+            if (snapSheet) state.snapshots = snapSheet.filter((r) => r.date).map((r) => { const c = safeNum(r.cashTWD), s = safeNum(r.stocksTWD), i = safeNum(r.investmentsTWD); return { id: r.id || uid('snap'), date: String(r.date), cashTWD: c, stocksTWD: s, investmentsTWD: i, totalTWD: safeNum(r.totalTWD, c + s + i), note: String(r.note || '') }; });
+            if (ledgerSheet) state.ledger = ledgerSheet.filter((r) => r.date && r.title).map((r) => ({ id: r.id || uid('led'), date: String(r.date), type: String(r.type || '其他收支'), title: String(r.title), amountTWD: safeNum(r.amountTWD), note: String(r.note || '') }));
+            if (fxSheet) fxSheet.forEach((r) => { if (r.currency && safeNum(r.rateToTWD) > 0) state.fx[String(r.currency)] = safeNum(r.rateToTWD); });
+
+            saveState();
+            renderAll();
+            showToast('成功從 Excel 匯入資料');
+          } catch (err) {
+            showToast('Excel 匯入失敗');
+          }
+        };
+        reader.readAsArrayBuffer(file);
+      }
+
+      // Event Bindings
+      document.getElementById('main-nav').addEventListener('click', (e) => {
+        const btn = e.target.closest('.tab-btn');
+        if (btn && btn.dataset.tab) switchTab(btn.dataset.tab);
+      });
+
+      document.getElementById('btn-go-history').addEventListener('click', () => switchTab('history'));
+      document.getElementById('btn-go-income').addEventListener('click', () => switchTab('income'));
+      document.getElementById('btn-go-expenses').addEventListener('click', () => switchTab('expenses'));
+      document.getElementById('btn-refresh-prices').addEventListener('click', () => refreshLivePricesAndFX(false));
+      document.getElementById('btn-test-refresh').addEventListener('click', () => refreshLivePricesAndFX(false));
+      document.getElementById('btn-batch-price').addEventListener('click', openBatchPriceModal);
+      document.getElementById('btn-google-auth').addEventListener('click', handleGoogleAuthClick);
+
+      document.getElementById('btn-quick-snapshot').addEventListener('click', saveTodaySnapshot);
+      document.getElementById('btn-history-save-today').addEventListener('click', saveTodaySnapshot);
+      document.getElementById('btn-header-export-json').addEventListener('click', exportJSON);
+      document.getElementById('btn-header-export-xlsx').addEventListener('click', exportExcel);
+      document.getElementById('btn-export-json').addEventListener('click', exportJSON);
+      document.getElementById('btn-export-xlsx').addEventListener('click', exportExcel);
+      document.getElementById('btn-export-clean-share').addEventListener('click', exportBlankTemplateJSON);
+
+      document.getElementById('btn-save-quote-cfg').addEventListener('click', () => {
+        appConfig.gsheetCsvUrl = document.getElementById('cfg-gsheet-csv').value.trim();
+        appConfig.finnhubKey = document.getElementById('cfg-finnhub-key').value.trim();
+        appConfig.autoRefresh = document.getElementById('cfg-auto-refresh').checked;
+        appConfig.refreshIntervalMin = safeNum(document.getElementById('cfg-refresh-interval').value, 5);
+        saveConfig();
+        state.quoteSettings = {
+          gsheetCsvUrl: appConfig.gsheetCsvUrl,
+          finnhubKey: appConfig.finnhubKey,
+          autoRefresh: appConfig.autoRefresh,
+          refreshIntervalMin: appConfig.refreshIntervalMin
+        };
+        saveState();
+        scheduleAutoRefresh();
+        showToast('已儲存報價來源與自動更新設定（已同步雲端）');
+      });
+
+      document.getElementById('btn-save-firebase').addEventListener('click', () => {
+        appConfig.firebaseConfigText = document.getElementById('cfg-firebase-json').value.trim();
+        saveConfig();
+        initFirebaseFromConfig(false);
+      });
+
+      document.getElementById('btn-cloud-push').addEventListener('click', () => pushToCloud(false));
+      document.getElementById('btn-cloud-pull').addEventListener('click', () => pullFromCloud(false));
+
+      document.getElementById('input-import-json').addEventListener('change', (e) => {
+        if (e.target.files && e.target.files[0]) { importJSONFile(e.target.files[0]); e.target.value = ''; }
+      });
+      document.getElementById('input-import-xlsx').addEventListener('change', (e) => {
+        if (e.target.files && e.target.files[0]) { importExcelFile(e.target.files[0]); e.target.value = ''; }
+      });
+
+      document.getElementById('chk-exclude-ibio').addEventListener('change', (e) => {
+        excludeIbio = e.target.checked;
+        renderAll();
+      });
+
+      document.getElementById('stock-market-filters').addEventListener('click', (e) => {
+        const btn = e.target.closest('.stock-filter-btn');
+        if (!btn) return;
+        stockMarketFilter = btn.dataset.market;
+        document.querySelectorAll('.stock-filter-btn').forEach((b) => {
+          const active = b.dataset.market === stockMarketFilter;
+          b.className = 'stock-filter-btn h-7 px-3 rounded-md text-xs font-medium transition-colors duration-150 ' +
+            (active ? 'bg-zinc-900 text-white' : 'bg-[#f7f7f5] text-zinc-600 hover:text-zinc-900');
+        });
+        renderStocks();
+      });
+
+      document.getElementById('btn-add-stock').addEventListener('click', () => openStockModal(null));
+      document.getElementById('btn-add-cash').addEventListener('click', () => openCashModal(null));
+      document.getElementById('btn-add-inv').addEventListener('click', () => openInvModal(null));
+      document.getElementById('btn-add-income').addEventListener('click', () => openFixedIncomeModal(null));
+      document.getElementById('btn-add-fixed-exp').addEventListener('click', () => openFixedExpenseModal(null));
+      document.getElementById('btn-add-random-exp').addEventListener('click', () => openRandomExpenseModal(null));
+      document.getElementById('btn-add-fx-trade').addEventListener('click', () => openFxTradeModal(null));
+      document.getElementById('filter-fx-cur').addEventListener('change', (e) => { fxFilterCur = e.target.value; renderFxTab(); });
+      ['fx-calc-amt', 'fx-calc-buy', 'fx-calc-sell', 'fx-calc-fee'].forEach((id) => {
+        document.getElementById(id).addEventListener('input', renderFxCalculator);
+      });
+      document.getElementById('fx-calc-cur').addEventListener('change', (e) => {
+        const cur = e.target.value;
+        const stats = computeFxStats(state.fxTrades, state.fx);
+        const live = safeNum(state.fx[cur], 1);
+        const avg = stats.pos[cur] && stats.pos[cur].avgRate > 0 ? stats.pos[cur].avgRate : live;
+        document.getElementById('fx-calc-buy').value = avg.toFixed(4);
+        document.getElementById('fx-calc-sell').value = live.toFixed(4);
+        renderFxCalculator();
+      });
+      document.getElementById('btn-fx-calc-fill-avg').addEventListener('click', () => {
+        const cur = document.getElementById('fx-calc-cur').value;
+        const stats = computeFxStats(state.fxTrades, state.fx);
+        const live = safeNum(state.fx[cur], 1);
+        const avg = stats.pos[cur] && stats.pos[cur].avgRate > 0 ? stats.pos[cur].avgRate : live;
+        if (stats.pos[cur] && stats.pos[cur].qty > 0) {
+          document.getElementById('fx-calc-amt').value = stats.pos[cur].qty;
+        }
+        document.getElementById('fx-calc-buy').value = avg.toFixed(4);
+        document.getElementById('fx-calc-sell').value = live.toFixed(4);
+        renderFxCalculator();
+        showToast(`已帶入 ${cur} 持倉均價與最新參考匯率`);
+      });
+      document.getElementById('btn-add-snapshot').addEventListener('click', () => openSnapshotModal(null));
+      document.getElementById('btn-add-ledger').addEventListener('click', () => openLedgerModal(null));
+
+      document.getElementById('filter-exp-month').addEventListener('change', (e) => { expMonthFilter = e.target.value; renderExpenses(computeTotals(state)); });
+      document.getElementById('filter-exp-cat').addEventListener('change', (e) => { expCatFilter = e.target.value; renderExpenses(computeTotals(state)); });
+      document.getElementById('btn-clear-exp-filter').addEventListener('click', () => {
+        expMonthFilter = ''; expCatFilter = 'ALL';
+        document.getElementById('filter-exp-month').value = '';
+        document.getElementById('filter-exp-cat').value = 'ALL';
+        renderExpenses(computeTotals(state));
+      });
+
+      document.getElementById('btn-save-fx').addEventListener('click', () => {
+        const usd = safeNum(document.getElementById('fx-usd').value);
+        const jpy = safeNum(document.getElementById('fx-jpy').value);
+        const hkd = safeNum(document.getElementById('fx-hkd').value);
+        const cny = safeNum(document.getElementById('fx-cny').value);
+        if (usd <= 0 || jpy <= 0 || hkd <= 0 || cny <= 0) { showToast('匯率必須大於 0'); return; }
+        state.fx = { TWD: 1, USD: usd, JPY: jpy, HKD: hkd, CNY: cny };
+        saveState();
+        renderAll();
+        showToast('已套用最新匯率');
+      });
+
+      document.getElementById('btn-clear-blank').addEventListener('click', () => {
+        openConfirmModal('清空為空白帳本', '將移除目前畫面中的所有個人資產資料，方便建立全新帳本。確定執行嗎？', () => {
+          state = createBlankData();
+          saveState();
+          renderAll();
+          showToast('已清空為空白帳本');
+        });
+      });
+
+      document.getElementById('btn-reset-data').addEventListener('click', () => {
+        openConfirmModal('重設回初始資料', '將清除目前修改並還原至初始建檔資料。建議先匯出 JSON 備份。', () => {
+          state = createDefaultData();
+          saveState();
+          renderAll();
+          showToast('已還原至初始資料');
+        });
+      });
+
+      document.body.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-action]');
+        if (!btn) return;
+        const action = btn.dataset.action;
+        const id = btn.dataset.id;
+
+        if (action === 'edit-stock') { const item = state.stocks.find((x) => x.id === id); if (item) openStockModal(item); }
+        else if (action === 'del-stock') { openConfirmModal('刪除股票', '確定要刪除此筆股票持倉嗎？', () => { state.stocks = state.stocks.filter((x) => x.id !== id); saveState(); renderAll(); showToast('已刪除股票'); }); }
+        else if (action === 'edit-cash') { const item = state.cash.find((x) => x.id === id); if (item) openCashModal(item); }
+        else if (action === 'del-cash') { openConfirmModal('刪除現金帳戶', '確定要刪除此現金帳戶嗎？', () => { state.cash = state.cash.filter((x) => x.id !== id); saveState(); renderAll(); showToast('已刪除現金帳戶'); }); }
+        else if (action === 'edit-inv') { const item = state.investments.find((x) => x.id === id); if (item) openInvModal(item); }
+        else if (action === 'del-inv') { openConfirmModal('刪除投資項目', '確定要刪除此投資項目嗎？', () => { state.investments = state.investments.filter((x) => x.id !== id); saveState(); renderAll(); showToast('已刪除投資項目'); }); }
+        else if (action === 'record-payout') { const inv = state.investments.find((x) => x.id === id); if (inv) openLedgerModal({ date: todayISO(), type: '投資分紅', title: `${inv.name} 結算入帳`, amountTWD: safeNum(btn.dataset.defaultAmt), note: `本金 ${fmtTWD(inv.principal)} 結算` }); }
+        else if (action === 'edit-income') { const item = (state.fixedIncomes || []).find((x) => x.id === id); if (item) openFixedIncomeModal(item); }
+        else if (action === 'del-income') { openConfirmModal('刪除固定收入', '確定要刪除此固定收入嗎？', () => { state.fixedIncomes = (state.fixedIncomes || []).filter((x) => x.id !== id); saveState(); renderAll(); showToast('已刪除固定收入'); }); }
+        else if (action === 'record-income') { const item = (state.fixedIncomes || []).find((x) => x.id === id); if (item) openLedgerModal({ date: todayISO(), type: item.category === '薪資收入' ? '薪資存入' : '其他收支', title: `${item.name} 入帳`, amountTWD: safeNum(btn.dataset.defaultAmt), note: item.account ? `入帳至 ${item.account}` : '' }); }
+        else if (action === 'edit-fixed-exp') { const item = (state.fixedExpenses || []).find((x) => x.id === id); if (item) openFixedExpenseModal(item); }
+        else if (action === 'del-fixed-exp') { openConfirmModal('刪除固定支出', '確定要刪除此固定支出嗎？', () => { state.fixedExpenses = (state.fixedExpenses || []).filter((x) => x.id !== id); saveState(); renderAll(); showToast('已刪除固定支出'); }); }
+        else if (action === 'record-fixed-exp') {
+          const item = (state.fixedExpenses || []).find((x) => x.id === id);
+          if (item) {
+            const cur = item.currency || 'TWD';
+            const amt = safeNum(item.amount);
+            const rate = cur === 'TWD' ? 1 : safeNum(state.fx[cur], 1);
+            const bank = (state.cash || []).find((c) => c.bank === item.account && c.currency === cur);
+            if (bank) {
+              bank.amount = Number((safeNum(bank.amount) - amt).toFixed(2));
+            }
+            item.deductStatus = 'paid';
+            state.ledger.push({ id: uid('led'), date: todayISO(), type: '其他收支', title: `${item.name} 扣款`, amountTWD: -Math.round(amt * rate), note: item.account ? `從 ${item.account} 扣款` : '' });
+            saveState();
+            renderAll();
+            showToast(bank ? `已標記已扣款，並自 ${bank.bank} 扣除 ${cur} ${amt}` : '已標記為已扣款並寫入收支流水');
+          }
+        }
+        else if (action === 'pay-random-exp') {
+          const item = (state.randomExpenses || []).find((x) => x.id === id);
+          if (item) {
+            const cur = item.currency || 'TWD';
+            const amt = safeNum(item.amount);
+            const rate = cur === 'TWD' ? 1 : safeNum(state.fx[cur], 1);
+            const bank = (state.cash || []).find((c) => c.bank === item.account && c.currency === cur);
+            if (bank) {
+              bank.amount = Number((safeNum(bank.amount) - amt).toFixed(2));
+            }
+            item.deductStatus = 'paid';
+            state.ledger.push({ id: uid('led'), date: item.date || todayISO(), type: '其他收支', title: `${item.title} 支出扣款`, amountTWD: -Math.round(amt * rate), note: item.account ? `從 ${item.account} 扣款` : '' });
+            saveState();
+            renderAll();
+            showToast(bank ? `已標記已扣款，並自 ${bank.bank} 扣除 ${cur} ${amt}` : '已標記為已扣款並寫入收支流水');
+          }
+        }
+        else if (action === 'edit-random-exp') { const item = (state.randomExpenses || []).find((x) => x.id === id); if (item) openRandomExpenseModal(item); }
+        else if (action === 'del-random-exp') { openConfirmModal('刪除隨機支出', '確定要刪除此筆隨機支出嗎？', () => { state.randomExpenses = (state.randomExpenses || []).filter((x) => x.id !== id); saveState(); renderAll(); showToast('已刪除隨機支出'); }); }
+        else if (action === 'edit-fx-trade') { const item = (state.fxTrades || []).find((x) => x.id === id); if (item) openFxTradeModal(item); }
+        else if (action === 'del-fx-trade') { openConfirmModal('刪除外幣交易', '確定要刪除此筆外幣交易紀錄嗎？', () => { state.fxTrades = (state.fxTrades || []).filter((x) => x.id !== id); saveState(); renderAll(); showToast('已刪除外幣交易'); }); }
+        else if (action === 'edit-snap') { const item = state.snapshots.find((x) => x.id === id); if (item) openSnapshotModal(item); }
+        else if (action === 'del-snap') { openConfirmModal('刪除歷史快照', '確定要刪除此筆歷史快照嗎？', () => { state.snapshots = state.snapshots.filter((x) => x.id !== id); saveState(); renderAll(); showToast('已刪除歷史快照'); }); }
+        else if (action === 'del-ledger') { openConfirmModal('刪除流水紀錄', '確定要刪除此筆流水紀錄嗎？', () => { state.ledger = state.ledger.filter((x) => x.id !== id); saveState(); renderAll(); showToast('已刪除流水紀錄'); }); }
+      });
+
+      document.getElementById('btn-modal-close').addEventListener('click', closeFormModal);
+      document.getElementById('btn-modal-cancel').addEventListener('click', closeFormModal);
+      document.getElementById('modal-form').addEventListener('submit', (e) => {
+        e.preventDefault();
+        if (currentModalSubmit) currentModalSubmit(new FormData(e.target));
+        closeFormModal();
+      });
+
+      document.getElementById('btn-confirm-cancel').addEventListener('click', closeConfirmModal);
+      document.getElementById('btn-confirm-ok').addEventListener('click', () => {
+        if (currentConfirmAction) currentConfirmAction();
+        closeConfirmModal();
+      });
+
+      initFirebaseFromConfig(true);
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js').catch(() => {});
+        });
+      }
+
+      renderAll();
+      scheduleAutoRefresh();
+      if (appConfig.autoRefresh !== false) {
+        setTimeout(() => refreshLivePricesAndFX(true), 400);
+      }
+    })();
+  </script>
+</body>
+</html>
