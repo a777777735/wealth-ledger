@@ -391,6 +391,38 @@
             <div id="inv-summary-cards" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"></div>
             <div id="inv-cards-grid" class="grid grid-cols-1 md:grid-cols-3 gap-4"></div>
           </div>
+
+          <div class="bg-white rounded-xl p-6 hairline space-y-4">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 class="text-base font-semibold text-zinc-900">投資資金異動與結算紀錄（投入／撤資／分紅結算）</h2>
+                <p class="text-xs text-zinc-500 mt-0.5">追蹤每次追加投入、部分撤資、分紅結算與全額出場，支援單筆與一次批次補登多筆歷史</p>
+              </div>
+              <div class="flex flex-wrap items-center gap-2">
+                <select id="filter-inv-log" class="h-8 px-2.5 rounded-lg hairline bg-white text-xs text-zinc-700">
+                  <option value="ALL">全部投資專案</option>
+                </select>
+                <button id="btn-batch-inv-log" type="button" class="btn-focus h-8 px-3.5 rounded-lg bg-[#f7f7f5] hover:bg-zinc-200/70 text-zinc-800 hairline text-xs font-medium transition-colors duration-150">批次補登多筆歷史</button>
+                <button id="btn-add-inv-log" type="button" class="btn-focus h-8 px-3.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-medium transition-colors duration-150">＋ 單筆投入／撤資／結算</button>
+              </div>
+            </div>
+
+            <div class="overflow-x-auto">
+              <table class="w-full text-left border-collapse text-xs sm:text-sm">
+                <thead>
+                  <tr class="hairline-b text-zinc-500 text-xs">
+                    <th class="py-3 px-2 font-medium">日期</th>
+                    <th class="py-3 px-2 font-medium">投資專案 / 次別說明</th>
+                    <th class="py-3 px-2 font-medium">異動類型</th>
+                    <th class="py-3 px-2 font-medium text-right">金額 (TWD)</th>
+                    <th class="py-3 px-2 font-medium">關聯帳戶 / 同步狀態</th>
+                    <th class="py-3 px-2 font-medium text-right">操作</th>
+                  </tr>
+                </thead>
+                <tbody id="inv-logs-tbody" class="divide-y divide-zinc-900/[0.06] font-mono-num"></tbody>
+              </table>
+            </div>
+          </div>
         </section>
 
         <!-- TAB 5: FIXED INCOME -->
@@ -912,6 +944,7 @@
           randomExpenses: [],
           fxTrades: [],
           incomeReceipts: [],
+          investmentLogs: [],
           snapshots: [],
           ledger: []
         };
@@ -1044,6 +1077,7 @@
               if (!Array.isArray(parsed.randomExpenses)) parsed.randomExpenses = [];
               if (!Array.isArray(parsed.fxTrades)) parsed.fxTrades = [];
               if (!Array.isArray(parsed.incomeReceipts)) parsed.incomeReceipts = [];
+              if (!Array.isArray(parsed.investmentLogs)) parsed.investmentLogs = [];
               if (!parsed.fx) parsed.fx = { TWD: 1, USD: 33.022, JPY: 0.2069, HKD: 4.2097, CNY: 4.9525 };
               if (!parsed.fx.JPY) parsed.fx.JPY = 0.2069;
               return parsed;
@@ -1081,6 +1115,7 @@
       let expMonthFilter = '';
       let expCatFilter = 'ALL';
       let fxFilterCur = 'ALL';
+      let invLogFilter = 'ALL';
       let chartAllocation = null;
       let chartCurrency = null;
       let chartTrend = null;
@@ -1258,6 +1293,7 @@
               if (!Array.isArray(parsed.randomExpenses)) parsed.randomExpenses = [];
               if (!Array.isArray(parsed.fxTrades)) parsed.fxTrades = [];
               if (!Array.isArray(parsed.incomeReceipts)) parsed.incomeReceipts = [];
+              if (!Array.isArray(parsed.investmentLogs)) parsed.investmentLogs = [];
               if (!parsed.fx) parsed.fx = { TWD: 1, USD: 33.022, JPY: 0.2069, HKD: 4.2097, CNY: 4.9525 };
               if (!parsed.fx.JPY) parsed.fx.JPY = 0.2069;
               state = parsed;
@@ -1849,20 +1885,87 @@
                   </div>
                 </div>
                 <div class="mt-4 space-y-2 text-xs font-mono-num">
-                  <div class="flex justify-between"><span class="font-sans text-zinc-500">投入本金</span><span class="font-medium text-zinc-900">${fmtTWD(p)}</span></div>
+                  <div class="flex justify-between"><span class="font-sans text-zinc-500">目前在投本金</span><span class="font-medium text-zinc-900">${fmtTWD(p)}</span></div>
                   <div class="flex justify-between"><span class="font-sans text-zinc-500">單期報酬率</span><span class="font-medium text-rose-700">${minR}% ～ ${maxR}%</span></div>
                   <div class="flex justify-between"><span class="font-sans text-zinc-500">單期預估收益</span><span class="text-zinc-700">${fmtTWD(perMin)} ～ ${fmtTWD(perMax)}</span></div>
                   <div class="flex justify-between"><span class="font-sans text-zinc-500">年化預估收益</span><span class="font-medium text-emerald-700">${fmtCompactWan(annMin)} ～ ${fmtCompactWan(annMax)}</span></div>
                   ${paybackMonths ? `<div class="flex justify-between"><span class="font-sans text-zinc-500">預估回本期間</span><span class="font-medium text-amber-700">約 ${paybackMonths.toFixed(1)} 個月</span></div>` : ''}
+                  ${(() => {
+                    const logs = (state.investmentLogs || []).filter((l) => l.investmentId === inv.id || l.investmentName === inv.name);
+                    if (!logs.length) return '';
+                    const sumInv = logs.filter((l) => l.eventType === 'invest').reduce((s, l) => s + safeNum(l.amountTWD), 0);
+                    const sumWd = logs.filter((l) => l.eventType === 'withdraw' || l.eventType === 'settle').reduce((s, l) => s + safeNum(l.amountTWD), 0);
+                    const sumPay = logs.filter((l) => l.eventType === 'payout').reduce((s, l) => s + safeNum(l.amountTWD), 0);
+                    const pctBack = (!recoverable && p > 0) ? Math.min(999, (sumPay / p) * 100) : null;
+                    return `<div class="pt-2 mt-2 hairline-t space-y-1 text-[11px]">` +
+                      (sumInv > 0 ? `<div class="flex justify-between"><span class="font-sans text-zinc-400">紀錄累計投入</span><span class="text-zinc-700">${fmtTWD(sumInv)}</span></div>` : '') +
+                      (sumWd > 0 ? `<div class="flex justify-between"><span class="font-sans text-zinc-400">紀錄累計撤資／結算</span><span class="text-amber-700">${fmtTWD(sumWd)}</span></div>` : '') +
+                      (sumPay > 0 ? `<div class="flex justify-between"><span class="font-sans text-zinc-400">累計已領分紅</span><span class="text-emerald-700 font-medium">${fmtTWD(sumPay)}${pctBack !== null ? ` (${pctBack.toFixed(1)}%)` : ''}</span></div>` : '') +
+                      `</div>`;
+                  })()}
                 </div>
                 ${inv.note ? `<p class="mt-3 text-xs text-zinc-500 hairline-t pt-2.5">${escapeHtml(inv.note)}</p>` : ''}
               </div>
               <button type="button" data-action="record-payout" data-id="${escapeHtml(inv.id)}" data-default-amt="${avgPer}" class="btn-focus w-full h-8 rounded-lg bg-[#f7f7f5] hover:bg-zinc-200/70 hairline text-zinc-800 text-xs font-medium transition-colors duration-150">
-                記錄本期結算入帳
+                記錄投入／撤資／結算
               </button>
             </div>
           `;
         }).join('');
+
+        // Sync project filter dropdown
+        const filterSel = document.getElementById('filter-inv-log');
+        if (filterSel) {
+          const prevVal = invLogFilter || 'ALL';
+          filterSel.innerHTML = `<option value="ALL" ${prevVal === 'ALL' ? 'selected' : ''}>全部投資專案</option>` +
+            state.investments.map((i) => `<option value="${escapeHtml(i.id)}" ${prevVal === i.id ? 'selected' : ''}>${escapeHtml(i.name)}</option>`).join('');
+        }
+
+        // Render investment logs table
+        const logTbody = document.getElementById('inv-logs-tbody');
+        if (logTbody) {
+          const allLogs = [...(state.investmentLogs || [])]
+            .filter((l) => invLogFilter === 'ALL' || l.investmentId === invLogFilter)
+            .sort((a, b) => String(b.date).localeCompare(String(a.date)));
+          if (allLogs.length === 0) {
+            logTbody.innerHTML = '<tr><td colspan="6" class="py-8 text-center text-zinc-400 text-xs font-sans">尚無資金異動紀錄，可點擊「批次補登多筆歷史」或專案卡片的「記錄投入／撤資／結算」</td></tr>';
+          } else {
+            const typeMeta = {
+              invest: { label: '本金投入', cls: 'bg-zinc-900 text-white', sign: '-' },
+              withdraw: { label: '本金撤資', cls: 'bg-amber-50 text-amber-800', sign: '+' },
+              payout: { label: '分紅／結算入帳', cls: 'bg-emerald-50 text-emerald-700', sign: '+' },
+              settle: { label: '全額結算出場', cls: 'bg-emerald-700 text-white', sign: '+' }
+            };
+            logTbody.innerHTML = allLogs.map((l) => {
+              const meta = typeMeta[l.eventType] || typeMeta.payout;
+              const isLive = l.applyMode === 'sync_live';
+              const amt = safeNum(l.amountTWD);
+              const amtCls = l.eventType === 'invest' ? 'text-zinc-900' : 'text-emerald-700';
+              return `
+                <tr class="hover:bg-[#f7f7f5]/60">
+                  <td class="py-3 px-2 text-zinc-600 whitespace-nowrap">${escapeHtml(l.date || '')}</td>
+                  <td class="py-3 px-2 font-sans">
+                    <div class="font-medium text-zinc-900">${escapeHtml(l.investmentName || '')}${l.stageLabel ? ' · ' + escapeHtml(l.stageLabel) : ''}</div>
+                    ${l.note ? `<div class="text-[11px] text-zinc-400">${escapeHtml(l.note)}</div>` : ''}
+                  </td>
+                  <td class="py-3 px-2 font-sans whitespace-nowrap">
+                    <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium ${meta.cls}">${meta.label}</span>
+                  </td>
+                  <td class="py-3 px-2 text-right font-medium ${amtCls}">${meta.sign}${fmtTWD(amt)}</td>
+                  <td class="py-3 px-2 font-sans">
+                    <div class="flex flex-wrap items-center gap-1.5">
+                      <span class="text-xs text-zinc-700">${escapeHtml(l.account || '未指定')}</span>
+                      <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${isLive ? 'bg-emerald-50 text-emerald-700' : 'bg-zinc-100 text-zinc-600'}">${isLive ? '已同步本金／餘額' : '歷史補登 · 僅記帳'}</span>
+                    </div>
+                  </td>
+                  <td class="py-3 px-2 text-right whitespace-nowrap font-sans">
+                    <button type="button" data-action="del-inv-log" data-id="${escapeHtml(l.id)}" class="text-zinc-400 hover:text-rose-700 text-xs font-medium">刪除</button>
+                  </td>
+                </tr>
+              `;
+            }).join('');
+          }
+        }
       }
 
       // Fixed Incomes Rendering
@@ -2616,6 +2719,260 @@
           renderAll();
           showToast(isEdit ? '已更新投資項目' : '已新增投資項目');
         });
+      }
+
+      function nextInvStageLabel(invId, eventType) {
+        const count = (state.investmentLogs || []).filter((l) => l.investmentId === invId && l.eventType === eventType).length + 1;
+        if (eventType === 'invest') return `第 ${count} 次投入`;
+        if (eventType === 'withdraw') return `第 ${count} 次撤資`;
+        if (eventType === 'settle') return '全額結算出場';
+        return `第 ${count} 次分紅結算`;
+      }
+
+      function applyInvLogRecord(rec) {
+        if (!Array.isArray(state.investmentLogs)) state.investmentLogs = [];
+        state.investmentLogs.push(rec);
+
+        const inv = (state.investments || []).find((x) => x.id === rec.investmentId);
+        const amt = safeNum(rec.amountTWD);
+        const isOutflow = rec.eventType === 'invest';
+
+        if (rec.applyMode === 'sync_live') {
+          if (inv) {
+            if (rec.eventType === 'invest') {
+              inv.principal = Math.max(0, safeNum(inv.principal) + amt);
+            } else if (rec.eventType === 'withdraw') {
+              inv.principal = Math.max(0, safeNum(inv.principal) - amt);
+            } else if (rec.eventType === 'settle') {
+              inv.principal = 0;
+            }
+          }
+          if (rec.account) {
+            const bank = (state.cash || []).find((c) => c.bank === rec.account && c.currency === 'TWD');
+            if (bank) {
+              bank.amount = Number((safeNum(bank.amount) + (isOutflow ? -amt : amt)).toFixed(2));
+            }
+          }
+        }
+
+        const typeTextMap = {
+          invest: '本金投入',
+          withdraw: '本金撤資',
+          payout: '投資分紅結算',
+          settle: '投資全額結算'
+        };
+        state.ledger.push({
+          id: uid('led'),
+          date: rec.date,
+          type: rec.eventType === 'payout' || rec.eventType === 'settle' ? '投資分紅' : '其他收支',
+          title: `${rec.investmentName} · ${rec.stageLabel || typeTextMap[rec.eventType] || '異動'}`,
+          amountTWD: isOutflow ? -Math.round(amt) : Math.round(amt),
+          note: `${rec.applyMode === 'sync_live' ? '同步本金／餘額' : '歷史補登（僅記帳）'}${rec.account ? ' · ' + rec.account : ''}${rec.note ? ' · ' + rec.note : ''}`
+        });
+      }
+
+      function openInvLogModal(inv = null, defaultAmt = 0) {
+        const list = state.investments || [];
+        const initInv = inv || list[0] || null;
+        const initInvId = initInv ? initInv.id : '';
+        const initType = defaultAmt > 0 ? 'payout' : 'invest';
+        const initStage = initInv ? nextInvStageLabel(initInv.id, initType) : '第 1 次投入';
+        const invOptions = list.map((x) =>
+          `<option value="${escapeHtml(x.id)}" ${x.id === initInvId ? 'selected' : ''}>${escapeHtml(x.name)}（在投 ${fmtTWD(x.principal)}）</option>`
+        ).join('') + (list.length === 0 ? '<option value="">（尚未建立投資專案）</option>' : '');
+
+        const html = `
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-medium text-zinc-600 mb-1">投資專案</label>
+              <select id="invlog-project" name="investmentId" required class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white">${invOptions}</select>
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-zinc-600 mb-1">異動類型</label>
+              <select id="invlog-type" name="eventType" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white">
+                <option value="invest" ${initType === 'invest' ? 'selected' : ''}>本金投入（初次／追加投入）</option>
+                <option value="withdraw" ${initType === 'withdraw' ? 'selected' : ''}>本金撤資（部分收回本金）</option>
+                <option value="payout" ${initType === 'payout' ? 'selected' : ''}>分紅／結算入帳（當期收益）</option>
+                <option value="settle" ${initType === 'settle' ? 'selected' : ''}>全額結算出場（本金歸零）</option>
+              </select>
+            </div>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div><label class="block text-xs font-medium text-zinc-600 mb-1">日期（可選過去歷史日）</label><input name="date" type="date" required value="${todayISO()}" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" /></div>
+            <div><label class="block text-xs font-medium text-zinc-600 mb-1">次別／階段名稱</label><input id="invlog-stage" name="stageLabel" value="${escapeHtml(initStage)}" placeholder="例如：第1次投入、第2次撤資" class="w-full h-9 px-3 rounded-lg hairline text-sm" /></div>
+            <div><label class="block text-xs font-medium text-zinc-600 mb-1">金額 (TWD)</label><input name="amountTWD" type="number" step="1" min="1" required value="${defaultAmt > 0 ? defaultAmt : ''}" placeholder="輸入台幣金額" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" /></div>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-medium text-zinc-600 mb-1">關聯台幣銀行卡／帳戶</label>
+              <select name="accountSelect" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white">${buildAccountOptionsHtml('TWD', '')}</select>
+              <input name="accountCustom" placeholder="輸入自訂帳戶名稱" class="hidden mt-2 w-full h-9 px-3 rounded-lg hairline text-sm" />
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-zinc-600 mb-1">本金與銀行餘額處理方式</label>
+              <select name="applyMode" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white">
+                <option value="sync_live" selected>即時新異動 — 自動更新專案本金與銀行餘額</option>
+                <option value="history_only">補登歷史紀錄 — 僅記帳，不重複加減現有本金與餘額</option>
+              </select>
+            </div>
+          </div>
+          <div><label class="block text-xs font-medium text-zinc-600 mb-1">備註</label><input name="note" placeholder="例如：第一次增資擴店、退回部分本金" class="w-full h-9 px-3 rounded-lg hairline text-sm" /></div>
+        `;
+        openFormModal('記錄實體投資投入／撤資／結算', html, (fd) => {
+          const invId = String(fd.get('investmentId') || '');
+          const proj = (state.investments || []).find((x) => x.id === invId);
+          if (!proj) { showToast('請先建立實體投資專案'); return; }
+          const rec = {
+            id: uid('ilog'),
+            investmentId: proj.id,
+            investmentName: proj.name,
+            date: String(fd.get('date') || todayISO()),
+            eventType: String(fd.get('eventType') || 'payout'),
+            stageLabel: String(fd.get('stageLabel') || '').trim(),
+            amountTWD: safeNum(fd.get('amountTWD')),
+            account: resolveModalAccount(fd),
+            applyMode: String(fd.get('applyMode') || 'sync_live'),
+            note: String(fd.get('note') || '').trim()
+          };
+          applyInvLogRecord(rec);
+          saveState();
+          renderAll();
+          showToast(rec.applyMode === 'sync_live' ? '已記錄異動並同步更新本金與銀行餘額' : '已補登投資歷史紀錄（不異動現有本金與餘額）');
+        });
+
+        const accSel = document.querySelector('#modal-form select[name="accountSelect"]');
+        const customIn = document.querySelector('#modal-form input[name="accountCustom"]');
+        if (accSel && customIn) {
+          accSel.addEventListener('change', () => {
+            const show = accSel.value === '__CUSTOM__';
+            customIn.classList.toggle('hidden', !show);
+            customIn.required = show;
+          });
+        }
+        const projSel = document.getElementById('invlog-project');
+        const typeSel = document.getElementById('invlog-type');
+        const stageInput = document.getElementById('invlog-stage');
+        const refreshStage = () => {
+          if (projSel && typeSel && stageInput) {
+            stageInput.value = nextInvStageLabel(projSel.value, typeSel.value);
+          }
+        };
+        if (projSel) projSel.addEventListener('change', refreshStage);
+        if (typeSel) typeSel.addEventListener('change', refreshStage);
+      }
+
+      function openBatchInvLogModal() {
+        const list = state.investments || [];
+        if (list.length === 0) {
+          showToast('請先新增至少一個實體投資專案');
+          return;
+        }
+        const invOptions = list.map((x) =>
+          `<option value="${escapeHtml(x.id)}">${escapeHtml(x.name)}（在投 ${fmtTWD(x.principal)}）</option>`
+        ).join('');
+
+        const html = `
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-medium text-zinc-600 mb-1">投資專案</label>
+              <select name="investmentId" required class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white">${invOptions}</select>
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-zinc-600 mb-1">關聯台幣銀行卡／帳戶</label>
+              <select name="accountSelect" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white">${buildAccountOptionsHtml('TWD', '')}</select>
+              <input name="accountCustom" placeholder="輸入自訂帳戶名稱" class="hidden mt-2 w-full h-9 px-3 rounded-lg hairline text-sm" />
+            </div>
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-zinc-600 mb-1">本金與銀行餘額處理方式</label>
+            <select name="applyMode" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white">
+              <option value="history_only" selected>補登歷史紀錄 — 僅記帳，不重複加減現有本金與餘額（推薦）</option>
+              <option value="sync_live">即時異動 — 依序更新專案本金與銀行餘額</option>
+            </select>
+          </div>
+          <div class="space-y-2">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-medium text-zinc-600">多筆歷史明細（可自由混合投入、撤資、分紅結算）</span>
+              <button id="btn-batch-inv-add-row" type="button" class="text-xs font-medium text-zinc-700 hover:text-zinc-900">＋ 加一列</button>
+            </div>
+            <div id="batch-inv-rows" class="max-h-60 overflow-y-auto space-y-2 pr-0.5"></div>
+          </div>
+        `;
+
+        openFormModal('批次補登多筆實體投資歷史', html, (fd) => {
+          const invId = String(fd.get('investmentId') || '');
+          const proj = (state.investments || []).find((x) => x.id === invId);
+          if (!proj) return;
+          const acc = resolveModalAccount(fd);
+          const applyMode = String(fd.get('applyMode') || 'history_only');
+          const container = document.getElementById('batch-inv-rows');
+          const rows = [];
+          container.querySelectorAll('.batch-inv-row').forEach((el) => {
+            const d = el.querySelector('.bi-date').value;
+            const t = el.querySelector('.bi-type').value;
+            const s = el.querySelector('.bi-stage').value.trim();
+            const a = safeNum(el.querySelector('.bi-amt').value);
+            if (d && a > 0) rows.push({ date: d, eventType: t, stageLabel: s, amountTWD: a });
+          });
+          if (rows.length === 0) {
+            showToast('請至少填寫一筆大於 0 的金額與日期');
+            return;
+          }
+          rows.forEach((r) => {
+            applyInvLogRecord({
+              id: uid('ilog'),
+              investmentId: proj.id,
+              investmentName: proj.name,
+              date: r.date,
+              eventType: r.eventType,
+              stageLabel: r.stageLabel,
+              amountTWD: r.amountTWD,
+              account: acc,
+              applyMode,
+              note: '批次補登歷史'
+            });
+          });
+          saveState();
+          renderAll();
+          showToast(`已一次寫入 ${rows.length} 筆「${proj.name}」歷史異動紀錄`);
+        });
+
+        const accSel = document.querySelector('#modal-form select[name="accountSelect"]');
+        const customIn = document.querySelector('#modal-form input[name="accountCustom"]');
+        if (accSel && customIn) {
+          accSel.addEventListener('change', () => {
+            const show = accSel.value === '__CUSTOM__';
+            customIn.classList.toggle('hidden', !show);
+            customIn.required = show;
+          });
+        }
+
+        const container = document.getElementById('batch-inv-rows');
+        const addInvRow = (typeVal = 'invest', stageVal = '', dateVal = todayISO()) => {
+          const row = document.createElement('div');
+          row.className = 'batch-inv-row grid grid-cols-12 gap-1.5 items-center';
+          row.innerHTML = `
+            <input type="date" value="${escapeHtml(dateVal)}" class="bi-date col-span-3 h-8 px-1.5 rounded-lg hairline bg-white text-xs font-mono-num" />
+            <select class="bi-type col-span-3 h-8 px-1.5 rounded-lg hairline bg-white text-xs">
+              <option value="invest" ${typeVal === 'invest' ? 'selected' : ''}>本金投入</option>
+              <option value="withdraw" ${typeVal === 'withdraw' ? 'selected' : ''}>本金撤資</option>
+              <option value="payout" ${typeVal === 'payout' ? 'selected' : ''}>分紅結算</option>
+              <option value="settle" ${typeVal === 'settle' ? 'selected' : ''}>全額結算</option>
+            </select>
+            <input type="text" value="${escapeHtml(stageVal)}" placeholder="如：第1次投入" class="bi-stage col-span-3 h-8 px-2 rounded-lg hairline bg-white text-xs" />
+            <input type="number" step="1" min="0" placeholder="金額 TWD" class="bi-amt col-span-2 h-8 px-1.5 rounded-lg hairline bg-white text-xs font-mono-num" />
+            <button type="button" class="bi-del col-span-1 h-8 text-zinc-400 hover:text-rose-700 text-xs font-medium" title="移除">✕</button>
+          `;
+          row.querySelector('.bi-del').addEventListener('click', () => row.remove());
+          container.appendChild(row);
+        };
+
+        // Pre-populate 3 illustrative starter rows (1st invest, 2nd invest, payout/withdraw)
+        addInvRow('invest', '第 1 次投入');
+        addInvRow('invest', '第 2 次投入');
+        addInvRow('payout', '第 1 次分紅結算');
+
+        document.getElementById('btn-batch-inv-add-row').addEventListener('click', () => addInvRow('withdraw', '第 1 次撤資'));
       }
 
       function openFixedIncomeModal(item = null) {
@@ -3434,6 +3791,9 @@
         const irecRows = (state.incomeReceipts || []).map((r) => ({ id: r.id, date: r.date, name: r.name, category: r.category || '', currency: r.currency || 'TWD', expectedAmount: r.expectedAmount, actualAmount: r.actualAmount, account: r.account || '', depositMode: r.depositMode || 'new_deposit', note: r.note || '' }));
         XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(irecRows.length ? irecRows : [{ id: '', date: '', name: '', category: '', currency: 'TWD', expectedAmount: 0, actualAmount: 0, account: '', depositMode: 'new_deposit', note: '' }]), '實際入帳紀錄');
 
+        const ilogRows = (state.investmentLogs || []).map((l) => ({ id: l.id, investmentId: l.investmentId || '', investmentName: l.investmentName || '', date: l.date, eventType: l.eventType || 'payout', stageLabel: l.stageLabel || '', amountTWD: l.amountTWD, account: l.account || '', applyMode: l.applyMode || 'history_only', note: l.note || '' }));
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(ilogRows.length ? ilogRows : [{ id: '', investmentId: '', investmentName: '', date: '', eventType: 'invest', stageLabel: '', amountTWD: 0, account: '', applyMode: 'history_only', note: '' }]), '實體投資異動紀錄');
+
         const fExpRows = (state.fixedExpenses || []).map((f) => ({ id: f.id, name: f.name, category: f.category, currency: f.currency, amount: f.amount, cycleMonths: f.cycleMonths, payday: f.payday || '', account: f.account || '', note: f.note || '' }));
         XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(fExpRows.length ? fExpRows : [{ id: '', name: '', category: '居住與房貸', currency: 'TWD', amount: 0, cycleMonths: 1, payday: '', account: '', note: '' }]), '固定支出');
 
@@ -3476,6 +3836,7 @@
             const invSheet = readSheet('實體投資');
             const incSheet = readSheet('固定收入') || readSheet('固定收入來源');
             const irecSheet = readSheet('實際入帳紀錄');
+            const ilogSheet = readSheet('實體投資異動紀錄');
             const fExpSheet = readSheet('固定支出');
             const rExpSheet = readSheet('隨機支出');
             const fxTradeSheet = readSheet('外幣交易');
@@ -3492,6 +3853,7 @@
             if (invSheet) state.investments = invSheet.filter((r) => r.name).map((r) => ({ id: r.id || uid('i'), name: String(r.name), principal: safeNum(r.principal), cycleMonths: Math.max(1, safeNum(r.cycleMonths, 12)), minRate: safeNum(r.minRate), maxRate: safeNum(r.maxRate), principalRecoverable: !(r.principalRecoverable === false || String(r.principalRecoverable) === 'false' || String(r.principalRecoverable) === '不可收回'), note: String(r.note || '') }));
             if (incSheet) state.fixedIncomes = incSheet.filter((r) => r.name || r['收入名稱']).map((r) => ({ id: r.id || uid('inc'), name: String(r.name || r['收入名稱']), category: String(r.category || r['類別'] || '固定收入'), currency: String(r.currency || r['幣別'] || 'TWD'), amount: safeNum(r.amount ?? r['單期金額']), cycleMonths: Math.max(1, safeNum(r.cycleMonths ?? r['發放週期(月)'], 1)), payday: String(r.payday || r['每月發放日'] || ''), account: String(r.account || r['入帳帳戶'] || ''), note: String(r.note || r['備註'] || '') }));
             if (irecSheet) state.incomeReceipts = irecSheet.filter((r) => r.name && safeNum(r.actualAmount) > 0).map((r) => ({ id: r.id || uid('irec'), date: String(r.date || todayISO()), name: String(r.name), category: String(r.category || '固定收入'), currency: String(r.currency || 'TWD'), expectedAmount: safeNum(r.expectedAmount, safeNum(r.actualAmount)), actualAmount: safeNum(r.actualAmount), account: String(r.account || ''), depositMode: String(r.depositMode || 'new_deposit'), note: String(r.note || '') }));
+            if (ilogSheet) state.investmentLogs = ilogSheet.filter((r) => r.investmentName && safeNum(r.amountTWD) > 0).map((r) => ({ id: r.id || uid('ilog'), investmentId: String(r.investmentId || ''), investmentName: String(r.investmentName), date: String(r.date || todayISO()), eventType: String(r.eventType || 'payout'), stageLabel: String(r.stageLabel || ''), amountTWD: safeNum(r.amountTWD), account: String(r.account || ''), applyMode: String(r.applyMode || 'history_only'), note: String(r.note || '') }));
             if (fExpSheet) state.fixedExpenses = fExpSheet.filter((r) => r.name || r['項目名稱']).map((r) => ({ id: r.id || uid('fexp'), name: String(r.name || r['項目名稱']), category: String(r.category || r['類別'] || '固定支出'), currency: String(r.currency || r['幣別'] || 'TWD'), amount: safeNum(r.amount ?? r['單期金額']), cycleMonths: Math.max(1, safeNum(r.cycleMonths ?? r['扣款週期(月)'], 1)), payday: String(r.payday || r['扣款日'] || ''), account: String(r.account || r['扣款帳戶'] || ''), deductStatus: String(r.deductStatus || r['扣款狀態'] || 'unpaid'), note: String(r.note || r['備註'] || '') }));
             if (rExpSheet) state.randomExpenses = rExpSheet.filter((r) => r.title || r['支出項目']).map((r) => ({ id: r.id || uid('rexp'), date: String(r.date || r['日期'] || todayISO()), category: String(r.category || r['類別'] || '其他隨機支出'), title: String(r.title || r['支出項目']), currency: String(r.currency || r['幣別'] || 'TWD'), amount: safeNum(r.amount ?? r['原幣金額']), account: String(r.account || r['支付帳戶'] || ''), deductStatus: String(r.deductStatus || r['扣款狀態'] || 'unpaid'), note: String(r.note || r['備註'] || '') }));
             if (fxTradeSheet) state.fxTrades = fxTradeSheet.filter((r) => r.date && safeNum(r.amount) > 0).map((r) => ({ id: r.id || uid('fx'), date: String(r.date), side: String(r.side || 'BUY').toUpperCase(), currency: String(r.currency || 'USD'), amount: safeNum(r.amount), rate: safeNum(r.rate), feeTWD: safeNum(r.feeTWD), account: String(r.account || ''), note: String(r.note || '') }));
@@ -3584,6 +3946,9 @@
       document.getElementById('btn-add-stock').addEventListener('click', () => openStockModal(null));
       document.getElementById('btn-add-cash').addEventListener('click', () => openCashModal(null));
       document.getElementById('btn-add-inv').addEventListener('click', () => openInvModal(null));
+      document.getElementById('btn-add-inv-log').addEventListener('click', () => openInvLogModal(null, 0));
+      document.getElementById('btn-batch-inv-log').addEventListener('click', openBatchInvLogModal);
+      document.getElementById('filter-inv-log').addEventListener('change', (e) => { invLogFilter = e.target.value; renderInvestments(computeTotals(state)); });
       document.getElementById('btn-add-income').addEventListener('click', () => openFixedIncomeModal(null));
       document.getElementById('btn-add-income-receipt').addEventListener('click', () => openIncomeReceiptModal(null));
       document.getElementById('btn-batch-income-history').addEventListener('click', () => openBatchHistoryModal('income'));
@@ -3714,7 +4079,21 @@
         else if (action === 'del-cash') { openConfirmModal('刪除現金帳戶', '確定要刪除此現金帳戶嗎？', () => { state.cash = state.cash.filter((x) => x.id !== id); saveState(); renderAll(); showToast('已刪除現金帳戶'); }); }
         else if (action === 'edit-inv') { const item = state.investments.find((x) => x.id === id); if (item) openInvModal(item); }
         else if (action === 'del-inv') { openConfirmModal('刪除投資項目', '確定要刪除此投資項目嗎？', () => { state.investments = state.investments.filter((x) => x.id !== id); saveState(); renderAll(); showToast('已刪除投資項目'); }); }
-        else if (action === 'record-payout') { const inv = state.investments.find((x) => x.id === id); if (inv) openLedgerModal({ date: todayISO(), type: '投資分紅', title: `${inv.name} 結算入帳`, amountTWD: safeNum(btn.dataset.defaultAmt), note: `本金 ${fmtTWD(inv.principal)} 結算` }); }
+        else if (action === 'record-payout') { const inv = state.investments.find((x) => x.id === id); if (inv) openInvLogModal(inv, safeNum(btn.dataset.defaultAmt)); }
+        else if (action === 'del-inv-log') {
+          const log = (state.investmentLogs || []).find((x) => x.id === id);
+          if (log) {
+            const msg = log.applyMode === 'sync_live'
+              ? `確定刪除此筆「${log.investmentName}」異動紀錄？若需復原專案本金或銀行餘額，請同步檢查修正。`
+              : '確定要刪除此筆補登歷史紀錄嗎？';
+            openConfirmModal('刪除投資異動紀錄', msg, () => {
+              state.investmentLogs = (state.investmentLogs || []).filter((x) => x.id !== id);
+              saveState();
+              renderAll();
+              showToast('已刪除投資異動紀錄');
+            });
+          }
+        }
         else if (action === 'edit-income') { const item = (state.fixedIncomes || []).find((x) => x.id === id); if (item) openFixedIncomeModal(item); }
         else if (action === 'del-income') { openConfirmModal('刪除固定收入', '確定要刪除此固定收入嗎？', () => { state.fixedIncomes = (state.fixedIncomes || []).filter((x) => x.id !== id); saveState(); renderAll(); showToast('已刪除固定收入'); }); }
         else if (action === 'record-income') { const item = (state.fixedIncomes || []).find((x) => x.id === id); if (item) openIncomeReceiptModal(item); }
