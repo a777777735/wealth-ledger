@@ -412,7 +412,8 @@
                 <thead>
                   <tr class="hairline-b text-zinc-500 text-xs">
                     <th class="py-3 px-2 font-medium">日期</th>
-                    <th class="py-3 px-2 font-medium">投資專案 / 次別說明</th>
+                    <th class="py-3 px-2 font-medium">投資專案</th>
+                    <th class="py-3 px-2 font-medium">次別／說明</th>
                     <th class="py-3 px-2 font-medium">異動類型</th>
                     <th class="py-3 px-2 font-medium text-right">金額 (TWD)</th>
                     <th class="py-3 px-2 font-medium">關聯帳戶 / 同步狀態</th>
@@ -1928,7 +1929,7 @@
             .filter((l) => invLogFilter === 'ALL' || l.investmentId === invLogFilter)
             .sort((a, b) => String(b.date).localeCompare(String(a.date)));
           if (allLogs.length === 0) {
-            logTbody.innerHTML = '<tr><td colspan="6" class="py-8 text-center text-zinc-400 text-xs font-sans">尚無資金異動紀錄，可點擊「批次補登多筆歷史」或專案卡片的「記錄投入／撤資／結算」</td></tr>';
+            logTbody.innerHTML = '<tr><td colspan="7" class="py-8 text-center text-zinc-400 text-xs font-sans">尚無資金異動紀錄，可點擊「批次補登多筆歷史」或專案卡片的「記錄投入／撤資／結算」</td></tr>';
           } else {
             const typeMeta = {
               invest: { label: '本金投入', cls: 'bg-zinc-900 text-white', sign: '-' },
@@ -1944,8 +1945,9 @@
               return `
                 <tr class="hover:bg-[#f7f7f5]/60">
                   <td class="py-3 px-2 text-zinc-600 whitespace-nowrap">${escapeHtml(l.date || '')}</td>
+                  <td class="py-3 px-2 font-sans font-medium text-zinc-900 whitespace-nowrap">${escapeHtml(l.investmentName || '')}</td>
                   <td class="py-3 px-2 font-sans">
-                    <div class="font-medium text-zinc-900">${escapeHtml(l.investmentName || '')}${l.stageLabel ? ' · ' + escapeHtml(l.stageLabel) : ''}</div>
+                    <div class="text-zinc-800">${escapeHtml(l.stageLabel || '—')}</div>
                     ${l.note ? `<div class="text-[11px] text-zinc-400">${escapeHtml(l.note)}</div>` : ''}
                   </td>
                   <td class="py-3 px-2 font-sans whitespace-nowrap">
@@ -1959,6 +1961,7 @@
                     </div>
                   </td>
                   <td class="py-3 px-2 text-right whitespace-nowrap font-sans">
+                    <button type="button" data-action="edit-inv-log" data-id="${escapeHtml(l.id)}" class="text-zinc-600 hover:text-zinc-900 text-xs font-medium mr-2.5">編輯</button>
                     <button type="button" data-action="del-inv-log" data-id="${escapeHtml(l.id)}" class="text-zinc-400 hover:text-rose-700 text-xs font-medium">刪除</button>
                   </td>
                 </tr>
@@ -2771,12 +2774,21 @@
         });
       }
 
-      function openInvLogModal(inv = null, defaultAmt = 0) {
+      function openInvLogModal(inv = null, defaultAmt = 0, editLog = null) {
+        const isEdit = Boolean(editLog);
         const list = state.investments || [];
-        const initInv = inv || list[0] || null;
-        const initInvId = initInv ? initInv.id : '';
-        const initType = defaultAmt > 0 ? 'payout' : 'invest';
-        const initStage = initInv ? nextInvStageLabel(initInv.id, initType) : '第 1 次投入';
+        const initInv = isEdit
+          ? (list.find((x) => x.id === editLog.investmentId || x.name === editLog.investmentName) || list[0] || null)
+          : (inv || list[0] || null);
+        const initInvId = initInv ? initInv.id : (isEdit ? (editLog.investmentId || '') : '');
+        const initType = isEdit ? (editLog.eventType || 'payout') : (defaultAmt > 0 ? 'payout' : 'invest');
+        const initStage = isEdit ? (editLog.stageLabel || '') : (initInv ? nextInvStageLabel(initInv.id, initType) : '第 1 次投入');
+        const initDate = isEdit ? (editLog.date || todayISO()) : todayISO();
+        const initAmt = isEdit ? safeNum(editLog.amountTWD) : defaultAmt;
+        const initAcc = isEdit ? (editLog.account || '') : '';
+        const initMode = isEdit ? (editLog.applyMode || 'history_only') : 'sync_live';
+        const initNote = isEdit ? (editLog.note || '') : '';
+
         const invOptions = list.map((x) =>
           `<option value="${escapeHtml(x.id)}" ${x.id === initInvId ? 'selected' : ''}>${escapeHtml(x.name)}（在投 ${fmtTWD(x.principal)}）</option>`
         ).join('') + (list.length === 0 ? '<option value="">（尚未建立投資專案）</option>' : '');
@@ -2798,32 +2810,33 @@
             </div>
           </div>
           <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div><label class="block text-xs font-medium text-zinc-600 mb-1">日期（可選過去歷史日）</label><input name="date" type="date" required value="${todayISO()}" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" /></div>
+            <div><label class="block text-xs font-medium text-zinc-600 mb-1">日期（可選過去歷史日）</label><input name="date" type="date" required value="${escapeHtml(initDate)}" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" /></div>
             <div><label class="block text-xs font-medium text-zinc-600 mb-1">次別／階段名稱</label><input id="invlog-stage" name="stageLabel" value="${escapeHtml(initStage)}" placeholder="例如：第1次投入、第2次撤資" class="w-full h-9 px-3 rounded-lg hairline text-sm" /></div>
-            <div><label class="block text-xs font-medium text-zinc-600 mb-1">金額 (TWD)</label><input name="amountTWD" type="number" step="1" min="1" required value="${defaultAmt > 0 ? defaultAmt : ''}" placeholder="輸入台幣金額" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" /></div>
+            <div><label class="block text-xs font-medium text-zinc-600 mb-1">金額 (TWD)</label><input name="amountTWD" type="number" step="1" min="1" required value="${initAmt > 0 ? initAmt : ''}" placeholder="輸入台幣金額" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" /></div>
           </div>
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label class="block text-xs font-medium text-zinc-600 mb-1">關聯台幣銀行卡／帳戶</label>
-              <select name="accountSelect" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white">${buildAccountOptionsHtml('TWD', '')}</select>
+              <select name="accountSelect" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white">${buildAccountOptionsHtml('TWD', initAcc)}</select>
               <input name="accountCustom" placeholder="輸入自訂帳戶名稱" class="hidden mt-2 w-full h-9 px-3 rounded-lg hairline text-sm" />
             </div>
             <div>
               <label class="block text-xs font-medium text-zinc-600 mb-1">本金與銀行餘額處理方式</label>
               <select name="applyMode" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white">
-                <option value="sync_live" selected>即時新異動 — 自動更新專案本金與銀行餘額</option>
-                <option value="history_only">補登歷史紀錄 — 僅記帳，不重複加減現有本金與餘額</option>
+                <option value="sync_live" ${initMode === 'sync_live' ? 'selected' : ''}>即時新異動 — 自動更新專案本金與銀行餘額</option>
+                <option value="history_only" ${initMode === 'history_only' ? 'selected' : ''}>補登歷史紀錄 — 僅記帳，不重複加減現有本金與餘額</option>
               </select>
             </div>
           </div>
-          <div><label class="block text-xs font-medium text-zinc-600 mb-1">備註</label><input name="note" placeholder="例如：第一次增資擴店、退回部分本金" class="w-full h-9 px-3 rounded-lg hairline text-sm" /></div>
+          <div><label class="block text-xs font-medium text-zinc-600 mb-1">備註</label><input name="note" value="${escapeHtml(initNote)}" placeholder="例如：第一次增資擴店、退回部分本金" class="w-full h-9 px-3 rounded-lg hairline text-sm" /></div>
+          ${isEdit ? '<p class="text-[11px] text-zinc-500">提示：修改紀錄僅更新本筆異動內容，不會重複加減銀行餘額或專案本金。</p>' : ''}
         `;
-        openFormModal('記錄實體投資投入／撤資／結算', html, (fd) => {
+        openFormModal(isEdit ? '編輯實體投資異動紀錄' : '記錄實體投資投入／撤資／結算', html, (fd) => {
           const invId = String(fd.get('investmentId') || '');
           const proj = (state.investments || []).find((x) => x.id === invId);
           if (!proj) { showToast('請先建立實體投資專案'); return; }
           const rec = {
-            id: uid('ilog'),
+            id: isEdit ? editLog.id : uid('ilog'),
             investmentId: proj.id,
             investmentName: proj.name,
             date: String(fd.get('date') || todayISO()),
@@ -2834,31 +2847,45 @@
             applyMode: String(fd.get('applyMode') || 'sync_live'),
             note: String(fd.get('note') || '').trim()
           };
-          applyInvLogRecord(rec);
-          saveState();
-          renderAll();
-          showToast(rec.applyMode === 'sync_live' ? '已記錄異動並同步更新本金與銀行餘額' : '已補登投資歷史紀錄（不異動現有本金與餘額）');
+          if (isEdit) {
+            state.investmentLogs = (state.investmentLogs || []).map((x) => (x.id === editLog.id ? rec : x));
+            saveState();
+            renderAll();
+            showToast('已更新投資異動紀錄');
+          } else {
+            applyInvLogRecord(rec);
+            saveState();
+            renderAll();
+            showToast(rec.applyMode === 'sync_live' ? '已記錄異動並同步更新本金與銀行餘額' : '已補登投資歷史紀錄（不異動現有本金與餘額）');
+          }
         });
 
         const accSel = document.querySelector('#modal-form select[name="accountSelect"]');
         const customIn = document.querySelector('#modal-form input[name="accountCustom"]');
         if (accSel && customIn) {
+          if (initAcc && accSel.value === '__CUSTOM__') {
+            customIn.value = initAcc;
+            customIn.classList.remove('hidden');
+            customIn.required = true;
+          }
           accSel.addEventListener('change', () => {
             const show = accSel.value === '__CUSTOM__';
             customIn.classList.toggle('hidden', !show);
             customIn.required = show;
           });
         }
-        const projSel = document.getElementById('invlog-project');
-        const typeSel = document.getElementById('invlog-type');
-        const stageInput = document.getElementById('invlog-stage');
-        const refreshStage = () => {
-          if (projSel && typeSel && stageInput) {
-            stageInput.value = nextInvStageLabel(projSel.value, typeSel.value);
-          }
-        };
-        if (projSel) projSel.addEventListener('change', refreshStage);
-        if (typeSel) typeSel.addEventListener('change', refreshStage);
+        if (!isEdit) {
+          const projSel = document.getElementById('invlog-project');
+          const typeSel = document.getElementById('invlog-type');
+          const stageInput = document.getElementById('invlog-stage');
+          const refreshStage = () => {
+            if (projSel && typeSel && stageInput) {
+              stageInput.value = nextInvStageLabel(projSel.value, typeSel.value);
+            }
+          };
+          if (projSel) projSel.addEventListener('change', refreshStage);
+          if (typeSel) typeSel.addEventListener('change', refreshStage);
+        }
       }
 
       function openBatchInvLogModal() {
@@ -4080,6 +4107,10 @@
         else if (action === 'edit-inv') { const item = state.investments.find((x) => x.id === id); if (item) openInvModal(item); }
         else if (action === 'del-inv') { openConfirmModal('刪除投資項目', '確定要刪除此投資項目嗎？', () => { state.investments = state.investments.filter((x) => x.id !== id); saveState(); renderAll(); showToast('已刪除投資項目'); }); }
         else if (action === 'record-payout') { const inv = state.investments.find((x) => x.id === id); if (inv) openInvLogModal(inv, safeNum(btn.dataset.defaultAmt)); }
+        else if (action === 'edit-inv-log') {
+          const log = (state.investmentLogs || []).find((x) => x.id === id);
+          if (log) openInvLogModal(null, 0, log);
+        }
         else if (action === 'del-inv-log') {
           const log = (state.investmentLogs || []).find((x) => x.id === id);
           if (log) {
