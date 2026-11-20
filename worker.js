@@ -6,6 +6,10 @@ export default {
       return handleQuotes(url);
     }
 
+    if (url.pathname === '/api/fx') {
+      return handleFx(url);
+    }
+
     return env.ASSETS.fetch(request);
   }
 };
@@ -88,6 +92,62 @@ async function fetchTwsePrice(rawSymbol) {
     // ignore
   }
   return null;
+}
+
+async function handleFx(url) {
+  const rawList = (url.searchParams.get('currencies') || 'USD,JPY,HKD,CNY')
+    .split(',')
+    .map((x) => x.trim().toUpperCase())
+    .filter((x) => /^[A-Z]{3}$/.test(x) && x !== 'TWD');
+  const codes = [...new Set(rawList.length ? rawList : ['USD', 'JPY', 'HKD', 'CNY'])].slice(0, 25);
+
+  const rates = {};
+  let source = 'yahoo';
+
+  await Promise.all(
+    codes.map(async (code) => {
+      const p = await fetchYahooPrice(`${code}TWD=X`);
+      if (p !== null && p > 0) {
+        rates[code] = Number(p.toFixed(6));
+      }
+    })
+  );
+
+  // Fallback to open.er-api.com (supports 160+ world currencies) for any missing currency
+  if (Object.keys(rates).length < codes.length) {
+    try {
+      const res = await fetch('https://open.er-api.com/v6/latest/TWD', {
+        headers: { 'User-Agent': BROWSER_UA, 'Accept': 'application/json' },
+        cf: { cacheTtl: 300, cacheEverything: true }
+      });
+      if (res.ok) {
+        const json = await res.json();
+        if (json && json.rates) {
+          for (const code of codes) {
+            if (!rates[code] && json.rates[code] > 0) {
+              rates[code] = Number((1 / json.rates[code]).toFixed(6));
+            }
+          }
+          if (Object.keys(rates).length > 0) {
+            source = 'yahoo+er-api';
+          }
+        }
+      }
+    } catch (e) {
+      // ignore
+    }
+  }
+
+  return new Response(
+    JSON.stringify({ ok: Object.keys(rates).length > 0, source, updatedAt: new Date().toISOString(), rates }),
+    {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/json; charset=utf-8',
+        'Cache-Control': 'public, max-age=60'
+      }
+    }
+  );
 }
 
 async function handleQuotes(url) {

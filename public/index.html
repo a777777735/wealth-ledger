@@ -741,30 +741,39 @@
 
           <!-- FX Rates -->
           <div class="bg-white rounded-xl p-6 hairline space-y-4">
-            <div>
-              <h2 class="text-base font-semibold text-zinc-900">匯率設定（對台幣 TWD）</h2>
-              <p class="text-xs text-zinc-500 mt-0.5">手動微調後套用，或按「一鍵更新股價與匯率」自動更新</p>
+            <div class="flex flex-wrap items-start justify-between gap-2">
+              <div>
+                <h2 class="text-base font-semibold text-zinc-900">匯率設定（對台幣 TWD）</h2>
+                <p class="text-xs text-zinc-500 mt-0.5">開啟網頁與定時輪詢會自動從後台抓取即時市場匯率，也可隨時點擊下方按鈕立即同步或手動微調</p>
+              </div>
+              <span id="fx-last-updated" class="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-emerald-50 text-emerald-700">已啟用自動獲取匯率</span>
             </div>
-            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              <div class="p-4 rounded-lg bg-[#f7f7f5] hairline">
-                <label for="fx-usd" class="block text-xs font-medium text-zinc-600 mb-1.5">美金 USD → 台幣 TWD</label>
-                <input id="fx-usd" type="number" step="0.0001" min="0.0001" class="w-full h-9 px-3 rounded-lg hairline bg-white text-sm font-medium font-mono-num" />
+            <div id="fx-inputs-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"></div>
+            <div class="flex flex-wrap items-center justify-between gap-3 pt-2 hairline-t">
+              <div class="flex flex-wrap items-center gap-2">
+                <select id="fx-add-preset" class="h-8 px-2.5 rounded-lg hairline bg-white text-xs text-zinc-700">
+                  <option value="">選擇常用新幣別...</option>
+                  <option value="EUR">歐元 EUR</option>
+                  <option value="GBP">英鎊 GBP</option>
+                  <option value="AUD">澳幣 AUD</option>
+                  <option value="SGD">新加坡幣 SGD</option>
+                  <option value="KRW">韓元 KRW</option>
+                  <option value="THB">泰銖 THB</option>
+                  <option value="CAD">加幣 CAD</option>
+                  <option value="CHF">瑞士法郎 CHF</option>
+                  <option value="NZD">紐幣 NZD</option>
+                  <option value="MYR">馬幣 MYR</option>
+                  <option value="VND">越南盾 VND</option>
+                  <option value="PHP">菲律賓披索 PHP</option>
+                  <option value="IDR">印尼盾 IDR</option>
+                </select>
+                <input id="fx-add-custom" type="text" maxlength="3" placeholder="或輸入 3 碼代號" class="w-28 h-8 px-2.5 rounded-lg hairline bg-white text-xs font-mono-num uppercase" />
+                <button id="btn-add-currency" type="button" class="btn-focus h-8 px-3 rounded-lg bg-[#f7f7f5] hover:bg-zinc-200/70 text-zinc-800 hairline text-xs font-medium transition-colors duration-150">＋ 新增幣別</button>
               </div>
-              <div class="p-4 rounded-lg bg-[#f7f7f5] hairline">
-                <label for="fx-jpy" class="block text-xs font-medium text-zinc-600 mb-1.5">日圓 JPY → 台幣 TWD</label>
-                <input id="fx-jpy" type="number" step="0.0001" min="0.0001" class="w-full h-9 px-3 rounded-lg hairline bg-white text-sm font-medium font-mono-num" />
+              <div class="flex flex-wrap items-center gap-2">
+                <button id="btn-fetch-fx" type="button" class="btn-focus h-8 px-3.5 rounded-lg bg-white hover:bg-zinc-50 text-zinc-800 hairline text-xs font-medium transition-colors duration-150">立即自動獲取匯率</button>
+                <button id="btn-save-fx" type="button" class="btn-focus h-8 px-4 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-medium transition-colors duration-150">手動套用匯率</button>
               </div>
-              <div class="p-4 rounded-lg bg-[#f7f7f5] hairline">
-                <label for="fx-hkd" class="block text-xs font-medium text-zinc-600 mb-1.5">港幣 HKD → 台幣 TWD</label>
-                <input id="fx-hkd" type="number" step="0.0001" min="0.0001" class="w-full h-9 px-3 rounded-lg hairline bg-white text-sm font-medium font-mono-num" />
-              </div>
-              <div class="p-4 rounded-lg bg-[#f7f7f5] hairline">
-                <label for="fx-cny" class="block text-xs font-medium text-zinc-600 mb-1.5">人民幣 CNY → 台幣 TWD</label>
-                <input id="fx-cny" type="number" step="0.0001" min="0.0001" class="w-full h-9 px-3 rounded-lg hairline bg-white text-sm font-medium font-mono-num" />
-              </div>
-            </div>
-            <div class="flex justify-end">
-              <button id="btn-save-fx" type="button" class="btn-focus h-8 px-4 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-medium transition-colors duration-150">套用最新匯率</button>
             </div>
           </div>
 
@@ -1262,20 +1271,51 @@
         let fxUpdated = false;
         let stockUpdatedCount = 0;
 
-        try {
-          const res = await fetch('https://open.er-api.com/v6/latest/TWD');
-          if (res.ok) {
-            const json = await res.json();
-            if (json && json.rates) {
-              if (json.rates.USD > 0) state.fx.USD = Number((1 / json.rates.USD).toFixed(4));
-              if (json.rates.HKD > 0) state.fx.HKD = Number((1 / json.rates.HKD).toFixed(4));
-              if (json.rates.CNY > 0) state.fx.CNY = Number((1 / json.rates.CNY).toFixed(4));
-              if (json.rates.JPY > 0) state.fx.JPY = Number((1 / json.rates.JPY).toFixed(4));
-              fxUpdated = true;
+        const activeForeign = getForeignCurrencies();
+        // 1. Prefer built-in Worker /api/fx (real-time Yahoo FX + er-api fallback, supports any ISO currency)
+        if (window.location && (window.location.protocol === 'https:' || window.location.protocol === 'http:')) {
+          try {
+            const fxApiRes = await fetch(`/api/fx?currencies=${encodeURIComponent(activeForeign.join(','))}`);
+            if (fxApiRes.ok) {
+              const fxJson = await fxApiRes.json();
+              if (fxJson && fxJson.rates) {
+                activeForeign.forEach((code) => {
+                  const val = Number(fxJson.rates[code]);
+                  if (Number.isFinite(val) && val > 0) {
+                    state.fx[code] = val < 0.1 ? Number(val.toFixed(6)) : Number(val.toFixed(4));
+                    fxUpdated = true;
+                  }
+                });
+              }
             }
+          } catch (err) {
+            // fallback to public API below
           }
-        } catch (err) {
-          // fallback
+        }
+
+        // 2. Fallback to public open.er-api.com (160+ currencies)
+        if (!fxUpdated) {
+          try {
+            const res = await fetch('https://open.er-api.com/v6/latest/TWD');
+            if (res.ok) {
+              const json = await res.json();
+              if (json && json.rates) {
+                activeForeign.forEach((code) => {
+                  if (json.rates[code] > 0) {
+                    const raw = 1 / json.rates[code];
+                    state.fx[code] = raw < 0.1 ? Number(raw.toFixed(6)) : Number(raw.toFixed(4));
+                    fxUpdated = true;
+                  }
+                });
+              }
+            }
+          } catch (err) {
+            // fallback
+          }
+        }
+        if (fxUpdated) {
+          const fxBadge = document.getElementById('fx-last-updated');
+          if (fxBadge) fxBadge.textContent = `已自動同步 · ${new Date().toLocaleTimeString('zh-TW', { hour12: false })}`;
         }
 
         // Built-in Cloudflare Pages _worker.js backend (/api/quotes) — zero-config for all users
@@ -1565,8 +1605,9 @@
         // Restrained Currency Exposure Bar Chart (Lead bar ink, others quiet neutral)
         const ctxCur = document.getElementById('chart-currency').getContext('2d');
         if (chartCurrency) chartCurrency.destroy();
-        const curKeys = ['TWD', 'USD', 'HKD', 'CNY'];
-        const curLabels = ['台幣 TWD', '美金 USD', '港幣 HKD', '人民幣 CNY'];
+        const allCors = getAllCurrencies();
+        const curKeys = allCors.filter((k) => ['TWD', 'USD', 'HKD', 'CNY'].includes(k) || Math.abs(totals.totalByCurrencyTWD[k] || 0) > 0);
+        const curLabels = curKeys.map((k) => `${currencyName(k)} ${k}`);
         const curValues = curKeys.map((k) => Math.round(totals.totalByCurrencyTWD[k] || 0));
         const maxCur = Math.max(...curValues, 1);
         chartCurrency = new Chart(ctxCur, {
@@ -1664,12 +1705,9 @@
       // Cash Rendering
       function renderCash(totals) {
         const rateOf = (cur) => (cur === 'TWD' ? 1 : safeNum(state.fx[cur], 1));
-        const curList = [
-          { code: 'TWD', label: '台幣' },
-          { code: 'USD', label: '美金' },
-          { code: 'HKD', label: '港幣' },
-          { code: 'CNY', label: '人民幣' }
-        ];
+        const curList = getAllCurrencies()
+          .filter((code) => ['TWD', 'USD', 'HKD', 'CNY'].includes(code) || (totals.cashByCurrency[code] || 0) > 0 || !DEFAULT_FOREIGN_CURRENCIES.includes(code))
+          .map((code) => ({ code, label: currencyName(code) }));
         document.getElementById('cash-currency-pills').innerHTML = curList.map((c) => {
           const nativeAmt = totals.cashByCurrency[c.code] || 0;
           const twdAmt = nativeAmt * rateOf(c.code);
@@ -1989,7 +2027,7 @@
 
       // FX Trading Calculations (Weighted Average Cost per Currency)
       function computeFxStats(trades, fxRates) {
-        const currencies = ['USD', 'JPY', 'HKD', 'CNY'];
+        const currencies = getForeignCurrencies();
         const pos = {};
         currencies.forEach((c) => {
           pos[c] = { currency: c, qty: 0, costTWD: 0, avgRate: 0, realizedTWD: 0, unrealizedTWD: 0, feesTWD: 0 };
@@ -2213,10 +2251,34 @@
       }
 
       function renderSettings() {
-        document.getElementById('fx-usd').value = safeNum(state.fx.USD, 33.022);
-        document.getElementById('fx-jpy').value = safeNum(state.fx.JPY, 0.2069);
-        document.getElementById('fx-hkd').value = safeNum(state.fx.HKD, 4.2097);
-        document.getElementById('fx-cny').value = safeNum(state.fx.CNY, 4.9525);
+        const foreignList = getForeignCurrencies();
+        const fxGrid = document.getElementById('fx-inputs-grid');
+        if (fxGrid) {
+          fxGrid.innerHTML = foreignList.map((code) => {
+            const isDefault = DEFAULT_FOREIGN_CURRENCIES.includes(code);
+            const val = safeNum(state.fx[code], 1);
+            return `
+              <div class="p-4 rounded-lg bg-[#f7f7f5] hairline">
+                <div class="flex items-center justify-between gap-2 mb-1.5">
+                  <label for="fx-input-${code}" class="block text-xs font-medium text-zinc-600">${escapeHtml(currencyName(code))} ${code} → 台幣 TWD</label>
+                  ${!isDefault ? `<button type="button" data-del-fx="${code}" class="text-[11px] text-zinc-400 hover:text-red-600 transition-colors" title="移除幣別">移除</button>` : ''}
+                </div>
+                <input id="fx-input-${code}" data-fx-code="${code}" type="number" step="0.000001" min="0.000001" value="${val}" class="w-full h-9 px-3 rounded-lg hairline bg-white text-sm font-medium font-mono-num" />
+              </div>
+            `;
+          }).join('');
+        }
+        // Keep FX tab dropdowns synced with dynamic currencies
+        const calcSel = document.getElementById('fx-calc-cur');
+        if (calcSel) {
+          const prevCalc = calcSel.value || 'USD';
+          calcSel.innerHTML = foreignList.map((code) => `<option value="${code}" ${prevCalc === code ? 'selected' : ''}>${escapeHtml(currencyName(code))} ${code}</option>`).join('');
+        }
+        const filterSel = document.getElementById('filter-fx-cur');
+        if (filterSel) {
+          const prevF = filterSel.value || 'ALL';
+          filterSel.innerHTML = `<option value="ALL" ${prevF === 'ALL' ? 'selected' : ''}>全部幣別</option>` + foreignList.map((code) => `<option value="${code}" ${prevF === code ? 'selected' : ''}>${code}</option>`).join('');
+        }
         document.getElementById('cfg-gsheet-csv').value = appConfig.gsheetCsvUrl || '';
         document.getElementById('cfg-finnhub-key').value = appConfig.finnhubKey || '';
         document.getElementById('cfg-firebase-json').value = appConfig.firebaseConfigText || '';
@@ -2269,6 +2331,30 @@
         modal.classList.add('hidden');
         modal.classList.remove('flex');
         currentConfirmAction = null;
+      }
+
+      const DEFAULT_FOREIGN_CURRENCIES = ['USD', 'JPY', 'HKD', 'CNY'];
+      const CURRENCY_NAMES = {
+        TWD: '台幣', USD: '美金', JPY: '日圓', HKD: '港幣', CNY: '人民幣',
+        EUR: '歐元', GBP: '英鎊', AUD: '澳幣', SGD: '新加坡幣', KRW: '韓元',
+        THB: '泰銖', CAD: '加幣', CHF: '瑞士法郎', NZD: '紐幣', MYR: '馬幣',
+        VND: '越南盾', PHP: '菲律賓披索', IDR: '印尼盾', INR: '印度盧比', MOP: '澳門幣'
+      };
+      function getForeignCurrencies() {
+        const extra = Object.keys(state.fx || {}).filter((k) => k !== 'TWD' && !DEFAULT_FOREIGN_CURRENCIES.includes(k));
+        return [...DEFAULT_FOREIGN_CURRENCIES, ...extra];
+      }
+      function getAllCurrencies() {
+        return ['TWD', ...getForeignCurrencies()];
+      }
+      function currencyName(code) {
+        return CURRENCY_NAMES[code] || code;
+      }
+      function buildCurrencyOptionsHtml(selected, includeTWD = true) {
+        const list = includeTWD ? getAllCurrencies() : getForeignCurrencies();
+        const cur = selected || (includeTWD ? 'TWD' : 'USD');
+        if (cur && !list.includes(cur)) list.push(cur);
+        return list.map((code) => `<option value="${code}" ${cur === code ? 'selected' : ''}>${code}${CURRENCY_NAMES[code] ? ' · ' + CURRENCY_NAMES[code] : ''}</option>`).join('');
       }
 
       // Dynamic Account Selector Helper (filters created cash accounts by currency + Cash + Credit Card)
@@ -2339,7 +2425,7 @@
           </div>
           <div class="grid grid-cols-3 gap-3">
             <div><label class="block text-xs font-medium text-zinc-600 mb-1">市場</label><select name="market" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white"><option value="TW" ${s.market === 'TW' ? 'selected' : ''}>台股</option><option value="US" ${s.market === 'US' ? 'selected' : ''}>美股</option><option value="HK" ${s.market === 'HK' ? 'selected' : ''}>港股</option></select></div>
-            <div><label class="block text-xs font-medium text-zinc-600 mb-1">幣別</label><select name="currency" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white"><option value="TWD" ${s.currency === 'TWD' ? 'selected' : ''}>TWD</option><option value="USD" ${s.currency === 'USD' ? 'selected' : ''}>USD</option><option value="HKD" ${s.currency === 'HKD' ? 'selected' : ''}>HKD</option></select></div>
+            <div><label class="block text-xs font-medium text-zinc-600 mb-1">幣別</label><select name="currency" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white">${buildCurrencyOptionsHtml(s.currency, true)}</select></div>
             <div><label class="block text-xs font-medium text-zinc-600 mb-1">帳戶</label><input name="account" value="${escapeHtml(s.account)}" class="w-full h-9 px-3 rounded-lg hairline text-sm" /></div>
           </div>
           <div class="grid grid-cols-3 gap-3">
@@ -2373,7 +2459,7 @@
         const html = `
           <div><label class="block text-xs font-medium text-zinc-600 mb-1">銀行 / 帳戶名稱</label><input name="bank" required value="${escapeHtml(c.bank)}" class="w-full h-9 px-3 rounded-lg hairline text-sm" /></div>
           <div class="grid grid-cols-2 gap-3">
-            <div><label class="block text-xs font-medium text-zinc-600 mb-1">幣別</label><select name="currency" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white"><option value="TWD" ${c.currency === 'TWD' ? 'selected' : ''}>TWD</option><option value="USD" ${c.currency === 'USD' ? 'selected' : ''}>USD</option><option value="HKD" ${c.currency === 'HKD' ? 'selected' : ''}>HKD</option><option value="CNY" ${c.currency === 'CNY' ? 'selected' : ''}>CNY</option><option value="JPY" ${c.currency === 'JPY' ? 'selected' : ''}>JPY</option></select></div>
+            <div><label class="block text-xs font-medium text-zinc-600 mb-1">幣別</label><select name="currency" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white">${buildCurrencyOptionsHtml(c.currency, true)}</select></div>
             <div><label class="block text-xs font-medium text-zinc-600 mb-1">原幣餘額</label><input name="amount" type="number" step="0.01" required value="${safeNum(c.amount)}" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" /></div>
           </div>
           <div><label class="block text-xs font-medium text-zinc-600 mb-1">備註</label><input name="note" value="${escapeHtml(c.note)}" class="w-full h-9 px-3 rounded-lg hairline text-sm" /></div>
@@ -2442,7 +2528,7 @@
             <div><label class="block text-xs font-medium text-zinc-600 mb-1">類別</label><select name="category" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white"><option value="薪資收入" ${inc.category === '薪資收入' ? 'selected' : ''}>薪資收入</option><option value="租金收入" ${inc.category === '租金收入' ? 'selected' : ''}>租金收入</option><option value="定存與債息" ${inc.category === '定存與債息' ? 'selected' : ''}>定存與債息</option><option value="副業與顧問" ${inc.category === '副業與顧問' ? 'selected' : ''}>副業與顧問</option><option value="其他固定收入" ${inc.category === '其他固定收入' ? 'selected' : ''}>其他固定收入</option></select></div>
           </div>
           <div class="grid grid-cols-3 gap-3">
-            <div><label class="block text-xs font-medium text-zinc-600 mb-1">幣別</label><select name="currency" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white"><option value="TWD" ${inc.currency === 'TWD' ? 'selected' : ''}>TWD</option><option value="USD" ${inc.currency === 'USD' ? 'selected' : ''}>USD</option><option value="HKD" ${inc.currency === 'HKD' ? 'selected' : ''}>HKD</option><option value="CNY" ${inc.currency === 'CNY' ? 'selected' : ''}>CNY</option><option value="JPY" ${inc.currency === 'JPY' ? 'selected' : ''}>JPY</option></select></div>
+            <div><label class="block text-xs font-medium text-zinc-600 mb-1">幣別</label><select name="currency" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white">${buildCurrencyOptionsHtml(inc.currency, true)}</select></div>
             <div><label class="block text-xs font-medium text-zinc-600 mb-1">單期金額</label><input name="amount" type="number" step="0.01" min="0" required value="${safeNum(inc.amount)}" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" /></div>
             <div><label class="block text-xs font-medium text-zinc-600 mb-1">發放週期</label><select name="cycleMonths" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white"><option value="1" ${safeNum(inc.cycleMonths, 1) === 1 ? 'selected' : ''}>每月</option><option value="2" ${safeNum(inc.cycleMonths) === 2 ? 'selected' : ''}>每2個月</option><option value="3" ${safeNum(inc.cycleMonths) === 3 ? 'selected' : ''}>每季</option><option value="6" ${safeNum(inc.cycleMonths) === 6 ? 'selected' : ''}>每半年</option><option value="12" ${safeNum(inc.cycleMonths) === 12 ? 'selected' : ''}>每年</option></select></div>
           </div>
@@ -2481,7 +2567,7 @@
             <div><label class="block text-xs font-medium text-zinc-600 mb-1">類別</label><select name="category" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white"><option value="居住與房貸" ${e.category === '居住與房貸' ? 'selected' : ''}>居住與房貸</option><option value="保險與醫療" ${e.category === '保險與醫療' ? 'selected' : ''}>保險與醫療</option><option value="水電與通訊" ${e.category === '水電與通訊' ? 'selected' : ''}>水電與通訊</option><option value="訂閱與會員" ${e.category === '訂閱與會員' ? 'selected' : ''}>訂閱與會員</option><option value="家庭與孝親" ${e.category === '家庭與孝親' ? 'selected' : ''}>家庭與孝親</option><option value="交通與車貸" ${e.category === '交通與車貸' ? 'selected' : ''}>交通與車貸</option><option value="其他固定支出" ${e.category === '其他固定支出' ? 'selected' : ''}>其他固定支出</option></select></div>
           </div>
           <div class="grid grid-cols-3 gap-3">
-            <div><label class="block text-xs font-medium text-zinc-600 mb-1">幣別（連動帳戶）</label><select name="currency" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white"><option value="TWD" ${e.currency === 'TWD' ? 'selected' : ''}>TWD</option><option value="USD" ${e.currency === 'USD' ? 'selected' : ''}>USD</option><option value="HKD" ${e.currency === 'HKD' ? 'selected' : ''}>HKD</option><option value="CNY" ${e.currency === 'CNY' ? 'selected' : ''}>CNY</option><option value="JPY" ${e.currency === 'JPY' ? 'selected' : ''}>JPY</option></select></div>
+            <div><label class="block text-xs font-medium text-zinc-600 mb-1">幣別（連動帳戶）</label><select name="currency" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white">${buildCurrencyOptionsHtml(e.currency, true)}</select></div>
             <div><label class="block text-xs font-medium text-zinc-600 mb-1">單期金額</label><input name="amount" type="number" step="0.01" min="0" required value="${safeNum(e.amount)}" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" /></div>
             <div><label class="block text-xs font-medium text-zinc-600 mb-1">扣款週期</label><select name="cycleMonths" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white"><option value="1" ${safeNum(e.cycleMonths, 1) === 1 ? 'selected' : ''}>每月</option><option value="2" ${safeNum(e.cycleMonths) === 2 ? 'selected' : ''}>每2個月</option><option value="3" ${safeNum(e.cycleMonths) === 3 ? 'selected' : ''}>每季</option><option value="6" ${safeNum(e.cycleMonths) === 6 ? 'selected' : ''}>每半年</option><option value="12" ${safeNum(e.cycleMonths) === 12 ? 'selected' : ''}>每年</option></select></div>
           </div>
@@ -2534,7 +2620,7 @@
           </div>
           <div><label class="block text-xs font-medium text-zinc-600 mb-1">支出項目名稱</label><input name="title" required value="${escapeHtml(r.title)}" class="w-full h-9 px-3 rounded-lg hairline text-sm" /></div>
           <div class="grid grid-cols-2 gap-3">
-            <div><label class="block text-xs font-medium text-zinc-600 mb-1">幣別（連動帳戶）</label><select name="currency" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white"><option value="TWD" ${r.currency === 'TWD' ? 'selected' : ''}>TWD</option><option value="USD" ${r.currency === 'USD' ? 'selected' : ''}>USD</option><option value="HKD" ${r.currency === 'HKD' ? 'selected' : ''}>HKD</option><option value="CNY" ${r.currency === 'CNY' ? 'selected' : ''}>CNY</option><option value="JPY" ${r.currency === 'JPY' ? 'selected' : ''}>JPY</option></select></div>
+            <div><label class="block text-xs font-medium text-zinc-600 mb-1">幣別（連動帳戶）</label><select name="currency" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white">${buildCurrencyOptionsHtml(r.currency, true)}</select></div>
             <div><label class="block text-xs font-medium text-zinc-600 mb-1">消費金額</label><input name="amount" type="number" step="0.01" min="0" required value="${safeNum(r.amount)}" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" /></div>
           </div>
           <div>
@@ -2579,7 +2665,7 @@
           <div class="grid grid-cols-3 gap-3">
             <div><label class="block text-xs font-medium text-zinc-600 mb-1">交易日期</label><input name="date" type="date" required value="${escapeHtml(t.date)}" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" /></div>
             <div><label class="block text-xs font-medium text-zinc-600 mb-1">買賣方向</label><select name="side" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white"><option value="BUY" ${t.side === 'BUY' ? 'selected' : ''}>買入外幣</option><option value="SELL" ${t.side === 'SELL' ? 'selected' : ''}>賣出外幣</option></select></div>
-            <div><label class="block text-xs font-medium text-zinc-600 mb-1">幣別（連動帳戶）</label><select name="currency" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white"><option value="USD" ${t.currency === 'USD' ? 'selected' : ''}>USD</option><option value="JPY" ${t.currency === 'JPY' ? 'selected' : ''}>JPY</option><option value="HKD" ${t.currency === 'HKD' ? 'selected' : ''}>HKD</option><option value="CNY" ${t.currency === 'CNY' ? 'selected' : ''}>CNY</option></select></div>
+            <div><label class="block text-xs font-medium text-zinc-600 mb-1">幣別（連動帳戶）</label><select name="currency" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white">${buildCurrencyOptionsHtml(t.currency, false)}</select></div>
           </div>
           <div class="grid grid-cols-3 gap-3">
             <div><label class="block text-xs font-medium text-zinc-600 mb-1">外幣金額</label><input name="amount" type="number" step="0.01" min="0.01" required value="${safeNum(t.amount)}" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" /></div>
@@ -2971,13 +3057,56 @@
         renderExpenses(computeTotals(state));
       });
 
+      document.getElementById('btn-fetch-fx').addEventListener('click', async () => {
+        const fxBtn = document.getElementById('btn-fetch-fx');
+        fxBtn.disabled = true;
+        fxBtn.textContent = '抓取中...';
+        await refreshLivePricesAndFX(false);
+        fxBtn.disabled = false;
+        fxBtn.textContent = '立即自動獲取匯率';
+      });
+      document.getElementById('btn-add-currency').addEventListener('click', async () => {
+        const preset = document.getElementById('fx-add-preset').value.trim().toUpperCase();
+        const custom = document.getElementById('fx-add-custom').value.trim().toUpperCase();
+        const code = custom || preset;
+        if (!/^[A-Z]{3}$/.test(code) || code === 'TWD') {
+          showToast('請選擇常用幣別，或輸入 3 碼英文幣別代號（例如 EUR、GBP）');
+          return;
+        }
+        if (state.fx[code]) {
+          showToast(`${code} 已在匯率清單中`);
+          return;
+        }
+        state.fx[code] = 1;
+        document.getElementById('fx-add-preset').value = '';
+        document.getElementById('fx-add-custom').value = '';
+        saveState();
+        renderAll();
+        showToast(`已新增 ${currencyName(code)} (${code})，正在自動抓取匯率...`);
+        await refreshLivePricesAndFX(false);
+      });
+      document.getElementById('fx-inputs-grid').addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-del-fx]');
+        if (!btn) return;
+        const code = btn.dataset.delFx;
+        if (DEFAULT_FOREIGN_CURRENCIES.includes(code)) return;
+        delete state.fx[code];
+        saveState();
+        renderAll();
+        showToast(`已移除自訂幣別 ${code}`);
+      });
       document.getElementById('btn-save-fx').addEventListener('click', () => {
-        const usd = safeNum(document.getElementById('fx-usd').value);
-        const jpy = safeNum(document.getElementById('fx-jpy').value);
-        const hkd = safeNum(document.getElementById('fx-hkd').value);
-        const cny = safeNum(document.getElementById('fx-cny').value);
-        if (usd <= 0 || jpy <= 0 || hkd <= 0 || cny <= 0) { showToast('匯率必須大於 0'); return; }
-        state.fx = { TWD: 1, USD: usd, JPY: jpy, HKD: hkd, CNY: cny };
+        const inputs = document.querySelectorAll('#fx-inputs-grid input[data-fx-code]');
+        const nextFx = { TWD: 1 };
+        let valid = true;
+        inputs.forEach((inp) => {
+          const code = inp.dataset.fxCode;
+          const v = safeNum(inp.value);
+          if (v <= 0) valid = false;
+          nextFx[code] = v;
+        });
+        if (!valid) { showToast('所有匯率必須大於 0'); return; }
+        state.fx = nextFx;
         saveState();
         renderAll();
         showToast('已套用最新匯率');
