@@ -672,22 +672,28 @@
         <section id="tab-settings" class="tab-panel hidden space-y-6">
           <!-- Live Quote Feed -->
           <div class="bg-white rounded-xl p-6 hairline space-y-4">
-            <div>
-              <h2 class="text-base font-semibold text-zinc-900">一鍵更新股價與匯率來源</h2>
-              <p class="text-xs text-zinc-500 mt-0.5">匯率已內建公開即時接口；股票支援綁定 Google 試算表發布 CSV（支援台美港股）或 Finnhub 美股 API Key</p>
-            </div>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div class="p-4 rounded-lg bg-[#f7f7f5] hairline space-y-2">
-                <label for="cfg-gsheet-csv" class="block text-xs font-medium text-zinc-700">Google 試算表報價 CSV 連結（推薦）</label>
-                <input id="cfg-gsheet-csv" type="url" placeholder="https://docs.google.com/spreadsheets/d/.../pub?output=csv" class="w-full h-9 px-3 rounded-lg hairline bg-white text-xs font-mono-num" />
-                <p class="text-xs text-zinc-500">將「網頁報價連動」分頁發布為 CSV 並貼上此處，即可一鍵同步台美港股價</p>
+            <div class="flex flex-wrap items-start justify-between gap-2">
+              <div>
+                <h2 class="text-base font-semibold text-zinc-900">自動更新股價與即時匯率</h2>
+                <p class="text-xs text-zinc-500 mt-0.5">已內建後台即時報價介面（免設定），所有使用者開啟網頁即可自動更新台股、美股、港股與多幣別匯率</p>
               </div>
-              <div class="p-4 rounded-lg bg-[#f7f7f5] hairline space-y-2">
-                <label for="cfg-finnhub-key" class="block text-xs font-medium text-zinc-700">Finnhub 美股 API Key（選填）</label>
-                <input id="cfg-finnhub-key" type="text" placeholder="輸入 Finnhub API Key" class="w-full h-9 px-3 rounded-lg hairline bg-white text-xs font-mono-num" />
-                <p class="text-xs text-zinc-500">填入後自動更新所有美股最新成交價</p>
-              </div>
+              <span class="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-emerald-50 text-emerald-700">內建後台報價已啟用</span>
             </div>
+            <details class="rounded-lg bg-[#f7f7f5] hairline px-4 py-3">
+              <summary class="text-xs font-medium text-zinc-700 cursor-pointer select-none">進階備援報價來源（一般使用者免填）</summary>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-3">
+                <div class="space-y-1.5">
+                  <label for="cfg-gsheet-csv" class="block text-xs font-medium text-zinc-700">Google 試算表報價 CSV 連結（備援選填）</label>
+                  <input id="cfg-gsheet-csv" type="url" placeholder="https://docs.google.com/spreadsheets/d/.../pub?output=csv" class="w-full h-9 px-3 rounded-lg hairline bg-white text-xs font-mono-num" />
+                  <p class="text-xs text-zinc-500">僅在無法使用內建後台時作為備援來源</p>
+                </div>
+                <div class="space-y-1.5">
+                  <label for="cfg-finnhub-key" class="block text-xs font-medium text-zinc-700">Finnhub 美股 API Key（備援選填）</label>
+                  <input id="cfg-finnhub-key" type="text" placeholder="輸入 Finnhub API Key" class="w-full h-9 px-3 rounded-lg hairline bg-white text-xs font-mono-num" />
+                  <p class="text-xs text-zinc-500">僅在需要額外備援美股報價時選填</p>
+                </div>
+              </div>
+            </details>
             <div class="flex flex-wrap items-center justify-between gap-3 pt-1">
               <div class="flex flex-wrap items-center gap-3 text-xs text-zinc-700">
                 <label class="inline-flex items-center gap-1.5 cursor-pointer select-none">
@@ -1359,7 +1365,7 @@
           document.getElementById('stock-last-updated').textContent = `${silent ? '自動更新' : '最後更新'} ${nowStr} · 已同步 ${stockUpdatedCount} 筆股價${fxUpdated ? '與即時匯率' : ''}`;
           if (!silent) showToast(`已更新 ${stockUpdatedCount} 筆股價${fxUpdated ? '與最新匯率' : ''}`);
         } else if (fxUpdated) {
-          if (!silent) showToast('已更新最新匯率；若要同步股價，請至「匯率與備份」綁定試算表報價連結');
+          if (!silent) showToast('已更新最新匯率；目前尚未連通後台股價介面（請確認已上傳 wrangler.jsonc 與 _worker.js）');
         } else if (!silent) {
           showToast('無法連線外部報價，已開啟批次更新面板');
           openBatchPriceModal();

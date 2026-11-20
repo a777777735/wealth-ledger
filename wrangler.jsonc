@@ -1,0 +1,9 @@
+{
+  "name": "wealth-ledger",
+  "main": "./_worker.js",
+  "compatibility_date": "2026-11-20",
+  "assets": {
+    "directory": "./",
+    "binding": "ASSETS"
+  }
+}
