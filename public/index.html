@@ -3731,7 +3731,7 @@
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label class="block text-xs font-medium text-zinc-600 mb-1">投資專案</label>
-              <select name="investmentId" required class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white">${invOptions}</select>
+              <select id="batch-inv-project" name="investmentId" required class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white">${invOptions}</select>
             </div>
             <div>
               <label class="block text-xs font-medium text-zinc-600 mb-1">關聯台幣銀行卡／帳戶</label>
@@ -3750,6 +3750,13 @@
             <div class="flex items-center justify-between">
               <span class="text-xs font-medium text-zinc-600">多筆歷史明細（可自由混合投入、撤資、分紅結算）</span>
               <button id="btn-batch-inv-add-row" type="button" class="text-xs font-medium text-zinc-700 hover:text-zinc-900">＋ 加一列</button>
+            </div>
+            <div class="grid grid-cols-12 gap-1.5 px-0.5 text-[11px] font-medium text-zinc-500">
+              <span class="col-span-3">日期</span>
+              <span class="col-span-3">異動類型</span>
+              <span class="col-span-3">次別／說明</span>
+              <span class="col-span-2">金額 TWD</span>
+              <span class="col-span-1 text-center">刪除</span>
             </div>
             <div id="batch-inv-rows" class="max-h-60 overflow-y-auto space-y-2 pr-0.5"></div>
           </div>
@@ -3803,8 +3810,36 @@
           });
         }
 
+        const projSel = document.getElementById('batch-inv-project');
         const container = document.getElementById('batch-inv-rows');
-        const addInvRow = (typeVal = 'invest', stageVal = '', dateVal = todayISO()) => {
+
+        const formatBatchInvStage = (eventType, seq) => {
+          if (eventType === 'invest') return `第 ${seq} 次投入`;
+          if (eventType === 'withdraw') return `第 ${seq} 次撤資`;
+          if (eventType === 'settle') return '全額結算出場';
+          return `第 ${seq} 次分紅結算`;
+        };
+
+        const syncBatchInvStageLabels = () => {
+          const invId = projSel ? projSel.value : '';
+          const baseCounts = { invest: 0, withdraw: 0, payout: 0, settle: 0 };
+          (state.investmentLogs || []).forEach((l) => {
+            if (l.investmentId === invId && Object.prototype.hasOwnProperty.call(baseCounts, l.eventType)) {
+              baseCounts[l.eventType] += 1;
+            }
+          });
+          container.querySelectorAll('.batch-inv-row').forEach((row) => {
+            const typeEl = row.querySelector('.bi-type');
+            const stageEl = row.querySelector('.bi-stage');
+            const t = typeEl ? typeEl.value : 'invest';
+            baseCounts[t] = (baseCounts[t] || 0) + 1;
+            if (stageEl && stageEl.dataset.manual !== '1') {
+              stageEl.value = formatBatchInvStage(t, baseCounts[t]);
+            }
+          });
+        };
+
+        const addInvRow = (typeVal = 'invest', stageVal = '', dateVal = todayISO(), isManualStage = false) => {
           const row = document.createElement('div');
           row.className = 'batch-inv-row grid grid-cols-12 gap-1.5 items-center';
           row.innerHTML = `
@@ -3815,20 +3850,58 @@
               <option value="payout" ${typeVal === 'payout' ? 'selected' : ''}>分紅結算</option>
               <option value="settle" ${typeVal === 'settle' ? 'selected' : ''}>全額結算</option>
             </select>
-            <input type="text" value="${escapeHtml(stageVal)}" placeholder="如：第1次投入" class="bi-stage col-span-3 h-8 px-2 rounded-lg hairline bg-white text-xs" />
+            <input type="text" value="${escapeHtml(stageVal)}" placeholder="如：第 1 次投入" class="bi-stage col-span-3 h-8 px-2 rounded-lg hairline bg-white text-xs" />
             <input type="number" step="1" min="0" placeholder="金額 TWD" class="bi-amt col-span-2 h-8 px-1.5 rounded-lg hairline bg-white text-xs font-mono-num" />
             <button type="button" class="bi-del col-span-1 h-8 text-zinc-400 hover:text-rose-700 text-xs font-medium" title="移除">✕</button>
           `;
-          row.querySelector('.bi-del').addEventListener('click', () => row.remove());
+          const typeEl = row.querySelector('.bi-type');
+          const stageEl = row.querySelector('.bi-stage');
+          if (isManualStage && stageVal) {
+            stageEl.dataset.manual = '1';
+          }
+          stageEl.addEventListener('input', () => {
+            stageEl.dataset.manual = stageEl.value.trim() ? '1' : '';
+          });
+          typeEl.addEventListener('change', () => {
+            stageEl.dataset.manual = '';
+            syncBatchInvStageLabels();
+          });
+          row.querySelector('.bi-del').addEventListener('click', () => {
+            row.remove();
+            syncBatchInvStageLabels();
+          });
           container.appendChild(row);
+          syncBatchInvStageLabels();
         };
 
-        // Pre-populate 3 illustrative starter rows (1st invest, 2nd invest, payout/withdraw)
-        addInvRow('invest', '第 1 次投入');
-        addInvRow('invest', '第 2 次投入');
-        addInvRow('payout', '第 1 次分紅結算');
+        if (projSel) {
+          projSel.addEventListener('change', syncBatchInvStageLabels);
+        }
 
-        document.getElementById('btn-batch-inv-add-row').addEventListener('click', () => addInvRow('withdraw', '第 1 次撤資'));
+        // Pre-populate 3 illustrative starter rows (1st invest, 2nd invest, payout)
+        addInvRow('invest');
+        addInvRow('invest');
+        addInvRow('payout');
+
+        document.getElementById('btn-batch-inv-add-row').addEventListener('click', () => {
+          const allRows = container.querySelectorAll('.batch-inv-row');
+          const lastRow = allRows.length > 0 ? allRows[allRows.length - 1] : null;
+          if (!lastRow) {
+            addInvRow('invest');
+            return;
+          }
+          const prevDate = lastRow.querySelector('.bi-date').value || todayISO();
+          const prevType = lastRow.querySelector('.bi-type').value || 'invest';
+          const prevStageEl = lastRow.querySelector('.bi-stage');
+          const prevStage = prevStageEl ? prevStageEl.value.trim() : '';
+
+          if (prevStageEl && prevStageEl.dataset.manual === '1' && prevStage) {
+            const incremented = prevStage.replace(/(第\s*)(\d+)(\s*次)/, (_, p1, num, p3) => `${p1}${Number(num) + 1}${p3}`);
+            addInvRow(prevType, incremented, prevDate, true);
+          } else {
+            addInvRow(prevType, '', prevDate, false);
+          }
+        });
       }
 
       function openFixedIncomeModal(item = null) {
