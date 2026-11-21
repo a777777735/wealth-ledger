@@ -99,8 +99,13 @@
 
         <!-- Navigation -->
         <nav id="main-nav" class="flex lg:flex-col gap-1 overflow-x-auto lg:overflow-visible pb-1 lg:pb-0" aria-label="主要功能頁籤">
-          <div class="hidden lg:block px-2.5 pt-1 pb-1.5 text-[11px] font-medium text-zinc-400">資產總覽</div>
-          <button type="button" data-tab="overview" class="tab-btn active btn-focus flex items-center gap-2.5 h-9 px-2.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors duration-150">
+          <div class="hidden lg:block px-2.5 pt-1 pb-1.5 text-[11px] font-medium text-zinc-400">快速開始</div>
+          <button type="button" data-tab="welcome" class="tab-btn active btn-focus flex items-center gap-2.5 h-9 px-2.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors duration-150">
+            <svg class="w-4 h-4 shrink-0 text-zinc-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.8h6.1l-4.9 3.6 1.9 5.8-5-3.6-5 3.6 1.9-5.8-4.9-3.6h6.1z"/></svg>
+            <span>今日任務</span>
+          </button>
+          <div class="hidden lg:block px-2.5 pt-3 pb-1.5 text-[11px] font-medium text-zinc-400">資產總覽</div>
+          <button type="button" data-tab="overview" class="tab-btn btn-focus flex items-center gap-2.5 h-9 px-2.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors duration-150">
             <svg class="w-4 h-4 shrink-0 text-zinc-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
             <span>總覽儀表板</span>
           </button>
@@ -180,8 +185,84 @@
       <!-- Main Content Container -->
       <main class="max-w-[1440px] w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 lg:py-8 space-y-6 flex-1">
 
+        <!-- TAB 0: WELCOME HUB (User-Centered Intent Entry) -->
+        <section id="tab-welcome" class="tab-panel space-y-6 max-w-4xl mx-auto">
+          <div class="bg-white rounded-2xl p-6 sm:p-8 hairline space-y-6">
+            <div class="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <p id="welcome-greeting" class="text-xs font-medium text-zinc-500">歡迎回來</p>
+                <h2 class="mt-1 text-xl sm:text-2xl font-semibold text-zinc-900 tracking-tight">這次打開想先處理哪件事？</h2>
+                <p class="mt-1 text-xs sm:text-sm text-zinc-500">點選下方的情境卡片，直接帶你進到對應功能，不必一層層找選單</p>
+              </div>
+              <button type="button" data-welcome-action="overview" class="text-left p-3.5 rounded-xl bg-[#f7f7f5] hover:bg-zinc-200/60 hairline transition-colors min-w-[190px]">
+                <div class="text-[11px] text-zinc-500">目前總資產淨值</div>
+                <div id="welcome-networth" class="mt-0.5 text-lg font-semibold text-zinc-900 font-mono-num">NT$ 0</div>
+                <div id="welcome-delta" class="mt-0.5 text-[11px] font-mono-num text-zinc-500">點擊查看詳細總覽 →</div>
+              </button>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
+              <button type="button" data-welcome-action="quick-expense" class="group text-left p-5 rounded-xl bg-[#f7f7f5]/70 hover:bg-white hover:shadow-sm hairline transition-all duration-150 space-y-2">
+                <div class="w-9 h-9 rounded-lg bg-white hairline flex items-center justify-center text-zinc-800 group-hover:bg-zinc-900 group-hover:text-white transition-colors">
+                  <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z"/><path d="M8 7h8"/><path d="M8 11h8"/></svg>
+                </div>
+                <div class="font-semibold text-sm text-zinc-900">記一筆日常開銷</div>
+                <p class="text-xs text-zinc-500 leading-relaxed">餐飲、加油、購物等日常消費，支援搜尋項目快選與扣款狀態</p>
+              </button>
+
+              <button type="button" data-welcome-action="quick-income" class="group text-left p-5 rounded-xl bg-[#f7f7f5]/70 hover:bg-white hover:shadow-sm hairline transition-all duration-150 space-y-2">
+                <div class="w-9 h-9 rounded-lg bg-white hairline flex items-center justify-center text-emerald-700 group-hover:bg-emerald-700 group-hover:text-white transition-colors">
+                  <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                </div>
+                <div class="font-semibold text-sm text-zinc-900">確認固定收入入帳</div>
+                <p class="text-xs text-zinc-500 leading-relaxed">發薪或租金入帳時微調本月實領金額，可選是否累加銀行餘額</p>
+              </button>
+
+              <button type="button" data-welcome-action="quick-inv-log" class="group text-left p-5 rounded-xl bg-[#f7f7f5]/70 hover:bg-white hover:shadow-sm hairline transition-all duration-150 space-y-2">
+                <div class="w-9 h-9 rounded-lg bg-white hairline flex items-center justify-center text-amber-700 group-hover:bg-amber-700 group-hover:text-white transition-colors">
+                  <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"/><path d="M5 21V7l8-4v18"/><path d="M19 21V11l-6-4"/></svg>
+                </div>
+                <div class="font-semibold text-sm text-zinc-900">登記投資分紅／異動</div>
+                <p class="text-xs text-zinc-500 leading-relaxed">實體專案追加投入、部分撤資、分紅結算或全額出場</p>
+              </button>
+
+              <button type="button" data-welcome-action="quick-stock-trade" class="group text-left p-5 rounded-xl bg-[#f7f7f5]/70 hover:bg-white hover:shadow-sm hairline transition-all duration-150 space-y-2">
+                <div class="w-9 h-9 rounded-lg bg-white hairline flex items-center justify-center text-rose-700 group-hover:bg-rose-700 group-hover:text-white transition-colors">
+                  <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
+                </div>
+                <div class="font-semibold text-sm text-zinc-900">記錄股票買賣／配息</div>
+                <p class="text-xs text-zinc-500 leading-relaxed">買入自動算均價、賣出結算已實現損益，支援台股費稅試算</p>
+              </button>
+
+              <button type="button" data-welcome-action="quick-cash" class="group text-left p-5 rounded-xl bg-[#f7f7f5]/70 hover:bg-white hover:shadow-sm hairline transition-all duration-150 space-y-2">
+                <div class="w-9 h-9 rounded-lg bg-white hairline flex items-center justify-center text-zinc-800 group-hover:bg-zinc-900 group-hover:text-white transition-colors">
+                  <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+                </div>
+                <div class="font-semibold text-sm text-zinc-900">更新銀行餘額／換匯</div>
+                <p class="text-xs text-zinc-500 leading-relaxed">核對各幣別銀行現金帳戶餘額，或記錄外幣買賣與匯差</p>
+              </button>
+
+              <button type="button" data-welcome-action="quick-trend" class="group text-left p-5 rounded-xl bg-[#f7f7f5]/70 hover:bg-white hover:shadow-sm hairline transition-all duration-150 space-y-2">
+                <div class="w-9 h-9 rounded-lg bg-white hairline flex items-center justify-center text-zinc-800 group-hover:bg-zinc-900 group-hover:text-white transition-colors">
+                  <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 14l4-4 4 3 5-6"/></svg>
+                </div>
+                <div class="font-semibold text-sm text-zinc-900">看資產成長曲線與對比</div>
+                <p class="text-xs text-zinc-500 leading-relaxed">切換日／週／月／年曲線，檢視本期與前期的資產變化</p>
+              </button>
+            </div>
+
+            <div class="flex flex-wrap items-center justify-between gap-3 pt-3 hairline-t">
+              <label class="inline-flex items-center gap-2 text-xs text-zinc-600 cursor-pointer select-none">
+                <input id="chk-show-welcome" type="checkbox" checked class="rounded border-zinc-300 text-zinc-900" />
+                <span>下次開啟網頁時先顯示此「今日任務」導引頁</span>
+              </label>
+              <button type="button" data-welcome-action="overview" class="btn-focus h-8 px-4 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-medium transition-colors duration-150">進入完整資產總覽 →</button>
+            </div>
+          </div>
+        </section>
+
         <!-- TAB 1: OVERVIEW -->
-        <section id="tab-overview" class="tab-panel space-y-6">
+        <section id="tab-overview" class="tab-panel hidden space-y-6">
           <!-- 4 Clean Stat Cards (Numbers only, no pills or decorative icons) -->
           <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
             <div class="bg-white rounded-xl p-5 hairline">
@@ -247,13 +328,23 @@
 
           <!-- Asymmetric Visual Hierarchy: Hero Trend Chart (8 cols) + Allocation Breakdown List (4 cols) -->
           <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
-            <div class="lg:col-span-8 bg-white rounded-xl p-6 hairline flex flex-col justify-between">
-              <div class="flex flex-wrap items-baseline justify-between gap-2 mb-4">
+            <div class="lg:col-span-8 bg-white rounded-xl p-6 hairline flex flex-col justify-between gap-3">
+              <div class="flex flex-wrap items-start justify-between gap-2">
                 <div>
-                  <h2 class="text-sm font-semibold text-zinc-900">總資產淨值歷史趨勢</h2>
-                  <p class="text-xs text-zinc-500 mt-0.5">每次儲存快照或補登歷史月份皆會即時繪製</p>
+                  <h2 class="text-sm font-semibold text-zinc-900">總資產淨值成長曲線</h2>
+                  <p id="ov-trend-delta-bar" class="text-xs text-zinc-500 mt-0.5 font-mono-num">切換日／週／月／年檢視資產變化</p>
                 </div>
-                <button id="btn-go-history" type="button" class="btn-focus text-xs font-medium text-zinc-600 hover:text-zinc-900 transition-colors duration-150">前往補登歷史紀錄 →</button>
+                <div class="flex flex-wrap items-center gap-1.5">
+                  <div class="trend-range-group inline-flex rounded-lg bg-[#f7f7f5] p-0.5 hairline">
+                    <button type="button" data-trend-range="day" class="trend-range-btn h-6 px-2 rounded-md text-[11px] font-medium bg-zinc-900 text-white">日</button>
+                    <button type="button" data-trend-range="week" class="trend-range-btn h-6 px-2 rounded-md text-[11px] font-medium text-zinc-600">週</button>
+                    <button type="button" data-trend-range="month" class="trend-range-btn h-6 px-2 rounded-md text-[11px] font-medium text-zinc-600">月</button>
+                    <button type="button" data-trend-range="year" class="trend-range-btn h-6 px-2 rounded-md text-[11px] font-medium text-zinc-600">年</button>
+                    <button type="button" data-trend-range="all" class="trend-range-btn h-6 px-2 rounded-md text-[11px] font-medium text-zinc-600">全部</button>
+                  </div>
+                  <button type="button" data-trend-mode-toggle class="trend-mode-btn btn-focus h-7 px-2.5 rounded-lg bg-white hover:bg-zinc-50 hairline text-[11px] font-medium text-zinc-700">分類對比</button>
+                  <button id="btn-go-history" type="button" class="btn-focus text-xs font-medium text-zinc-500 hover:text-zinc-900 ml-1">詳細對比 →</button>
+                </div>
               </div>
               <div class="relative h-72">
                 <canvas id="chart-trend"></canvas>
@@ -305,14 +396,13 @@
                 <p id="stock-last-updated" class="text-xs text-zinc-500 mt-0.5">台灣慣用色標（紅漲綠跌），可一鍵更新或批次調整現價</p>
               </div>
               <div class="flex flex-wrap items-center gap-2">
-                <label class="inline-flex items-center gap-1.5 text-xs text-zinc-600 bg-[#f7f7f5] px-3 h-8 rounded-lg hairline cursor-pointer select-none">
-                  <input id="chk-exclude-ibio" type="checkbox" class="rounded border-zinc-300 text-zinc-900 focus:ring-zinc-500" />
-                  <span>損益排除 IBIO</span>
-                </label>
                 <button id="btn-batch-price" type="button" class="btn-focus h-8 px-3 rounded-lg bg-white hover:bg-zinc-50 text-zinc-800 hairline text-xs font-medium transition-colors duration-150">批次更新現價</button>
-                <button id="btn-add-stock" type="button" class="btn-focus h-8 px-3.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-medium transition-colors duration-150">新增股票</button>
+                <button id="btn-add-stock-trade-top" type="button" class="btn-focus h-8 px-3 rounded-lg bg-[#f7f7f5] hover:bg-zinc-200/70 text-zinc-800 hairline text-xs font-medium transition-colors duration-150">記錄買賣／配息</button>
+                <button id="btn-add-stock" type="button" class="btn-focus h-8 px-3.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-medium transition-colors duration-150">新增持倉</button>
               </div>
             </div>
+
+            <div id="stock-kpi-cards" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3"></div>
 
             <div class="flex flex-wrap items-center justify-between gap-3 pt-1">
               <div id="stock-market-filters" class="flex items-center gap-1.5 flex-wrap">
@@ -340,6 +430,44 @@
                   </tr>
                 </thead>
                 <tbody id="stocks-tbody" class="divide-y divide-zinc-900/[0.06] font-mono-num"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="bg-white rounded-xl p-6 hairline space-y-4">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 class="text-base font-semibold text-zinc-900">股票買賣與股利紀錄</h2>
+                <p class="text-xs text-zinc-500 mt-0.5">記錄買入、賣出（自動計算已實現損益）、現金股利與配股，支援即時扣款／入帳或補登歷史交易</p>
+              </div>
+              <div class="flex flex-wrap items-center gap-2">
+                <select id="filter-stock-trade-type" class="h-8 px-2.5 rounded-lg hairline bg-white text-xs text-zinc-700">
+                  <option value="ALL">全部類型</option>
+                  <option value="BUY">買入</option>
+                  <option value="SELL">賣出</option>
+                  <option value="DIVIDEND">現金股利</option>
+                  <option value="BONUS">股票股利／配股</option>
+                </select>
+                <button id="btn-batch-stock-trade" type="button" class="btn-focus h-8 px-3.5 rounded-lg bg-[#f7f7f5] hover:bg-zinc-200/70 text-zinc-800 hairline text-xs font-medium transition-colors duration-150">批次補登多筆歷史</button>
+                <button id="btn-add-stock-trade" type="button" class="btn-focus h-8 px-3.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-medium transition-colors duration-150">＋ 單筆買賣／配息</button>
+              </div>
+            </div>
+
+            <div class="overflow-x-auto">
+              <table class="w-full text-left border-collapse text-xs sm:text-sm">
+                <thead>
+                  <tr class="hairline-b text-zinc-500 text-xs">
+                    <th class="py-3 px-2 font-medium">交易日期</th>
+                    <th class="py-3 px-2 font-medium">代碼 / 名稱</th>
+                    <th class="py-3 px-2 font-medium">類型</th>
+                    <th class="py-3 px-2 font-medium text-right">股數 / 單價</th>
+                    <th class="py-3 px-2 font-medium text-right">淨額 (原幣)</th>
+                    <th class="py-3 px-2 font-medium text-right">已實現損益 (TWD)</th>
+                    <th class="py-3 px-2 font-medium">交割帳戶 / 狀態</th>
+                    <th class="py-3 px-2 font-medium text-right">操作</th>
+                  </tr>
+                </thead>
+                <tbody id="stock-trades-tbody" class="divide-y divide-zinc-900/[0.06] font-mono-num"></tbody>
               </table>
             </div>
           </div>
@@ -677,6 +805,31 @@
 
         <!-- TAB 7: HISTORY & SNAPSHOTS -->
         <section id="tab-history" class="tab-panel hidden space-y-6">
+          <div class="bg-white rounded-xl p-6 hairline space-y-5">
+            <div class="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h2 class="text-base font-semibold text-zinc-900">資產成長曲線與區間對比</h2>
+                <p class="text-xs text-zinc-500 mt-0.5">系統每日首次開啟自動記錄快照，可切換日／週／月／年比較本期與前期變化</p>
+              </div>
+              <div class="flex flex-wrap items-center gap-2">
+                <div class="trend-range-group inline-flex rounded-lg bg-[#f7f7f5] p-0.5 hairline">
+                  <button type="button" data-trend-range="day" class="trend-range-btn h-7 px-2.5 rounded-md text-xs font-medium bg-zinc-900 text-white">日</button>
+                  <button type="button" data-trend-range="week" class="trend-range-btn h-7 px-2.5 rounded-md text-xs font-medium text-zinc-600">週</button>
+                  <button type="button" data-trend-range="month" class="trend-range-btn h-7 px-2.5 rounded-md text-xs font-medium text-zinc-600">月</button>
+                  <button type="button" data-trend-range="year" class="trend-range-btn h-7 px-2.5 rounded-md text-xs font-medium text-zinc-600">年</button>
+                  <button type="button" data-trend-range="all" class="trend-range-btn h-7 px-2.5 rounded-md text-xs font-medium text-zinc-600">全部</button>
+                </div>
+                <button type="button" data-trend-mode-toggle class="trend-mode-btn btn-focus h-8 px-3 rounded-lg bg-white hover:bg-zinc-50 hairline text-xs font-medium text-zinc-700">分類對比</button>
+              </div>
+            </div>
+
+            <div id="hist-compare-cards" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3"></div>
+
+            <div class="relative h-72">
+              <canvas id="chart-history-trend"></canvas>
+            </div>
+          </div>
+
           <div class="bg-white rounded-xl p-6 hairline space-y-4">
             <div class="flex flex-wrap items-center justify-between gap-3">
               <div>
@@ -784,25 +937,25 @@
           <div class="bg-white rounded-xl p-6 hairline space-y-4">
             <div class="flex flex-wrap items-start justify-between gap-2">
               <div>
-                <h2 class="text-base font-semibold text-zinc-900">Google 帳號登入與多用戶雲端儲存（Firebase）</h2>
-                <p class="text-xs text-zinc-500 mt-0.5">貼上 Firebase 專案設定後，每位使用者登入 Google 帳號皆獨立儲存於 <code class="font-mono-num text-zinc-700">wealth_users/{uid}</code>，彼此資料完全隔離</p>
+                <h2 class="text-base font-semibold text-zinc-900">Google 帳號登入與雲端同步</h2>
+                <p class="text-xs text-zinc-500 mt-0.5">登入 Google 帳號後，所有資料自動加密儲存於個人獨立雲端空間，跨手機與電腦即時同步且彼此完全隔離</p>
               </div>
-              <span id="cloud-badge" class="text-xs font-mono-num text-zinc-500">尚未綁定雲端</span>
+              <span id="cloud-badge" class="text-xs font-mono-num text-zinc-500">尚未登入雲端</span>
             </div>
 
-            <div class="space-y-1.5">
-              <label for="cfg-firebase-json" class="block text-xs font-medium text-zinc-700">Firebase Config JSON</label>
-              <textarea id="cfg-firebase-json" rows="3" placeholder='{"apiKey":"...","authDomain":"...","projectId":"...","appId":"..."}' class="w-full px-3 py-2 rounded-lg hairline bg-[#f7f7f5] text-xs font-mono-num"></textarea>
+            <div class="flex flex-wrap items-center gap-2">
+              <button id="btn-cloud-push" type="button" class="btn-focus h-8 px-3.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-medium transition-colors duration-150">立即同步至雲端</button>
+              <button id="btn-cloud-pull" type="button" class="btn-focus h-8 px-3.5 rounded-lg bg-white hover:bg-zinc-50 text-zinc-800 hairline text-xs font-medium transition-colors duration-150">從雲端拉取資料</button>
             </div>
 
-            <div class="flex flex-wrap items-center justify-between gap-2">
-              <div class="flex flex-wrap gap-2">
-                <button id="btn-save-firebase" type="button" class="btn-focus h-8 px-3.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-medium transition-colors duration-150">啟用 Google 登入</button>
-                <button id="btn-cloud-push" type="button" class="btn-focus h-8 px-3.5 rounded-lg bg-white hover:bg-zinc-50 text-zinc-800 hairline text-xs font-medium transition-colors duration-150">立即同步至雲端</button>
-                <button id="btn-cloud-pull" type="button" class="btn-focus h-8 px-3.5 rounded-lg bg-white hover:bg-zinc-50 text-zinc-800 hairline text-xs font-medium transition-colors duration-150">從雲端拉取資料</button>
+            <details class="rounded-lg bg-[#f7f7f5] hairline px-4 py-3">
+              <summary class="text-xs font-medium text-zinc-700 cursor-pointer select-none">進階開發者設定：自訂 Firebase 專案（一般使用者免填）</summary>
+              <div class="space-y-2.5 pt-3">
+                <label for="cfg-firebase-json" class="block text-xs font-medium text-zinc-700">Firebase Config JSON</label>
+                <textarea id="cfg-firebase-json" rows="3" placeholder='{"apiKey":"...","authDomain":"...","projectId":"...","appId":"..."}' class="w-full px-3 py-2 rounded-lg hairline bg-white text-xs font-mono-num"></textarea>
+                <button id="btn-save-firebase" type="button" class="btn-focus h-8 px-3.5 rounded-lg bg-white hover:bg-zinc-50 text-zinc-800 hairline text-xs font-medium transition-colors duration-150">套用自訂 Firebase 設定</button>
               </div>
-              <button id="btn-export-clean-share" type="button" class="btn-focus h-8 px-3 rounded-lg bg-[#f7f7f5] hover:bg-zinc-200/70 text-zinc-700 text-xs font-medium transition-colors duration-150">匯出空白範本 JSON（給別人用）</button>
-            </div>
+            </details>
           </div>
 
           <!-- FX Rates -->
@@ -877,13 +1030,10 @@
           <!-- Reset Zone -->
           <div class="bg-white rounded-xl p-5 hairline flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h3 class="text-sm font-medium text-zinc-900">資料重設</h3>
-              <p class="text-xs text-zinc-500 mt-0.5">清空為空白帳本供他人使用，或還原至 2026/11/20 初始建檔資料</p>
+              <h3 class="text-sm font-medium text-zinc-900">清空帳本資料</h3>
+              <p class="text-xs text-zinc-500 mt-0.5">清除目前畫面中的所有資產與收支紀錄，建議執行前先下載 JSON 或 Excel 備份</p>
             </div>
-            <div class="flex flex-wrap gap-2">
-              <button id="btn-clear-blank" type="button" class="btn-focus h-8 px-3.5 rounded-lg bg-white hover:bg-zinc-50 text-zinc-700 hairline text-xs font-medium transition-colors duration-150">清空為空白帳本</button>
-              <button id="btn-reset-data" type="button" class="btn-focus h-8 px-3.5 rounded-lg bg-white hover:bg-rose-50 text-rose-700 border border-rose-200 text-xs font-medium transition-colors duration-150">重設初始資料</button>
-            </div>
+            <button id="btn-clear-blank" type="button" class="btn-focus h-8 px-3.5 rounded-lg bg-white hover:bg-rose-50 text-rose-700 border border-rose-200 text-xs font-medium transition-colors duration-150">清空全部資料</button>
           </div>
         </section>
       </main>
@@ -946,6 +1096,7 @@
           fxTrades: [],
           incomeReceipts: [],
           investmentLogs: [],
+          stockTrades: [],
           snapshots: [],
           ledger: []
         };
@@ -982,7 +1133,6 @@
 
         let stocksTWD = 0;
         let stocksPnlTWD = 0;
-        let stocksPnlExIbioTWD = 0;
         (data.stocks || []).forEach((s) => {
           const shares = safeNum(s.shares);
           const price = safeNum(s.currentPrice);
@@ -992,9 +1142,6 @@
           const pnlTWD = shares * (price - cost) * r;
           stocksTWD += mvTWD;
           stocksPnlTWD += pnlTWD;
-          if (String(s.symbol).toUpperCase() !== 'IBIO') {
-            stocksPnlExIbioTWD += pnlTWD;
-          }
           totalByCurrencyTWD[s.currency] = (totalByCurrencyTWD[s.currency] || 0) + mvTWD;
         });
 
@@ -1050,7 +1197,6 @@
           cashTWD,
           stocksTWD,
           stocksPnlTWD,
-          stocksPnlExIbioTWD,
           investmentsTWD,
           nonRecoverableInvTWD,
           annualIncomeMin,
@@ -1079,6 +1225,7 @@
               if (!Array.isArray(parsed.fxTrades)) parsed.fxTrades = [];
               if (!Array.isArray(parsed.incomeReceipts)) parsed.incomeReceipts = [];
               if (!Array.isArray(parsed.investmentLogs)) parsed.investmentLogs = [];
+              if (!Array.isArray(parsed.stockTrades)) parsed.stockTrades = [];
               if (!parsed.fx) parsed.fx = { TWD: 1, USD: 33.022, JPY: 0.2069, HKD: 4.2097, CNY: 4.9525 };
               if (!parsed.fx.JPY) parsed.fx.JPY = 0.2069;
               return parsed;
@@ -1112,7 +1259,7 @@
       let appConfig = loadConfig();
       let activeTab = 'overview';
       let stockMarketFilter = 'ALL';
-      let excludeIbio = false;
+      let stockTradeTypeFilter = 'ALL';
       let expMonthFilter = '';
       let expCatFilter = 'ALL';
       let fxFilterCur = 'ALL';
@@ -1120,6 +1267,9 @@
       let chartAllocation = null;
       let chartCurrency = null;
       let chartTrend = null;
+      let chartHistoryTrend = null;
+      let trendRange = 'day';
+      let trendMode = 'total';
       let currentModalSubmit = null;
       let currentConfirmAction = null;
       let toastTimer = null;
@@ -1295,6 +1445,7 @@
               if (!Array.isArray(parsed.fxTrades)) parsed.fxTrades = [];
               if (!Array.isArray(parsed.incomeReceipts)) parsed.incomeReceipts = [];
               if (!Array.isArray(parsed.investmentLogs)) parsed.investmentLogs = [];
+              if (!Array.isArray(parsed.stockTrades)) parsed.stockTrades = [];
               if (!parsed.fx) parsed.fx = { TWD: 1, USD: 33.022, JPY: 0.2069, HKD: 4.2097, CNY: 4.9525 };
               if (!parsed.fx.JPY) parsed.fx.JPY = 0.2069;
               state = parsed;
@@ -1307,7 +1458,64 @@
               }
               saveState(false);
               renderAll();
-              scheduleAutoRefresh();
+              (function autoDailySnapshot() {
+        const totals = computeTotals(state);
+        if (totals.totalTWD <= 0) return;
+        const today = todayISO();
+        if (!Array.isArray(state.snapshots)) state.snapshots = [];
+        const exists = state.snapshots.some((s) => s.date === today);
+        if (!exists) {
+          state.snapshots.push({
+            id: uid('snap'),
+            date: today,
+            cashTWD: Math.round(totals.cashTWD),
+            stocksTWD: Math.round(totals.stocksTWD),
+            investmentsTWD: Math.round(totals.investmentsTWD),
+            totalTWD: Math.round(totals.totalTWD),
+            note: '每日自動快照'
+          });
+          saveState();
+          renderHistory();
+        }
+      })();
+      document.querySelectorAll('[data-welcome-action]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const act = btn.dataset.welcomeAction;
+          if (act === 'overview') { switchTab('overview'); }
+          else if (act === 'quick-expense') { switchTab('expenses'); openRandomExpenseModal(null); }
+          else if (act === 'quick-income') { switchTab('income'); openIncomeReceiptModal((state.fixedIncomes && state.fixedIncomes[0]) || null); }
+          else if (act === 'quick-inv-log') { switchTab('investments'); openInvLogModal(null, 0); }
+          else if (act === 'quick-stock-trade') { switchTab('stocks'); openStockTradeModal(null, null); }
+          else if (act === 'quick-cash') { switchTab('cash'); }
+          else if (act === 'quick-trend') { switchTab('history'); }
+        });
+      });
+
+      const chkWelcome = document.getElementById('chk-show-welcome');
+      if (chkWelcome) {
+        chkWelcome.addEventListener('change', (e) => {
+          localStorage.setItem('wealth_skip_welcome', e.target.checked ? '0' : '1');
+          showToast(e.target.checked ? '下次開啟將優先顯示今日任務導引頁' : '下次開啟將直接進入資產總覽');
+        });
+      }
+
+      document.querySelectorAll('.trend-range-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          trendRange = btn.dataset.trendRange || 'day';
+          renderTrendChartOnCanvas('chart-trend', false);
+          renderTrendChartOnCanvas('chart-history-trend', true);
+        });
+      });
+      document.querySelectorAll('.trend-mode-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          trendMode = trendMode === 'total' ? 'breakdown' : 'total';
+          renderTrendChartOnCanvas('chart-trend', false);
+          renderTrendChartOnCanvas('chart-history-trend', true);
+        });
+      });
+
+      switchTab(localStorage.getItem('wealth_skip_welcome') === '1' ? 'overview' : 'welcome');
+      scheduleAutoRefresh();
               if (appConfig.autoRefresh !== false) refreshLivePricesAndFX(true);
               if (!silent) showToast('已從雲端還原資料');
             }
@@ -1545,9 +1753,9 @@
 
         document.getElementById('kpi-total-stocks').textContent = fmtTWD(totals.stocksTWD);
         document.getElementById('kpi-stocks-pct').textContent = ((totals.stocksTWD / nw) * 100).toFixed(1) + '%';
-        const pnl = excludeIbio ? totals.stocksPnlExIbioTWD : totals.stocksPnlTWD;
+        const pnl = totals.stocksPnlTWD;
         const pnlEl = document.getElementById('kpi-stocks-pnl');
-        pnlEl.textContent = `未實現損益 ${pnl >= 0 ? '+' : ''}${fmtTWD(pnl)}${excludeIbio ? '（不含IBIO）' : ''}`;
+        pnlEl.textContent = `未實現損益 ${pnl >= 0 ? '+' : ''}${fmtTWD(pnl)}`;
         pnlEl.className = 'mt-2 text-xs font-mono-num ' + (pnl >= 0 ? 'text-rose-700' : 'text-emerald-700');
 
         document.getElementById('kpi-total-inv').textContent = fmtTWD(totals.investmentsTWD);
@@ -1588,59 +1796,7 @@
         const gridColor = 'rgba(24, 24, 27, 0.06)';
         const tickFont = { family: "'JetBrains Mono', monospace", size: 11 };
 
-        // Hero Trend Chart (Single primary accent ink + quiet neutral comparison lines)
-        const ctxTrend = document.getElementById('chart-trend').getContext('2d');
-        if (chartTrend) chartTrend.destroy();
-        const sortedSnaps = [...(state.snapshots || [])].sort((a, b) => String(a.date).localeCompare(String(b.date)));
-        chartTrend = new Chart(ctxTrend, {
-          type: 'line',
-          data: {
-            labels: sortedSnaps.map((s) => s.date),
-            datasets: [
-              {
-                label: '總資產淨值',
-                data: sortedSnaps.map((s) => safeNum(s.totalTWD)),
-                borderColor: '#18181b',
-                backgroundColor: 'rgba(24, 24, 27, 0.05)',
-                borderWidth: 2,
-                fill: true,
-                tension: 0.2,
-                pointRadius: 4,
-                pointBackgroundColor: '#18181b'
-              },
-              {
-                label: '銀行現金',
-                data: sortedSnaps.map((s) => safeNum(s.cashTWD)),
-                borderColor: '#71717a',
-                borderWidth: 1.5,
-                borderDash: [4, 4],
-                tension: 0.2,
-                pointRadius: 2.5
-              },
-              {
-                label: '股票 ETF',
-                data: sortedSnaps.map((s) => safeNum(s.stocksTWD)),
-                borderColor: '#a1a1aa',
-                borderWidth: 1.5,
-                borderDash: [2, 3],
-                tension: 0.2,
-                pointRadius: 2.5
-              }
-            ]
-          },
-          options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-              legend: { position: 'bottom', align: 'start', labels: { usePointStyle: true, boxWidth: 6, color: '#52525b', font: { size: 11 } } },
-              tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${fmtTWD(ctx.parsed.y)}` } }
-            },
-            scales: {
-              x: { grid: { display: false }, ticks: { color: '#71717a', font: tickFont } },
-              y: { grid: { color: gridColor }, border: { display: false }, ticks: { color: '#71717a', font: tickFont, callback: (v) => (v / 10000).toFixed(0) + '萬' } }
-            }
-          }
-        });
+        renderTrendChartOnCanvas('chart-trend', false);
 
         // Compact Doughnut
         const ctxAlloc = document.getElementById('chart-allocation').getContext('2d');
@@ -1716,14 +1872,47 @@
         const filtered = state.stocks.filter((s) => stockMarketFilter === 'ALL' || s.market === stockMarketFilter);
 
         let sumTWD = 0;
+        let sumCostTWD = 0;
         let sumPnlTWD = 0;
         filtered.forEach((s) => {
           const r = rateOf(s.currency);
-          sumTWD += safeNum(s.shares) * safeNum(s.currentPrice) * r;
-          if (!excludeIbio || String(s.symbol).toUpperCase() !== 'IBIO') {
-            sumPnlTWD += safeNum(s.shares) * (safeNum(s.currentPrice) - safeNum(s.avgCost)) * r;
-          }
+          const mv = safeNum(s.shares) * safeNum(s.currentPrice) * r;
+          const cost = safeNum(s.shares) * safeNum(s.avgCost) * r;
+          sumTWD += mv;
+          sumCostTWD += cost;
+          sumPnlTWD += (mv - cost);
         });
+
+        let realizedTWD = 0;
+        let dividendsTWD = 0;
+        (state.stockTrades || []).forEach((tr) => {
+          if (stockMarketFilter !== 'ALL' && tr.market !== stockMarketFilter) return;
+          if (tr.tradeType === 'SELL') realizedTWD += safeNum(tr.realizedPnlTWD);
+          if (tr.tradeType === 'DIVIDEND') dividendsTWD += safeNum(tr.netAmountTWD, safeNum(tr.netAmount) * rateOf(tr.currency || 'TWD'));
+        });
+
+        const unrealPct = sumCostTWD > 0 ? (sumPnlTWD / sumCostTWD) * 100 : 0;
+        const kpiEl = document.getElementById('stock-kpi-cards');
+        if (kpiEl) {
+          kpiEl.innerHTML = `
+            <div class="p-4 rounded-lg bg-[#f7f7f5] hairline">
+              <div class="text-xs text-zinc-500">持倉總市值</div>
+              <div class="mt-1 text-lg font-semibold text-zinc-900 font-mono-num">${fmtTWD(sumTWD)}</div>
+            </div>
+            <div class="p-4 rounded-lg bg-[#f7f7f5] hairline">
+              <div class="text-xs text-zinc-500">未實現損益</div>
+              <div class="mt-1 text-lg font-semibold ${sumPnlTWD >= 0 ? 'text-rose-700' : 'text-emerald-700'} font-mono-num">${sumPnlTWD >= 0 ? '+' : ''}${fmtTWD(sumPnlTWD)} <span class="text-xs font-normal">(${unrealPct >= 0 ? '+' : ''}${unrealPct.toFixed(1)}%)</span></div>
+            </div>
+            <div class="p-4 rounded-lg bg-[#f7f7f5] hairline">
+              <div class="text-xs text-zinc-500">累計已實現損益</div>
+              <div class="mt-1 text-lg font-semibold ${realizedTWD >= 0 ? 'text-rose-700' : 'text-emerald-700'} font-mono-num">${realizedTWD >= 0 ? '+' : ''}${fmtTWD(realizedTWD)}</div>
+            </div>
+            <div class="p-4 rounded-lg bg-[#f7f7f5] hairline">
+              <div class="text-xs text-zinc-500">累計已領股利</div>
+              <div class="mt-1 text-lg font-semibold text-emerald-700 font-mono-num">+${fmtTWD(dividendsTWD)}</div>
+            </div>
+          `;
+        }
 
         const pnlClass = sumPnlTWD >= 0 ? 'text-rose-700' : 'text-emerald-700';
         document.getElementById('stock-summary-bar').innerHTML =
@@ -1733,9 +1922,7 @@
         const tbody = document.getElementById('stocks-tbody');
         if (filtered.length === 0) {
           tbody.innerHTML = '<tr><td colspan="9" class="py-8 text-center text-zinc-400">目前沒有符合條件的持股</td></tr>';
-          return;
-        }
-
+        } else {
         tbody.innerHTML = filtered.map((s) => {
           const shares = safeNum(s.shares);
           const avg = safeNum(s.avgCost);
@@ -1767,12 +1954,70 @@
                 <div class="text-[11px]">${costNative > 0 ? (isGain ? '+' : '') + pnlPct.toFixed(1) + '%' : '零成本'}</div>
               </td>
               <td class="py-3 px-2 text-right whitespace-nowrap font-sans">
-                <button type="button" data-action="edit-stock" data-id="${escapeHtml(s.id)}" class="text-zinc-600 hover:text-zinc-900 text-xs font-medium mr-2.5">編輯</button>
+                <button type="button" data-action="trade-stock-buy" data-id="${escapeHtml(s.id)}" class="text-rose-700 hover:text-rose-900 text-xs font-medium mr-2">買入</button>
+                <button type="button" data-action="trade-stock-sell" data-id="${escapeHtml(s.id)}" class="text-emerald-700 hover:text-emerald-900 text-xs font-medium mr-2">賣出</button>
+                <button type="button" data-action="trade-stock-div" data-id="${escapeHtml(s.id)}" class="text-amber-700 hover:text-amber-900 text-xs font-medium mr-2">配息</button>
+                <button type="button" data-action="edit-stock" data-id="${escapeHtml(s.id)}" class="text-zinc-600 hover:text-zinc-900 text-xs font-medium mr-2">編輯</button>
                 <button type="button" data-action="del-stock" data-id="${escapeHtml(s.id)}" class="text-zinc-400 hover:text-rose-700 text-xs font-medium">刪除</button>
               </td>
             </tr>
           `;
         }).join('');
+        }
+
+        const trTbody = document.getElementById('stock-trades-tbody');
+        if (trTbody) {
+          const trList = [...(state.stockTrades || [])]
+            .filter((t) => stockTradeTypeFilter === 'ALL' || t.tradeType === stockTradeTypeFilter)
+            .filter((t) => stockMarketFilter === 'ALL' || t.market === stockMarketFilter)
+            .sort((a, b) => String(b.date).localeCompare(String(a.date)));
+          if (trList.length === 0) {
+            trTbody.innerHTML = '<tr><td colspan="8" class="py-8 text-center text-zinc-400 text-xs font-sans">尚無股票買賣或股利紀錄，可點擊「＋ 單筆買賣／配息」或「批次補登多筆歷史」</td></tr>';
+          } else {
+            const typeBadge = {
+              BUY: { label: '買入', cls: 'bg-rose-50 text-rose-700' },
+              SELL: { label: '賣出', cls: 'bg-emerald-50 text-emerald-700' },
+              DIVIDEND: { label: '現金股利', cls: 'bg-amber-50 text-amber-800' },
+              BONUS: { label: '配股', cls: 'bg-zinc-100 text-zinc-700' }
+            };
+            trTbody.innerHTML = trList.map((t) => {
+              const tb = typeBadge[t.tradeType] || typeBadge.BUY;
+              const cur = t.currency || 'TWD';
+              const isLive = t.applyMode === 'sync_live';
+              const netAmt = safeNum(t.netAmount);
+              const realized = safeNum(t.realizedPnlTWD);
+              const realizedHtml = t.tradeType === 'SELL'
+                ? `<span class="${realized >= 0 ? 'text-rose-700' : 'text-emerald-700'} font-medium">${realized >= 0 ? '+' : ''}${fmtTWD(realized)}</span>`
+                : '<span class="text-zinc-400">—</span>';
+              const qtyPriceHtml = t.tradeType === 'DIVIDEND'
+                ? '<span class="text-zinc-500">現金入帳</span>'
+                : `${safeNum(t.shares).toLocaleString('zh-TW', { maximumFractionDigits: 4 })} 股 @ ${fmtNum(t.price, 2)}`;
+              return `
+                <tr class="hover:bg-[#f7f7f5]/60">
+                  <td class="py-3 px-2 text-zinc-600 whitespace-nowrap">${escapeHtml(t.date || '')}</td>
+                  <td class="py-3 px-2 font-sans">
+                    <div class="font-medium text-zinc-900">${escapeHtml(t.symbol)} <span class="text-xs font-normal text-zinc-500">${escapeHtml(t.name || '')}</span></div>
+                    ${t.note ? `<div class="text-[11px] text-zinc-400">${escapeHtml(t.note)}</div>` : ''}
+                  </td>
+                  <td class="py-3 px-2 font-sans whitespace-nowrap"><span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium ${tb.cls}">${tb.label}</span></td>
+                  <td class="py-3 px-2 text-right text-xs text-zinc-700 whitespace-nowrap">${qtyPriceHtml}</td>
+                  <td class="py-3 px-2 text-right font-medium text-zinc-900 whitespace-nowrap">${cur} ${fmtNum(netAmt, 2)}</td>
+                  <td class="py-3 px-2 text-right whitespace-nowrap">${realizedHtml}</td>
+                  <td class="py-3 px-2 font-sans">
+                    <div class="flex flex-wrap items-center gap-1.5">
+                      <span class="text-xs text-zinc-700">${escapeHtml(t.account || '未指定')}</span>
+                      <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${isLive ? 'bg-emerald-50 text-emerald-700' : 'bg-zinc-100 text-zinc-600'}">${isLive ? '已同步持倉／餘額' : '歷史補登'}</span>
+                    </div>
+                  </td>
+                  <td class="py-3 px-2 text-right whitespace-nowrap font-sans">
+                    <button type="button" data-action="edit-stock-trade" data-id="${escapeHtml(t.id)}" class="text-zinc-600 hover:text-zinc-900 text-xs font-medium mr-2">編輯</button>
+                    <button type="button" data-action="del-stock-trade" data-id="${escapeHtml(t.id)}" class="text-zinc-400 hover:text-rose-700 text-xs font-medium">刪除</button>
+                  </td>
+                </tr>
+              `;
+            }).join('');
+          }
+        }
       }
 
       // Cash Rendering
@@ -2390,7 +2635,222 @@
       }
 
       // History Rendering
+      function getISOWeekKey(dateStr) {
+        const d = new Date(dateStr + 'T00:00:00');
+        if (Number.isNaN(d.getTime())) return String(dateStr).slice(0, 7);
+        const target = new Date(d.valueOf());
+        const dayNr = (d.getDay() + 6) % 7;
+        target.setDate(target.getDate() - dayNr + 3);
+        const firstThursday = target.valueOf();
+        target.setMonth(0, 1);
+        if (target.getDay() !== 4) target.setMonth(0, 1 + ((4 - target.getDay()) + 7) % 7);
+        const weekNo = 1 + Math.ceil((firstThursday - target) / 604800000);
+        return `${target.getFullYear()}-W${String(weekNo).padStart(2, '0')}`;
+      }
+
+      function aggregateSnapshots(snaps, range) {
+        const sorted = [...(snaps || [])].sort((a, b) => String(a.date).localeCompare(String(b.date)));
+        if (sorted.length === 0) return [];
+        if (range === 'all') return sorted.map((s) => ({ ...s, label: s.date }));
+
+        const buckets = new Map();
+        sorted.forEach((s) => {
+          let key = s.date;
+          if (range === 'day') key = String(s.date).slice(0, 10);
+          else if (range === 'week') key = getISOWeekKey(s.date);
+          else if (range === 'month') key = String(s.date).slice(0, 7);
+          else if (range === 'year') key = String(s.date).slice(0, 4);
+          buckets.set(key, { ...s, label: key });
+        });
+        const arr = [...buckets.values()];
+        if (range === 'day') return arr.slice(-30);
+        if (range === 'week') return arr.slice(-26);
+        if (range === 'month') return arr.slice(-24);
+        return arr;
+      }
+
+      function syncTrendControlButtons() {
+        document.querySelectorAll('.trend-range-btn').forEach((btn) => {
+          const active = btn.dataset.trendRange === trendRange;
+          btn.classList.toggle('bg-zinc-900', active);
+          btn.classList.toggle('text-white', active);
+          btn.classList.toggle('text-zinc-600', !active);
+        });
+        document.querySelectorAll('.trend-mode-btn').forEach((btn) => {
+          btn.textContent = trendMode === 'total' ? '切換分類對比' : '切換總淨值線';
+        });
+      }
+
+      function renderTrendChartOnCanvas(canvasId, isHistoryPage) {
+        const canvas = document.getElementById(canvasId);
+        if (!canvas) return;
+        const points = aggregateSnapshots(state.snapshots, trendRange);
+        const rangeNameMap = { day: '近 30 日', week: '週趨勢', month: '月趨勢', year: '年趨勢', all: '全部期間' };
+
+        const latest = points.length > 0 ? points[points.length - 1] : null;
+        const prev = points.length > 1 ? points[points.length - 2] : latest;
+        const deltaTotal = latest && prev ? safeNum(latest.totalTWD) - safeNum(prev.totalTWD) : 0;
+        const deltaPct = prev && safeNum(prev.totalTWD) > 0 ? (deltaTotal / safeNum(prev.totalTWD)) * 100 : 0;
+        const deltaCash = latest && prev ? safeNum(latest.cashTWD) - safeNum(prev.cashTWD) : 0;
+        const deltaStocks = latest && prev ? safeNum(latest.stocksTWD) - safeNum(prev.stocksTWD) : 0;
+        const deltaInv = latest && prev ? safeNum(latest.investmentsTWD) - safeNum(prev.investmentsTWD) : 0;
+
+        if (!isHistoryPage) {
+          const bar = document.getElementById('ov-trend-delta-bar');
+          if (bar) {
+            if (points.length <= 1) {
+              bar.textContent = `${rangeNameMap[trendRange]} · 目前累計 ${points.length} 筆快照（系統每日自動記錄）`;
+            } else {
+              const sign = deltaTotal >= 0 ? '+' : '';
+              const cls = deltaTotal >= 0 ? 'text-rose-700' : 'text-emerald-700';
+              bar.innerHTML = `${rangeNameMap[trendRange]} 較前期（${escapeHtml(prev.label)} → ${escapeHtml(latest.label)}）：<span class="${cls} font-medium">${sign}${fmtTWD(deltaTotal)} (${sign}${deltaPct.toFixed(2)}%)</span>`;
+            }
+          }
+        } else {
+          const cardsEl = document.getElementById('hist-compare-cards');
+          if (cardsEl) {
+            const fmtDelta = (val) => {
+              const s = val >= 0 ? '+' : '';
+              const c = val > 0 ? 'text-rose-700' : val < 0 ? 'text-emerald-700' : 'text-zinc-500';
+              return `<span class="${c}">${s}${fmtTWD(val)}</span>`;
+            };
+            const compareLabel = points.length > 1 ? `${prev.label} → ${latest.label}` : '尚待累積第 2 期對比';
+            cardsEl.innerHTML = `
+              <div class="p-4 rounded-lg bg-[#f7f7f5] hairline">
+                <div class="text-xs text-zinc-500">區間淨值變化（${escapeHtml(compareLabel)}）</div>
+                <div class="mt-1 text-base font-semibold font-mono-num">${fmtDelta(deltaTotal)} <span class="text-xs font-normal text-zinc-500">(${deltaTotal >= 0 ? '+' : ''}${deltaPct.toFixed(1)}%)</span></div>
+              </div>
+              <div class="p-4 rounded-lg bg-[#f7f7f5] hairline">
+                <div class="text-xs text-zinc-500">銀行現金增減</div>
+                <div class="mt-1 text-base font-semibold font-mono-num">${fmtDelta(deltaCash)}</div>
+              </div>
+              <div class="p-4 rounded-lg bg-[#f7f7f5] hairline">
+                <div class="text-xs text-zinc-500">股票市值增減</div>
+                <div class="mt-1 text-base font-semibold font-mono-num">${fmtDelta(deltaStocks)}</div>
+              </div>
+              <div class="p-4 rounded-lg bg-[#f7f7f5] hairline">
+                <div class="text-xs text-zinc-500">實體投資本金增減</div>
+                <div class="mt-1 text-base font-semibold font-mono-num">${fmtDelta(deltaInv)}</div>
+              </div>
+            `;
+          }
+        }
+
+        const datasets = trendMode === 'total'
+          ? [{
+              label: '總資產淨值 (TWD)',
+              data: points.map((s) => safeNum(s.totalTWD)),
+              borderColor: '#18181b',
+              backgroundColor: 'rgba(24, 24, 27, 0.07)',
+              borderWidth: 2,
+              pointRadius: points.length > 20 ? 2 : 3.5,
+              pointBackgroundColor: '#18181b',
+              fill: true,
+              tension: 0.3
+            }]
+          : [
+              {
+                label: '銀行現金',
+                data: points.map((s) => safeNum(s.cashTWD)),
+                borderColor: '#18181b',
+                backgroundColor: 'transparent',
+                borderWidth: 2,
+                pointRadius: 2.5,
+                tension: 0.3
+              },
+              {
+                label: '股票與 ETF',
+                data: points.map((s) => safeNum(s.stocksTWD)),
+                borderColor: '#b91c1c',
+                backgroundColor: 'transparent',
+                borderWidth: 2,
+                pointRadius: 2.5,
+                tension: 0.3
+              },
+              {
+                label: '實體投資',
+                data: points.map((s) => safeNum(s.investmentsTWD)),
+                borderColor: '#047857',
+                backgroundColor: 'transparent',
+                borderWidth: 2,
+                pointRadius: 2.5,
+                tension: 0.3
+              }
+            ];
+
+        if (isHistoryPage) {
+          if (chartHistoryTrend) chartHistoryTrend.destroy();
+        } else {
+          if (chartTrend) chartTrend.destroy();
+        }
+
+        const chartInst = new Chart(canvas.getContext('2d'), {
+          type: 'line',
+          data: {
+            labels: points.map((s) => s.label),
+            datasets
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+              legend: { display: trendMode === 'breakdown', position: 'top', labels: { boxWidth: 10, font: { size: 11 } } },
+              tooltip: {
+                callbacks: {
+                  label: (ctx) => ` ${ctx.dataset.label}: ${fmtTWD(ctx.parsed.y)}`
+                }
+              }
+            },
+            scales: {
+              x: {
+                grid: { display: false },
+                ticks: { color: '#71717a', font: { size: 11, family: 'JetBrains Mono' }, maxRotation: 0 }
+              },
+              y: {
+                grid: { color: 'rgba(24,24,27,0.06)' },
+                ticks: {
+                  color: '#71717a',
+                  font: { size: 11, family: 'JetBrains Mono' },
+                  callback: (v) => (v / 10000).toFixed(0) + '萬'
+                }
+              }
+            }
+          }
+        });
+
+        if (isHistoryPage) chartHistoryTrend = chartInst;
+        else chartTrend = chartInst;
+        syncTrendControlButtons();
+      }
+
+      function renderWelcomeHub(totals) {
+        const hr = new Date().getHours();
+        const greet = hr < 11 ? '早安' : hr < 18 ? '午安' : '晚安';
+        const userName = currentUser && currentUser.displayName ? `，${currentUser.displayName}` : '';
+        const greetEl = document.getElementById('welcome-greeting');
+        if (greetEl) greetEl.textContent = `${greet}${userName} · ${todayISO()}`;
+
+        const nwEl = document.getElementById('welcome-networth');
+        if (nwEl) nwEl.textContent = fmtTWD(totals.netWorthTWD);
+
+        const deltaEl = document.getElementById('welcome-delta');
+        if (deltaEl) {
+          const snaps = [...(state.snapshots || [])].sort((a, b) => String(a.date).localeCompare(String(b.date)));
+          if (snaps.length >= 2) {
+            const diff = safeNum(snaps[snaps.length - 1].totalTWD) - safeNum(snaps[snaps.length - 2].totalTWD);
+            const sign = diff >= 0 ? '+' : '';
+            deltaEl.textContent = `較上次快照 ${sign}${fmtTWD(diff)} · 查看總覽 →`;
+          } else {
+            deltaEl.textContent = '點擊查看詳細總覽 →';
+          }
+        }
+        const chk = document.getElementById('chk-show-welcome');
+        if (chk) chk.checked = localStorage.getItem('wealth_skip_welcome') !== '1';
+      }
+
       function renderHistory() {
+        renderTrendChartOnCanvas('chart-history-trend', true);
         const sortedSnaps = [...(state.snapshots || [])].sort((a, b) => String(b.date).localeCompare(String(a.date)));
         const snapsTbody = document.getElementById('snapshots-tbody');
         if (sortedSnaps.length === 0) {
@@ -2475,6 +2935,7 @@
 
       function renderAll() {
         const totals = computeTotals(state);
+        renderWelcomeHub(totals);
         renderOverview(totals);
         renderStocks();
         renderCash(totals);
@@ -2622,7 +3083,7 @@
       // CRUD Modals
       function openStockModal(item = null) {
         const isEdit = Boolean(item);
-        const s = item || { symbol: '', name: '', market: 'US', account: '美股複委託', currency: 'USD', shares: 0, avgCost: 0, currentPrice: 0 };
+        const s = item || { symbol: '', name: '', market: 'TW', account: '', currency: 'TWD', shares: 0, avgCost: 0, currentPrice: 0 };
         const html = `
           <div class="grid grid-cols-2 gap-3">
             <div><label class="block text-xs font-medium text-zinc-600 mb-1">股票代碼</label><input name="symbol" required value="${escapeHtml(s.symbol)}" class="w-full h-9 px-3 rounded-lg hairline text-sm" /></div>
@@ -2656,6 +3117,374 @@
           renderAll();
           showToast(isEdit ? '已更新股票持倉' : '已新增股票持倉');
         });
+      }
+
+      function applyStockTradeRecord(rec) {
+        if (!Array.isArray(state.stockTrades)) state.stockTrades = [];
+        const rateOf = (cur) => (cur === 'TWD' ? 1 : safeNum(state.fx[cur], 1));
+        const cur = rec.currency || 'TWD';
+        const fxRate = rateOf(cur);
+        const sym = String(rec.symbol || '').trim().toUpperCase();
+        const market = rec.market || 'TW';
+        const shares = safeNum(rec.shares);
+        const price = safeNum(rec.price);
+        const fee = safeNum(rec.fee);
+        const tax = safeNum(rec.tax);
+
+        const existing = (state.stocks || []).find(
+          (s) => String(s.symbol).trim().toUpperCase() === sym && s.market === market && (!rec.account || !s.account || s.account === rec.account)
+        ) || (state.stocks || []).find(
+          (s) => String(s.symbol).trim().toUpperCase() === sym && s.market === market
+        );
+
+        let gross = shares * price;
+        let netNative = gross;
+        let realizedNative = 0;
+
+        if (rec.tradeType === 'BUY') {
+          netNative = gross + fee + tax;
+        } else if (rec.tradeType === 'SELL') {
+          netNative = Math.max(0, gross - fee - tax);
+          const avgCost = existing ? safeNum(existing.avgCost) : safeNum(rec.costBasisPrice, price);
+          realizedNative = netNative - (shares * avgCost);
+        } else if (rec.tradeType === 'DIVIDEND') {
+          netNative = Math.max(0, safeNum(rec.dividendAmount, gross) - fee - tax);
+        } else if (rec.tradeType === 'BONUS') {
+          netNative = 0;
+        }
+
+        rec.netAmount = Number(netNative.toFixed(2));
+        rec.netAmountTWD = Math.round(netNative * fxRate);
+        rec.realizedPnlTWD = rec.tradeType === 'SELL' ? Math.round(realizedNative * fxRate) : 0;
+
+        state.stockTrades.push(rec);
+
+        if (rec.applyMode === 'sync_live') {
+          if (rec.tradeType === 'BUY' && shares > 0) {
+            if (existing) {
+              const oldShares = safeNum(existing.shares);
+              const oldCost = oldShares * safeNum(existing.avgCost);
+              const newShares = oldShares + shares;
+              existing.shares = Number(newShares.toFixed(6));
+              existing.avgCost = Number(((oldCost + netNative) / newShares).toFixed(4));
+              if (price > 0) existing.currentPrice = price;
+            } else {
+              state.stocks.push({
+                id: uid('s'),
+                symbol: sym,
+                name: rec.name || sym,
+                market,
+                account: rec.account || '',
+                currency: cur,
+                shares: Number(shares.toFixed(6)),
+                avgCost: Number((netNative / shares).toFixed(4)),
+                currentPrice: price
+              });
+            }
+          } else if (rec.tradeType === 'SELL' && shares > 0 && existing) {
+            const rem = Number((safeNum(existing.shares) - shares).toFixed(6));
+            if (rem <= 0.000001) {
+              state.stocks = state.stocks.filter((x) => x.id !== existing.id);
+            } else {
+              existing.shares = rem;
+              if (price > 0) existing.currentPrice = price;
+            }
+          } else if (rec.tradeType === 'BONUS' && shares > 0) {
+            if (existing) {
+              const oldShares = safeNum(existing.shares);
+              const oldCost = oldShares * safeNum(existing.avgCost);
+              const newShares = oldShares + shares;
+              existing.shares = Number(newShares.toFixed(6));
+              existing.avgCost = newShares > 0 ? Number((oldCost / newShares).toFixed(4)) : 0;
+            } else {
+              state.stocks.push({
+                id: uid('s'),
+                symbol: sym,
+                name: rec.name || sym,
+                market,
+                account: rec.account || '',
+                currency: cur,
+                shares: Number(shares.toFixed(6)),
+                avgCost: 0,
+                currentPrice: price
+              });
+            }
+          }
+
+          if (rec.account && netNative > 0) {
+            const bank = (state.cash || []).find((c) => c.bank === rec.account && c.currency === cur);
+            if (bank) {
+              const delta = rec.tradeType === 'BUY' ? -netNative : netNative;
+              bank.amount = Number((safeNum(bank.amount) + delta).toFixed(2));
+            }
+          }
+        }
+
+        if (netNative > 0) {
+          const labelMap = { BUY: '買入股票', SELL: '賣出股票', DIVIDEND: '股票股利' };
+          state.ledger.push({
+            id: uid('led'),
+            date: rec.date,
+            type: rec.tradeType === 'DIVIDEND' ? '股票股利' : '股票買賣',
+            title: `${labelMap[rec.tradeType] || '股票交易'} ${sym} ${rec.name || ''}`.trim(),
+            amountTWD: rec.tradeType === 'BUY' ? -Math.round(netNative * fxRate) : Math.round(netNative * fxRate),
+            note: `${rec.applyMode === 'sync_live' ? '同步持倉／餘額' : '歷史補登'}${rec.account ? ' · ' + rec.account : ''}${rec.note ? ' · ' + rec.note : ''}`
+          });
+        }
+      }
+
+      function openStockTradeModal(preset = null, editTrade = null) {
+        const isEdit = Boolean(editTrade);
+        const p = editTrade || preset || {
+          date: todayISO(),
+          tradeType: 'BUY',
+          market: 'TW',
+          symbol: '',
+          name: '',
+          currency: 'TWD',
+          shares: 1000,
+          price: 0,
+          fee: 0,
+          tax: 0,
+          dividendAmount: 0,
+          account: '',
+          applyMode: 'sync_live',
+          note: ''
+        };
+        const cur = p.currency || (p.market === 'US' ? 'USD' : p.market === 'HK' ? 'HKD' : 'TWD');
+        const html = `
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div><label class="block text-xs font-medium text-zinc-600 mb-1">交易日期</label><input name="date" type="date" required value="${escapeHtml(p.date || todayISO())}" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" /></div>
+            <div>
+              <label class="block text-xs font-medium text-zinc-600 mb-1">交易類型</label>
+              <select id="st-trade-type" name="tradeType" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white">
+                <option value="BUY" ${p.tradeType === 'BUY' ? 'selected' : ''}>買入（加權重算均價）</option>
+                <option value="SELL" ${p.tradeType === 'SELL' ? 'selected' : ''}>賣出（計算已實現損益）</option>
+                <option value="DIVIDEND" ${p.tradeType === 'DIVIDEND' ? 'selected' : ''}>現金股利入帳</option>
+                <option value="BONUS" ${p.tradeType === 'BONUS' ? 'selected' : ''}>配股／股票股利</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-zinc-600 mb-1">市場</label>
+              <select id="st-market" name="market" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white">
+                <option value="TW" ${p.market === 'TW' ? 'selected' : ''}>台股 TW</option>
+                <option value="US" ${p.market === 'US' ? 'selected' : ''}>美股 US</option>
+                <option value="HK" ${p.market === 'HK' ? 'selected' : ''}>港股 HK</option>
+              </select>
+            </div>
+          </div>
+          <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            <div><label class="block text-xs font-medium text-zinc-600 mb-1">股票代號</label><input name="symbol" required value="${escapeHtml(p.symbol || '')}" placeholder="如 0050 / NVDA" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num uppercase" /></div>
+            <div><label class="block text-xs font-medium text-zinc-600 mb-1">股票名稱</label><input name="name" value="${escapeHtml(p.name || '')}" placeholder="選填" class="w-full h-9 px-3 rounded-lg hairline text-sm" /></div>
+            <div><label class="block text-xs font-medium text-zinc-600 mb-1">交割幣別</label><select name="currency" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white">${buildCurrencyOptionsHtml(cur, true)}</select></div>
+          </div>
+          <div id="st-qty-price-row" class="grid grid-cols-2 gap-3">
+            <div><label class="block text-xs font-medium text-zinc-600 mb-1">股數</label><input id="st-shares" name="shares" type="number" step="0.0001" min="0" value="${safeNum(p.shares)}" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" /></div>
+            <div><label class="block text-xs font-medium text-zinc-600 mb-1">成交單價 (原幣)</label><input id="st-price" name="price" type="number" step="0.0001" min="0" value="${safeNum(p.price)}" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" /></div>
+          </div>
+          <div id="st-div-row" class="hidden">
+            <label class="block text-xs font-medium text-zinc-600 mb-1">現金股利總額 (原幣)</label>
+            <input id="st-div-amt" name="dividendAmount" type="number" step="0.01" min="0" value="${safeNum(p.dividendAmount || p.netAmount)}" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" />
+          </div>
+          <div class="p-3 rounded-lg bg-[#f7f7f5] hairline space-y-2">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <span class="text-xs font-medium text-zinc-700">手續費與證交稅（可手動填，或台股一鍵試算）</span>
+              <div class="flex items-center gap-1.5">
+                <select id="st-tw-discount" class="h-7 px-2 rounded hairline bg-white text-[11px] text-zinc-700">
+                  <option value="0.6">手續費 6 折</option>
+                  <option value="0.28" selected>手續費 2.8 折</option>
+                  <option value="1">無折數 (0.1425%)</option>
+                </select>
+                <button id="btn-calc-tw-fee" type="button" class="h-7 px-2.5 rounded bg-white hover:bg-zinc-50 hairline text-[11px] font-medium text-zinc-800">試算台股費稅</button>
+              </div>
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+              <div><label class="block text-[11px] text-zinc-500 mb-1">手續費 (原幣)</label><input id="st-fee" name="fee" type="number" step="0.01" min="0" value="${safeNum(p.fee)}" class="w-full h-8 px-2.5 rounded-lg hairline bg-white text-xs font-mono-num" /></div>
+              <div><label class="block text-[11px] text-zinc-500 mb-1">證交稅／預扣稅 (原幣)</label><input id="st-tax" name="tax" type="number" step="0.01" min="0" value="${safeNum(p.tax)}" class="w-full h-8 px-2.5 rounded-lg hairline bg-white text-xs font-mono-num" /></div>
+            </div>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-medium text-zinc-600 mb-1">交割銀行卡／帳戶</label>
+              <select name="accountSelect" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white">${buildAccountOptionsHtml(cur, p.account || '')}</select>
+              <input name="accountCustom" placeholder="輸入券商或交割帳戶名稱" class="hidden mt-2 w-full h-9 px-3 rounded-lg hairline text-sm" />
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-zinc-600 mb-1">持倉與銀行餘額處理方式</label>
+              <select name="applyMode" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white">
+                <option value="sync_live" ${(p.applyMode || 'sync_live') === 'sync_live' ? 'selected' : ''}>即時新交易 — 自動更新持倉均價與銀行餘額</option>
+                <option value="history_only" ${p.applyMode === 'history_only' ? 'selected' : ''}>補登歷史交易 — 僅記帳與累計損益，不動現有餘額</option>
+              </select>
+            </div>
+          </div>
+          <div><label class="block text-xs font-medium text-zinc-600 mb-1">備註</label><input name="note" value="${escapeHtml(p.note || '')}" placeholder="選填" class="w-full h-9 px-3 rounded-lg hairline text-sm" /></div>
+          ${isEdit ? '<p class="text-[11px] text-zinc-500">提示：修改紀錄僅更新本筆明細，不會重複異動現有持股股數與銀行餘額。</p>' : ''}
+        `;
+
+        openFormModal(isEdit ? '編輯股票交易紀錄' : '記錄股票買賣／配息', html, (fd) => {
+          const rec = {
+            id: isEdit ? editTrade.id : uid('strd'),
+            date: String(fd.get('date') || todayISO()),
+            tradeType: String(fd.get('tradeType') || 'BUY'),
+            market: String(fd.get('market') || 'TW'),
+            symbol: String(fd.get('symbol') || '').trim().toUpperCase(),
+            name: String(fd.get('name') || '').trim(),
+            currency: String(fd.get('currency') || 'TWD'),
+            shares: safeNum(fd.get('shares')),
+            price: safeNum(fd.get('price')),
+            dividendAmount: safeNum(fd.get('dividendAmount')),
+            fee: safeNum(fd.get('fee')),
+            tax: safeNum(fd.get('tax')),
+            account: resolveModalAccount(fd),
+            applyMode: String(fd.get('applyMode') || 'sync_live'),
+            note: String(fd.get('note') || '').trim()
+          };
+          if (isEdit) {
+            const rate = rec.currency === 'TWD' ? 1 : safeNum(state.fx[rec.currency], 1);
+            const gross = rec.shares * rec.price;
+            rec.netAmount = rec.tradeType === 'BUY' ? Number((gross + rec.fee + rec.tax).toFixed(2))
+              : rec.tradeType === 'SELL' ? Number(Math.max(0, gross - rec.fee - rec.tax).toFixed(2))
+              : rec.tradeType === 'DIVIDEND' ? Number(Math.max(0, rec.dividendAmount - rec.fee - rec.tax).toFixed(2)) : 0;
+            rec.netAmountTWD = Math.round(rec.netAmount * rate);
+            rec.realizedPnlTWD = editTrade.realizedPnlTWD || 0;
+            state.stockTrades = (state.stockTrades || []).map((x) => (x.id === editTrade.id ? rec : x));
+            saveState();
+            renderAll();
+            showToast('已更新股票交易紀錄');
+          } else {
+            applyStockTradeRecord(rec);
+            saveState();
+            renderAll();
+            showToast(rec.applyMode === 'sync_live' ? '已記錄交易並同步更新持倉與銀行餘額' : '已補登股票歷史交易');
+            if (rec.tradeType === 'BUY') refreshLivePricesAndFX(true);
+          }
+        });
+
+        wireCurrencyAccountSelect(p.account || '');
+
+        const typeSel = document.getElementById('st-trade-type');
+        const qtyRow = document.getElementById('st-qty-price-row');
+        const divRow = document.getElementById('st-div-row');
+        const syncTypeUI = () => {
+          const isDiv = typeSel.value === 'DIVIDEND';
+          qtyRow.classList.toggle('hidden', isDiv);
+          divRow.classList.toggle('hidden', !isDiv);
+        };
+        typeSel.addEventListener('change', syncTypeUI);
+        syncTypeUI();
+
+        document.getElementById('btn-calc-tw-fee').addEventListener('click', () => {
+          const sh = safeNum(document.getElementById('st-shares').value);
+          const pr = safeNum(document.getElementById('st-price').value);
+          const disc = safeNum(document.getElementById('st-tw-discount').value, 0.28);
+          const sym = String(document.querySelector('#modal-form input[name="symbol"]').value || '').trim().toUpperCase();
+          const gross = sh * pr;
+          const feeVal = gross > 0 ? Math.max(1, Math.floor(gross * 0.001425 * disc)) : 0;
+          const isEtf = sym.startsWith('00');
+          const taxRate = isEtf ? 0.001 : 0.003;
+          const taxVal = typeSel.value === 'SELL' ? Math.floor(gross * taxRate) : 0;
+          document.getElementById('st-fee').value = feeVal;
+          document.getElementById('st-tax').value = taxVal;
+          showToast(`已依台股試算：手續費 ${feeVal}${taxVal > 0 ? ' · 證交稅 ' + taxVal : ''}`);
+        });
+      }
+
+      function openBatchStockTradeModal() {
+        const html = `
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-medium text-zinc-600 mb-1">預設交割幣別</label>
+              <select name="currency" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white">${buildCurrencyOptionsHtml('TWD', true)}</select>
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-zinc-600 mb-1">預設交割帳戶</label>
+              <select name="accountSelect" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white">${buildAccountOptionsHtml('TWD', '')}</select>
+              <input name="accountCustom" placeholder="輸入自訂帳戶名稱" class="hidden mt-2 w-full h-9 px-3 rounded-lg hairline text-sm" />
+            </div>
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-zinc-600 mb-1">持倉與銀行餘額處理方式</label>
+            <select name="applyMode" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white">
+              <option value="history_only" selected>補登歷史交易 — 僅記帳，不重複加減現有持倉與餘額（推薦）</option>
+              <option value="sync_live">即時異動 — 依序更新持倉均價與銀行餘額</option>
+            </select>
+          </div>
+          <div class="space-y-2">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-medium text-zinc-600">多筆交易明細（日期、類型、市場、代號、股數、單價／股利）</span>
+              <button id="btn-batch-st-add" type="button" class="text-xs font-medium text-zinc-700 hover:text-zinc-900">＋ 加一列</button>
+            </div>
+            <div id="batch-st-rows" class="max-h-60 overflow-y-auto space-y-2 pr-0.5"></div>
+          </div>
+        `;
+        openFormModal('批次補登多筆股票交易歷史', html, (fd) => {
+          const cur = String(fd.get('currency') || 'TWD');
+          const acc = resolveModalAccount(fd);
+          const applyMode = String(fd.get('applyMode') || 'history_only');
+          const rows = [];
+          document.querySelectorAll('#batch-st-rows .batch-st-row').forEach((el) => {
+            const d = el.querySelector('.bs-date').value;
+            const t = el.querySelector('.bs-type').value;
+            const m = el.querySelector('.bs-mkt').value;
+            const s = el.querySelector('.bs-sym').value.trim().toUpperCase();
+            const q = safeNum(el.querySelector('.bs-qty').value);
+            const p = safeNum(el.querySelector('.bs-price').value);
+            if (d && s && (q > 0 || p > 0)) {
+              rows.push({ date: d, tradeType: t, market: m, symbol: s, shares: q, price: p });
+            }
+          });
+          if (rows.length === 0) { showToast('請至少填寫一筆有效的股票交易'); return; }
+          rows.forEach((r) => {
+            applyStockTradeRecord({
+              id: uid('strd'),
+              date: r.date,
+              tradeType: r.tradeType,
+              market: r.market,
+              symbol: r.symbol,
+              name: '',
+              currency: cur,
+              shares: r.tradeType === 'DIVIDEND' ? 0 : r.shares,
+              price: r.tradeType === 'DIVIDEND' ? 0 : r.price,
+              dividendAmount: r.tradeType === 'DIVIDEND' ? r.price : 0,
+              fee: 0,
+              tax: 0,
+              account: acc,
+              applyMode,
+              note: '批次補登歷史'
+            });
+          });
+          saveState();
+          renderAll();
+          showToast(`已一次寫入 ${rows.length} 筆股票交易歷史`);
+        });
+        wireCurrencyAccountSelect('');
+        const container = document.getElementById('batch-st-rows');
+        const addRow = () => {
+          const row = document.createElement('div');
+          row.className = 'batch-st-row grid grid-cols-12 gap-1 items-center';
+          row.innerHTML = `
+            <input type="date" value="${todayISO()}" class="bs-date col-span-3 h-8 px-1 rounded hairline bg-white text-[11px] font-mono-num" />
+            <select class="bs-type col-span-2 h-8 px-1 rounded hairline bg-white text-[11px]">
+              <option value="BUY">買入</option>
+              <option value="SELL">賣出</option>
+              <option value="DIVIDEND">股利</option>
+              <option value="BONUS">配股</option>
+            </select>
+            <select class="bs-mkt col-span-1 h-8 px-0.5 rounded hairline bg-white text-[11px]">
+              <option value="TW">TW</option>
+              <option value="US">US</option>
+              <option value="HK">HK</option>
+            </select>
+            <input type="text" placeholder="代號" class="bs-sym col-span-2 h-8 px-1.5 rounded hairline bg-white text-[11px] font-mono-num uppercase" />
+            <input type="number" step="0.0001" min="0" placeholder="股數" class="bs-qty col-span-1 h-8 px-1 rounded hairline bg-white text-[11px] font-mono-num" />
+            <input type="number" step="0.01" min="0" placeholder="單價/股利" class="bs-price col-span-2 h-8 px-1.5 rounded hairline bg-white text-[11px] font-mono-num" />
+            <button type="button" class="bs-del col-span-1 h-8 text-zinc-400 hover:text-rose-700 text-xs">✕</button>
+          `;
+          row.querySelector('.bs-del').addEventListener('click', () => row.remove());
+          container.appendChild(row);
+        };
+        addRow(); addRow(); addRow();
+        document.getElementById('btn-batch-st-add').addEventListener('click', addRow);
       }
 
       function openCashModal(item = null) {
@@ -3806,6 +4635,9 @@
         const sRows = state.stocks.map((s) => ({ id: s.id, symbol: s.symbol, name: s.name, market: s.market, account: s.account, currency: s.currency, shares: s.shares, avgCost: s.avgCost, currentPrice: s.currentPrice }));
         XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sRows.length ? sRows : [{ id: '', symbol: '', name: '', market: '', account: '', currency: '', shares: 0, avgCost: 0, currentPrice: 0 }]), '股票持倉');
 
+        const stTrRows = (state.stockTrades || []).map((t) => ({ id: t.id, date: t.date, tradeType: t.tradeType, market: t.market, symbol: t.symbol, name: t.name || '', currency: t.currency || 'TWD', shares: t.shares, price: t.price, fee: t.fee || 0, tax: t.tax || 0, netAmount: t.netAmount || 0, realizedPnlTWD: t.realizedPnlTWD || 0, account: t.account || '', applyMode: t.applyMode || 'history_only', note: t.note || '' }));
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(stTrRows.length ? stTrRows : [{ id: '', date: '', tradeType: 'BUY', market: 'TW', symbol: '', name: '', currency: 'TWD', shares: 0, price: 0, fee: 0, tax: 0, netAmount: 0, realizedPnlTWD: 0, account: '', applyMode: 'history_only', note: '' }]), '股票交易紀錄');
+
         const cRows = state.cash.map((c) => ({ id: c.id, bank: c.bank, currency: c.currency, amount: c.amount, note: c.note || '' }));
         XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(cRows.length ? cRows : [{ id: '', bank: '', currency: 'TWD', amount: 0, note: '' }]), '銀行現金');
 
@@ -3859,6 +4691,7 @@
             const readSheet = (name) => (wb.Sheets[name] ? XLSX.utils.sheet_to_json(wb.Sheets[name]) : null);
 
             const stockSheet = readSheet('股票持倉');
+            const stTradeSheet = readSheet('股票交易紀錄');
             const cashSheet = readSheet('銀行現金');
             const invSheet = readSheet('實體投資');
             const incSheet = readSheet('固定收入') || readSheet('固定收入來源');
@@ -3876,6 +4709,7 @@
               return;
             }
             if (stockSheet) state.stocks = stockSheet.filter((r) => r.symbol).map((r) => ({ id: r.id || uid('s'), symbol: String(r.symbol), name: String(r.name || r.symbol), market: String(r.market || 'US'), account: String(r.account || ''), currency: String(r.currency || 'USD'), shares: safeNum(r.shares), avgCost: safeNum(r.avgCost), currentPrice: safeNum(r.currentPrice) }));
+            if (stTradeSheet) state.stockTrades = stTradeSheet.filter((r) => r.symbol).map((r) => ({ id: r.id || uid('strd'), date: String(r.date || todayISO()), tradeType: String(r.tradeType || 'BUY'), market: String(r.market || 'TW'), symbol: String(r.symbol).toUpperCase(), name: String(r.name || ''), currency: String(r.currency || 'TWD'), shares: safeNum(r.shares), price: safeNum(r.price), fee: safeNum(r.fee), tax: safeNum(r.tax), netAmount: safeNum(r.netAmount), realizedPnlTWD: safeNum(r.realizedPnlTWD), account: String(r.account || ''), applyMode: String(r.applyMode || 'history_only'), note: String(r.note || '') }));
             if (cashSheet) state.cash = cashSheet.filter((r) => r.bank).map((r) => ({ id: r.id || uid('c'), bank: String(r.bank), currency: String(r.currency || 'TWD'), amount: safeNum(r.amount), note: String(r.note || '') }));
             if (invSheet) state.investments = invSheet.filter((r) => r.name).map((r) => ({ id: r.id || uid('i'), name: String(r.name), principal: safeNum(r.principal), cycleMonths: Math.max(1, safeNum(r.cycleMonths, 12)), minRate: safeNum(r.minRate), maxRate: safeNum(r.maxRate), principalRecoverable: !(r.principalRecoverable === false || String(r.principalRecoverable) === 'false' || String(r.principalRecoverable) === '不可收回'), note: String(r.note || '') }));
             if (incSheet) state.fixedIncomes = incSheet.filter((r) => r.name || r['收入名稱']).map((r) => ({ id: r.id || uid('inc'), name: String(r.name || r['收入名稱']), category: String(r.category || r['類別'] || '固定收入'), currency: String(r.currency || r['幣別'] || 'TWD'), amount: safeNum(r.amount ?? r['單期金額']), cycleMonths: Math.max(1, safeNum(r.cycleMonths ?? r['發放週期(月)'], 1)), payday: String(r.payday || r['每月發放日'] || ''), account: String(r.account || r['入帳帳戶'] || ''), note: String(r.note || r['備註'] || '') }));
@@ -3918,7 +4752,6 @@
       document.getElementById('btn-header-export-xlsx').addEventListener('click', exportExcel);
       document.getElementById('btn-export-json').addEventListener('click', exportJSON);
       document.getElementById('btn-export-xlsx').addEventListener('click', exportExcel);
-      document.getElementById('btn-export-clean-share').addEventListener('click', exportBlankTemplateJSON);
 
       document.getElementById('btn-save-quote-cfg').addEventListener('click', () => {
         appConfig.gsheetCsvUrl = document.getElementById('cfg-gsheet-csv').value.trim();
@@ -3953,10 +4786,10 @@
         if (e.target.files && e.target.files[0]) { importExcelFile(e.target.files[0]); e.target.value = ''; }
       });
 
-      document.getElementById('chk-exclude-ibio').addEventListener('change', (e) => {
-        excludeIbio = e.target.checked;
-        renderAll();
-      });
+      document.getElementById('btn-add-stock-trade').addEventListener('click', () => openStockTradeModal(null, null));
+      document.getElementById('btn-add-stock-trade-top').addEventListener('click', () => openStockTradeModal(null, null));
+      document.getElementById('btn-batch-stock-trade').addEventListener('click', openBatchStockTradeModal);
+      document.getElementById('filter-stock-trade-type').addEventListener('change', (e) => { stockTradeTypeFilter = e.target.value; renderStocks(); });
 
       document.getElementById('stock-market-filters').addEventListener('click', (e) => {
         const btn = e.target.closest('.stock-filter-btn');
@@ -4085,14 +4918,7 @@
         });
       });
 
-      document.getElementById('btn-reset-data').addEventListener('click', () => {
-        openConfirmModal('重設回初始資料', '將清除目前修改並還原至初始建檔資料。建議先匯出 JSON 備份。', () => {
-          state = createDefaultData();
-          saveState();
-          renderAll();
-          showToast('已還原至初始資料');
-        });
-      });
+
 
       document.body.addEventListener('click', (e) => {
         const btn = e.target.closest('[data-action]');
@@ -4102,6 +4928,14 @@
 
         if (action === 'edit-stock') { const item = state.stocks.find((x) => x.id === id); if (item) openStockModal(item); }
         else if (action === 'del-stock') { openConfirmModal('刪除股票', '確定要刪除此筆股票持倉嗎？', () => { state.stocks = state.stocks.filter((x) => x.id !== id); saveState(); renderAll(); showToast('已刪除股票'); }); }
+        else if (action === 'trade-stock-buy') { const s = state.stocks.find((x) => x.id === id); if (s) openStockTradeModal({ date: todayISO(), tradeType: 'BUY', market: s.market, symbol: s.symbol, name: s.name, currency: s.currency, shares: s.market === 'TW' ? 1000 : 1, price: s.currentPrice, account: s.account, applyMode: 'sync_live' }); }
+        else if (action === 'trade-stock-sell') { const s = state.stocks.find((x) => x.id === id); if (s) openStockTradeModal({ date: todayISO(), tradeType: 'SELL', market: s.market, symbol: s.symbol, name: s.name, currency: s.currency, shares: s.shares, price: s.currentPrice, account: s.account, applyMode: 'sync_live' }); }
+        else if (action === 'trade-stock-div') { const s = state.stocks.find((x) => x.id === id); if (s) openStockTradeModal({ date: todayISO(), tradeType: 'DIVIDEND', market: s.market, symbol: s.symbol, name: s.name, currency: s.currency, dividendAmount: 0, account: s.account, applyMode: 'sync_live' }); }
+        else if (action === 'edit-stock-trade') { const t = (state.stockTrades || []).find((x) => x.id === id); if (t) openStockTradeModal(null, t); }
+        else if (action === 'del-stock-trade') {
+          const t = (state.stockTrades || []).find((x) => x.id === id);
+          if (t) openConfirmModal('刪除股票交易紀錄', '確定要刪除此筆交易紀錄嗎？', () => { state.stockTrades = (state.stockTrades || []).filter((x) => x.id !== id); saveState(); renderAll(); showToast('已刪除股票交易紀錄'); });
+        }
         else if (action === 'edit-cash') { const item = state.cash.find((x) => x.id === id); if (item) openCashModal(item); }
         else if (action === 'del-cash') { openConfirmModal('刪除現金帳戶', '確定要刪除此現金帳戶嗎？', () => { state.cash = state.cash.filter((x) => x.id !== id); saveState(); renderAll(); showToast('已刪除現金帳戶'); }); }
         else if (action === 'edit-inv') { const item = state.investments.find((x) => x.id === id); if (item) openInvModal(item); }
