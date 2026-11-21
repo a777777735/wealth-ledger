@@ -517,6 +517,7 @@
             </div>
 
             <div id="inv-summary-cards" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"></div>
+            <div id="inv-recycling-panel" class="hidden"></div>
             <div id="inv-tag-filter-bar" class="hidden flex flex-wrap items-center gap-1.5"></div>
             <div id="inv-cards-grid" class="grid grid-cols-1 md:grid-cols-3 gap-4"></div>
           </div>
@@ -1284,6 +1285,95 @@
         if (tag === '已結算') return 'bg-zinc-200/80 text-zinc-700';
         if (tag === '暫停分紅') return 'bg-amber-50 text-amber-800';
         return 'bg-sky-50 text-sky-700';
+      }
+      const FUNDING_SOURCE_META = {
+        fresh: { label: '新自備本金', short: '新自備', cls: 'bg-zinc-100 text-zinc-700', barColor: '#18181b' },
+        recycled_principal: { label: '舊本金轉投', short: '舊本金轉投', cls: 'bg-sky-50 text-sky-700', barColor: '#0284c7' },
+        reinvested_profit: { label: '分潤再投入', short: '分潤複投', cls: 'bg-emerald-50 text-emerald-700', barColor: '#059669' }
+      };
+      function getInvestmentRound(invId, investmentsList = state.investments) {
+        const list = investmentsList || [];
+        const byId = new Map(list.map((i) => [i.id, i]));
+        const cur = byId.get(invId);
+        if (!cur || !cur.sourceInvestmentId) return { round: 1, parentName: '' };
+        const parent = byId.get(cur.sourceInvestmentId);
+        const parentName = parent ? parent.name : '';
+        let round = 1;
+        let ptr = cur;
+        const visited = new Set([cur.id]);
+        while (ptr && ptr.sourceInvestmentId && !visited.has(ptr.sourceInvestmentId)) {
+          visited.add(ptr.sourceInvestmentId);
+          const next = byId.get(ptr.sourceInvestmentId);
+          if (!next) break;
+          round += 1;
+          ptr = next;
+        }
+        return { round, parentName };
+      }
+      function computeInvestmentRecyclingStats(data) {
+        const logs = [...((data && data.investmentLogs) || [])].filter((l) => safeNum(l.amountTWD) > 0);
+        // Sort chronologically; on the same date process inflows before outflows so same-day rollover does not inflate peak capital
+        const sorted = logs.sort((a, b) => {
+          const cmp = String(a.date || '').localeCompare(String(b.date || ''));
+          if (cmp !== 0) return cmp;
+          const rankA = a.eventType === 'invest' ? 1 : 0;
+          const rankB = b.eventType === 'invest' ? 1 : 0;
+          return rankA - rankB;
+        });
+
+        let runningNet = 0;
+        let peakOutflow = 0;
+        let totalInvested = 0;
+        let totalReturned = 0;
+        let freshTotal = 0;
+        let recycledPrincipalTotal = 0;
+        let reinvestedProfitTotal = 0;
+
+        sorted.forEach((l) => {
+          const amt = safeNum(l.amountTWD);
+          if (l.eventType === 'invest') {
+            totalInvested += amt;
+            runningNet -= amt;
+            if (-runningNet > peakOutflow) peakOutflow = -runningNet;
+            const src = l.fundingSource || 'fresh';
+            if (src === 'recycled_principal') recycledPrincipalTotal += amt;
+            else if (src === 'reinvested_profit') reinvestedProfitTotal += amt;
+            else freshTotal += amt;
+          } else {
+            totalReturned += amt;
+            runningNet += amt;
+          }
+        });
+
+        const hasExplicitSplit = recycledPrincipalTotal > 0 || reinvestedProfitTotal > 0;
+        const timelineRecycled = Math.max(0, totalInvested - peakOutflow);
+        const recycledTotal = hasExplicitSplit ? (recycledPrincipalTotal + reinvestedProfitTotal) : timelineRecycled;
+        const recycledPct = totalInvested > 0 ? (recycledTotal / totalInvested) * 100 : 0;
+        const freshPct = totalInvested > 0 ? (freshTotal / totalInvested) * 100 : 0;
+        const recycledPrincipalPct = totalInvested > 0 ? (recycledPrincipalTotal / totalInvested) * 100 : 0;
+        const reinvestedProfitPct = totalInvested > 0 ? (reinvestedProfitTotal / totalInvested) * 100 : 0;
+        const trueCapitalBase = (hasExplicitSplit && freshTotal > 0) ? freshTotal : peakOutflow;
+        const moic = trueCapitalBase > 0 ? (totalReturned / trueCapitalBase) : null;
+
+        return {
+          hasLogs: sorted.length > 0,
+          totalInvested,
+          totalReturned,
+          netCashflow: totalReturned - totalInvested,
+          peakOutflow,
+          timelineRecycled,
+          recycledTotal,
+          recycledPct,
+          freshTotal,
+          recycledPrincipalTotal,
+          reinvestedProfitTotal,
+          freshPct,
+          recycledPrincipalPct,
+          reinvestedProfitPct,
+          hasExplicitSplit,
+          trueCapitalBase,
+          moic
+        };
       }
       let chartAllocation = null;
       let chartCurrency = null;
@@ -2107,6 +2197,74 @@
           </div>
         `;
 
+        // Render Capital Recycling & Peak Capital Panel
+        const recPanel = document.getElementById('inv-recycling-panel');
+        const rStats = computeInvestmentRecyclingStats(state);
+        if (recPanel) {
+          if (!rStats.hasLogs || rStats.totalInvested <= 0) {
+            recPanel.classList.add('hidden');
+            recPanel.innerHTML = '';
+          } else {
+            recPanel.classList.remove('hidden');
+            const barHtml = rStats.hasExplicitSplit
+              ? `
+                <div class="h-2 w-full rounded-full bg-zinc-200/70 overflow-hidden flex">
+                  ${rStats.freshPct > 0 ? `<div style="width:${rStats.freshPct.toFixed(1)}%;background-color:#18181b" title="新自備本金 ${rStats.freshPct.toFixed(1)}%"></div>` : ''}
+                  ${rStats.recycledPrincipalPct > 0 ? `<div style="width:${rStats.recycledPrincipalPct.toFixed(1)}%;background-color:#0284c7" title="舊本金轉投 ${rStats.recycledPrincipalPct.toFixed(1)}%"></div>` : ''}
+                  ${rStats.reinvestedProfitPct > 0 ? `<div style="width:${rStats.reinvestedProfitPct.toFixed(1)}%;background-color:#059669" title="分潤再投入 ${rStats.reinvestedProfitPct.toFixed(1)}%"></div>` : ''}
+                </div>
+                <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-zinc-600 font-mono-num">
+                  <span class="inline-flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-zinc-900"></span><span class="font-sans">新自備本金</span> ${fmtTWD(rStats.freshTotal)} (${rStats.freshPct.toFixed(1)}%)</span>
+                  <span class="inline-flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-sky-600"></span><span class="font-sans">舊本金轉投</span> ${fmtTWD(rStats.recycledPrincipalTotal)} (${rStats.recycledPrincipalPct.toFixed(1)}%)</span>
+                  <span class="inline-flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-emerald-600"></span><span class="font-sans">分潤再投入</span> ${fmtTWD(rStats.reinvestedProfitTotal)} (${rStats.reinvestedProfitPct.toFixed(1)}%)</span>
+                </div>
+              `
+              : `
+                <div class="h-2 w-full rounded-full bg-zinc-200/70 overflow-hidden flex">
+                  <div style="width:${(100 - rStats.recycledPct).toFixed(1)}%;background-color:#18181b" title="最大實質自備本金 ${(100 - rStats.recycledPct).toFixed(1)}%"></div>
+                  ${rStats.recycledPct > 0 ? `<div style="width:${rStats.recycledPct.toFixed(1)}%;background-color:#0284c7" title="時間軸推算滾動複投 ${rStats.recycledPct.toFixed(1)}%"></div>` : ''}
+                </div>
+                <div class="flex flex-wrap items-center justify-between gap-2 text-[11px] text-zinc-500">
+                  <div class="flex flex-wrap items-center gap-x-4 gap-y-1 font-mono-num">
+                    <span class="inline-flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-zinc-900"></span><span class="font-sans">最大實質自備本金</span> ${fmtTWD(rStats.peakOutflow)} (${(100 - rStats.recycledPct).toFixed(1)}%)</span>
+                    <span class="inline-flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-sky-600"></span><span class="font-sans">時間軸推算滾動複投</span> ${fmtTWD(rStats.timelineRecycled)} (${rStats.recycledPct.toFixed(1)}%)</span>
+                  </div>
+                  <span>可在「本金投入」紀錄標記資金來源，進一步拆出舊本金與分潤複投比例</span>
+                </div>
+              `;
+            recPanel.innerHTML = `
+              <div class="rounded-xl bg-[#f7f7f5] hairline p-4 space-y-3">
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <div class="text-xs font-semibold text-zinc-900">資金滾動複投分析（自備本金 vs 二次／三次轉投）</div>
+                    <div class="text-[11px] text-zinc-500 mt-0.5">依歷史時間軸自動計算口袋實際最高墊款，搭配資金來源標記還原真實資本效率</div>
+                  </div>
+                  ${rStats.moic !== null ? `<span class="text-xs font-mono-num font-semibold px-2.5 py-1 rounded-lg bg-white hairline text-emerald-700">實質本金回收倍數 ${rStats.moic.toFixed(2)}x</span>` : ''}
+                </div>
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs font-mono-num">
+                  <div class="bg-white rounded-lg hairline px-3 py-2">
+                    <div class="font-sans text-[11px] text-zinc-500">紀錄累計總投入</div>
+                    <div class="mt-0.5 font-semibold text-zinc-900">${fmtTWD(rStats.totalInvested)}</div>
+                  </div>
+                  <div class="bg-white rounded-lg hairline px-3 py-2">
+                    <div class="font-sans text-[11px] text-zinc-500">實質最大自備本金</div>
+                    <div class="mt-0.5 font-semibold text-zinc-900">${fmtTWD(rStats.peakOutflow)}</div>
+                  </div>
+                  <div class="bg-white rounded-lg hairline px-3 py-2">
+                    <div class="font-sans text-[11px] text-zinc-500">滾動複投金額（佔比）</div>
+                    <div class="mt-0.5 font-semibold text-sky-700">${fmtTWD(rStats.recycledTotal)} (${rStats.recycledPct.toFixed(1)}%)</div>
+                  </div>
+                  <div class="bg-white rounded-lg hairline px-3 py-2">
+                    <div class="font-sans text-[11px] text-zinc-500">累計總回收（分紅＋收回）</div>
+                    <div class="mt-0.5 font-semibold text-emerald-700">${fmtTWD(rStats.totalReturned)}</div>
+                  </div>
+                </div>
+                <div class="space-y-1.5">${barHtml}</div>
+              </div>
+            `;
+          }
+        }
+
         const tagFilterBar = document.getElementById('inv-tag-filter-bar');
         const tagCounts = {};
         (state.investments || []).forEach((i) => {
@@ -2167,8 +2325,12 @@
           const avgMonthly = (annMin + annMax) / 24;
           const paybackMonths = (p > 0 && avgMonthly > 0) ? (p / avgMonthly) : null;
           const tags = normalizeInvTags(inv.tags);
-          const tagsHtml = tags.length
-            ? `<div class="mt-1.5 flex flex-wrap items-center gap-1">${tags.map((t) => `<span class="text-[11px] px-1.5 py-0.5 rounded font-medium ${invTagBadgeClass(t)}">${escapeHtml(t)}</span>`).join('')}</div>`
+          const roundInfo = getInvestmentRound(inv.id);
+          const roundBadge = roundInfo.round > 1
+            ? `<span class="text-[11px] px-1.5 py-0.5 rounded font-medium bg-indigo-50 text-indigo-700">第 ${roundInfo.round} 輪轉投${roundInfo.parentName ? ' · 承接 ' + escapeHtml(roundInfo.parentName) : ''}</span>`
+            : '';
+          const tagsHtml = (tags.length || roundBadge)
+            ? `<div class="mt-1.5 flex flex-wrap items-center gap-1">${roundBadge}${tags.map((t) => `<span class="text-[11px] px-1.5 py-0.5 rounded font-medium ${invTagBadgeClass(t)}">${escapeHtml(t)}</span>`).join('')}</div>`
             : '';
 
           return `
@@ -2196,13 +2358,21 @@
                   ${(() => {
                     const logs = (state.investmentLogs || []).filter((l) => l.investmentId === inv.id || l.investmentName === inv.name);
                     if (!logs.length) return '';
-                    const sumInv = logs.filter((l) => l.eventType === 'invest').reduce((s, l) => s + safeNum(l.amountTWD), 0);
+                    const invLogs = logs.filter((l) => l.eventType === 'invest');
+                    const sumInv = invLogs.reduce((s, l) => s + safeNum(l.amountTWD), 0);
                     const sumWd = logs.filter((l) => l.eventType === 'withdraw' || l.eventType === 'settle').reduce((s, l) => s + safeNum(l.amountTWD), 0);
                     const sumPay = logs.filter((l) => l.eventType === 'payout').reduce((s, l) => s + safeNum(l.amountTWD), 0);
                     const baseAmt = sumInv > 0 ? sumInv : p;
                     const pctBack = baseAmt > 0 ? Math.min(999, ((sumPay + sumWd) / baseAmt) * 100) : null;
+                    const fFresh = invLogs.filter((l) => !l.fundingSource || l.fundingSource === 'fresh').reduce((s, l) => s + safeNum(l.amountTWD), 0);
+                    const fRec = invLogs.filter((l) => l.fundingSource === 'recycled_principal').reduce((s, l) => s + safeNum(l.amountTWD), 0);
+                    const fProf = invLogs.filter((l) => l.fundingSource === 'reinvested_profit').reduce((s, l) => s + safeNum(l.amountTWD), 0);
+                    const splitLine = (sumInv > 0 && (fRec > 0 || fProf > 0))
+                      ? `<div class="text-[10px] text-zinc-500 font-sans pt-0.5">資金構成：新自備 ${Math.round((fFresh / sumInv) * 100)}% · 舊本金轉投 ${Math.round((fRec / sumInv) * 100)}% · 分潤複投 ${Math.round((fProf / sumInv) * 100)}%</div>`
+                      : '';
                     return `<div class="pt-2 mt-2 hairline-t space-y-1 text-[11px]">` +
                       (sumInv > 0 ? `<div class="flex justify-between"><span class="font-sans text-zinc-400">紀錄累計投入</span><span class="text-zinc-700">${fmtTWD(sumInv)}</span></div>` : '') +
+                      splitLine +
                       (sumWd > 0 ? `<div class="flex justify-between"><span class="font-sans text-zinc-400">紀錄累計撤資／結算</span><span class="text-amber-700">${fmtTWD(sumWd)}</span></div>` : '') +
                       (sumPay > 0 ? `<div class="flex justify-between"><span class="font-sans text-zinc-400">累計已領分紅</span><span class="text-emerald-700 font-medium">${fmtTWD(sumPay)}${pctBack !== null ? `（總回收 ${pctBack.toFixed(1)}%）` : ''}</span></div>` : '') +
                       `</div>`;
@@ -2241,17 +2411,28 @@
               payout: { label: '分紅／結算入帳', cls: 'bg-emerald-50 text-emerald-700', sign: '+' },
               settle: { label: '全額結算出場', cls: 'bg-emerald-700 text-white', sign: '+' }
             };
+            const invNameMap = new Map((state.investments || []).map((i) => [i.id, i.name]));
             logTbody.innerHTML = allLogs.map((l) => {
               const meta = typeMeta[l.eventType] || typeMeta.payout;
               const isLive = l.applyMode === 'sync_live';
               const amt = safeNum(l.amountTWD);
               const amtCls = l.eventType === 'invest' ? 'text-zinc-900' : 'text-emerald-700';
+              const fMeta = (l.eventType === 'invest' && l.fundingSource && l.fundingSource !== 'fresh')
+                ? FUNDING_SOURCE_META[l.fundingSource]
+                : null;
+              const srcName = l.sourceInvestmentId ? (invNameMap.get(l.sourceInvestmentId) || '') : '';
+              const fundingBadge = fMeta
+                ? `<span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${fMeta.cls}">${fMeta.short}${srcName ? ' ← ' + escapeHtml(srcName) : ''}</span>`
+                : '';
               return `
                 <tr class="hover:bg-[#f7f7f5]/60">
                   <td class="py-3 px-2 text-zinc-600 whitespace-nowrap">${escapeHtml(l.date || '')}</td>
                   <td class="py-3 px-2 font-sans font-medium text-zinc-900 whitespace-nowrap">${escapeHtml(l.investmentName || '')}</td>
                   <td class="py-3 px-2 font-sans">
-                    <div class="text-zinc-800">${escapeHtml(l.stageLabel || '—')}</div>
+                    <div class="flex flex-wrap items-center gap-1.5">
+                      <span class="text-zinc-800">${escapeHtml(l.stageLabel || '—')}</span>
+                      ${fundingBadge}
+                    </div>
                     ${l.note ? `<div class="text-[11px] text-zinc-400">${escapeHtml(l.note)}</div>` : ''}
                   </td>
                   <td class="py-3 px-2 font-sans whitespace-nowrap">
@@ -3574,9 +3755,14 @@
 
       function openInvModal(item = null) {
         const isEdit = Boolean(item);
-        const inv = item || { name: '', principal: 0, cycleMonths: 1, minRate: 3, maxRate: 5, principalRecoverable: false, tags: ['進行中'], note: '' };
+        const inv = item || { name: '', principal: 0, cycleMonths: 1, minRate: 3, maxRate: 5, principalRecoverable: false, sourceInvestmentId: '', tags: ['進行中'], note: '' };
         const selectedTags = new Set(normalizeInvTags(inv.tags));
         const allTagOptions = [...new Set([...getAllInvTagOptions(), ...selectedTags])];
+        const parentOptions = `<option value="">無（第 1 輪原始投資）</option>` +
+          (state.investments || [])
+            .filter((x) => !isEdit || x.id !== inv.id)
+            .map((x) => `<option value="${escapeHtml(x.id)}" ${inv.sourceInvestmentId === x.id ? 'selected' : ''}>承接：${escapeHtml(x.name)}</option>`)
+            .join('');
 
         const html = `
           <div><label class="block text-xs font-medium text-zinc-600 mb-1">投資項目名稱</label><input name="name" required value="${escapeHtml(inv.name)}" class="w-full h-9 px-3 rounded-lg hairline text-sm" /></div>
@@ -3588,6 +3774,10 @@
           <div class="grid grid-cols-2 gap-3">
             <div><label class="block text-xs font-medium text-zinc-600 mb-1">單期低標報酬 (%)</label><input name="minRate" type="number" step="0.1" required value="${safeNum(inv.minRate)}" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" /></div>
             <div><label class="block text-xs font-medium text-zinc-600 mb-1">單期高標報酬 (%)</label><input name="maxRate" type="number" step="0.1" required value="${safeNum(inv.maxRate)}" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" /></div>
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-zinc-600 mb-1">承接／轉投來源專案（選填，用於追蹤第 2 輪／第 3 輪滾動複投）</label>
+            <select name="sourceInvestmentId" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white">${parentOptions}</select>
           </div>
           <div class="space-y-2">
             <label class="block text-xs font-medium text-zinc-600">標籤（可多選或自行新增）</label>
@@ -3601,6 +3791,7 @@
           <div><label class="block text-xs font-medium text-zinc-600 mb-1">備註</label><input name="note" value="${escapeHtml(inv.note)}" class="w-full h-9 px-3 rounded-lg hairline text-sm" /></div>
         `;
         openFormModal(isEdit ? '編輯實體投資' : '新增實體投資', html, (fd) => {
+          const sourceInvestmentId = String(fd.get('sourceInvestmentId') || '').trim();
           const record = {
             id: isEdit ? inv.id : uid('i'),
             name: String(fd.get('name')).trim(),
@@ -3609,6 +3800,7 @@
             minRate: safeNum(fd.get('minRate')),
             maxRate: safeNum(fd.get('maxRate')),
             principalRecoverable: false,
+            ...(sourceInvestmentId ? { sourceInvestmentId } : {}),
             tags: normalizeInvTags(fd.get('tags')),
             note: String(fd.get('note')).trim()
           };
@@ -3925,10 +4117,19 @@
         const initAcc = isEdit ? (editLog.account || '') : '';
         const initMode = isEdit ? (editLog.applyMode || 'history_only') : 'sync_live';
         const initNote = isEdit ? (editLog.note || '') : '';
+        const initFundingSource = isEdit
+          ? (editLog.fundingSource || 'fresh')
+          : (initInv && initInv.sourceInvestmentId ? 'recycled_principal' : 'fresh');
+        const initSourceInvId = isEdit
+          ? (editLog.sourceInvestmentId || '')
+          : (initInv && initInv.sourceInvestmentId ? initInv.sourceInvestmentId : '');
 
         const invOptions = list.map((x) =>
-          `<option value="${escapeHtml(x.id)}" ${x.id === initInvId ? 'selected' : ''}>${escapeHtml(x.name)}（在投 ${fmtTWD(x.principal)}）</option>`
+          `<option value="${escapeHtml(x.id)}" ${x.id === initInvId ? 'selected' : ''}>${escapeHtml(x.name)}（預計 ${fmtTWD(x.principal)}）</option>`
         ).join('') + (list.length === 0 ? '<option value="">（尚未建立投資專案）</option>' : '');
+
+        const srcInvOptions = `<option value="">未指定來源專案</option>` +
+          list.map((x) => `<option value="${escapeHtml(x.id)}" ${x.id === initSourceInvId ? 'selected' : ''}>源自：${escapeHtml(x.name)}</option>`).join('');
 
         const html = `
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -3947,6 +4148,20 @@
             </div>
           </div>
           <div id="invlog-estimate-bar" class="hidden rounded-lg bg-[#f7f7f5] hairline px-3 py-2 text-[11px] text-zinc-600 flex flex-wrap items-center justify-between gap-2"></div>
+          <div id="invlog-funding-row" class="${initType === 'invest' ? '' : 'hidden '}grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-medium text-zinc-600 mb-1">資金來源（用於區分自備 vs 滾動複投）</label>
+              <select id="invlog-funding-source" name="fundingSource" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white">
+                <option value="fresh" ${initFundingSource === 'fresh' ? 'selected' : ''}>新自備本金（口袋新投入）</option>
+                <option value="recycled_principal" ${initFundingSource === 'recycled_principal' ? 'selected' : ''}>舊本金轉投（收回本金二次／三次轉投）</option>
+                <option value="reinvested_profit" ${initFundingSource === 'reinvested_profit' ? 'selected' : ''}>分潤再投入（獲利滾動複投）</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-zinc-600 mb-1">轉投來源專案（選填）</label>
+              <select id="invlog-source-inv" name="sourceInvestmentId" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white">${srcInvOptions}</select>
+            </div>
+          </div>
           <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div><label class="block text-xs font-medium text-zinc-600 mb-1">入帳日期（可選歷史日）</label><input id="invlog-date" name="date" type="date" required value="${escapeHtml(initDate)}" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" /></div>
             <div><label class="block text-xs font-medium text-zinc-600 mb-1">次別／說明</label><input id="invlog-stage" name="stageLabel" value="${escapeHtml(initStage)}" placeholder="例如：2021-05 分潤、第 1 次投入" class="w-full h-9 px-3 rounded-lg hairline text-sm" /></div>
@@ -3975,15 +4190,20 @@
           if (!proj) { showToast('請先建立實體投資專案'); return; }
           const stageLabel = String(fd.get('stageLabel') || '').trim();
           const { periodMonth, periodEndMonth } = extractPeriodRange(stageLabel);
+          const eventType = String(fd.get('eventType') || 'payout');
+          const fundingSource = eventType === 'invest' ? String(fd.get('fundingSource') || 'fresh') : '';
+          const sourceInvestmentId = eventType === 'invest' ? String(fd.get('sourceInvestmentId') || '').trim() : '';
           const rec = {
             id: isEdit ? editLog.id : uid('ilog'),
             investmentId: proj.id,
             investmentName: proj.name,
             date: String(fd.get('date') || todayISO()),
-            eventType: String(fd.get('eventType') || 'payout'),
+            eventType,
             stageLabel,
             ...(periodMonth ? { periodMonth } : {}),
             ...(periodEndMonth ? { periodEndMonth } : {}),
+            ...(fundingSource ? { fundingSource } : {}),
+            ...(sourceInvestmentId ? { sourceInvestmentId } : {}),
             amountTWD: safeNum(fd.get('amountTWD')),
             account: resolveModalAccount(fd),
             applyMode: String(fd.get('applyMode') || 'sync_live'),
@@ -4068,9 +4288,32 @@
           }
         };
 
+        const fundingRow = document.getElementById('invlog-funding-row');
+        const fundingSrcSel = document.getElementById('invlog-funding-source');
+        const sourceInvSel = document.getElementById('invlog-source-inv');
+        const refreshFundingVisibility = () => {
+          if (fundingRow && typeSel) {
+            fundingRow.classList.toggle('hidden', typeSel.value !== 'invest');
+          }
+        };
         refreshEstimateBar();
-        if (projSel) projSel.addEventListener('change', refreshEstimateBar);
-        if (typeSel) typeSel.addEventListener('change', refreshEstimateBar);
+        refreshFundingVisibility();
+        if (projSel) {
+          projSel.addEventListener('change', () => {
+            refreshEstimateBar();
+            if (!isEdit) {
+              const p = (state.investments || []).find((x) => x.id === projSel.value);
+              if (fundingSrcSel) fundingSrcSel.value = (p && p.sourceInvestmentId) ? 'recycled_principal' : 'fresh';
+              if (sourceInvSel) sourceInvSel.value = (p && p.sourceInvestmentId) ? p.sourceInvestmentId : '';
+            }
+          });
+        }
+        if (typeSel) {
+          typeSel.addEventListener('change', () => {
+            refreshEstimateBar();
+            refreshFundingVisibility();
+          });
+        }
 
         const applyModeSel = document.getElementById('invlog-apply-mode');
         let applyModeManual = false;
@@ -4120,8 +4363,10 @@
         const initBatchInvId = (invLogFilter && invLogFilter !== 'ALL' && list.some((x) => x.id === invLogFilter))
           ? invLogFilter
           : list[0].id;
+        const initBatchProj = list.find((x) => x.id === initBatchInvId) || list[0];
+        const initBatchFunding = initBatchProj && initBatchProj.sourceInvestmentId ? 'recycled_principal' : 'fresh';
         const invOptions = list.map((x) =>
-          `<option value="${escapeHtml(x.id)}" ${x.id === initBatchInvId ? 'selected' : ''}>${escapeHtml(x.name)}（在投 ${fmtTWD(x.principal)}）</option>`
+          `<option value="${escapeHtml(x.id)}" ${x.id === initBatchInvId ? 'selected' : ''}>${escapeHtml(x.name)}（預計 ${fmtTWD(x.principal)}）</option>`
         ).join('');
 
         const html = `
@@ -4137,12 +4382,22 @@
             </div>
           </div>
           <div id="batch-inv-estimate-bar" class="rounded-lg bg-[#f7f7f5] hairline px-3 py-2 text-[11px] text-zinc-600"></div>
-          <div>
-            <label class="block text-xs font-medium text-zinc-600 mb-1">本金與銀行餘額處理方式</label>
-            <select name="applyMode" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white">
-              <option value="history_only" selected>補登歷史紀錄 — 僅記帳，不重複加減現有本金與餘額（推薦）</option>
-              <option value="sync_live">即時異動 — 依序更新專案本金與銀行餘額</option>
-            </select>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-medium text-zinc-600 mb-1">本金與銀行餘額處理方式</label>
+              <select name="applyMode" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white">
+                <option value="history_only" selected>補登歷史紀錄 — 僅記帳，不動現有餘額（推薦）</option>
+                <option value="sync_live">即時異動 — 依序更新銀行餘額</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-zinc-600 mb-1">「本金投入」預設資金來源</label>
+              <select id="batch-inv-funding" name="fundingSource" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white">
+                <option value="fresh" ${initBatchFunding === 'fresh' ? 'selected' : ''}>新自備本金（口袋新投入）</option>
+                <option value="recycled_principal" ${initBatchFunding === 'recycled_principal' ? 'selected' : ''}>舊本金轉投（收回本金轉投）</option>
+                <option value="reinvested_profit" ${initBatchFunding === 'reinvested_profit' ? 'selected' : ''}>分潤再投入（獲利滾動複投）</option>
+              </select>
+            </div>
           </div>
           <div class="space-y-2">
             <div class="flex items-center justify-between">
@@ -4166,6 +4421,7 @@
           if (!proj) return;
           const acc = resolveModalAccount(fd);
           const applyMode = String(fd.get('applyMode') || 'history_only');
+          const batchFundingSource = String(fd.get('fundingSource') || 'fresh');
           const container = document.getElementById('batch-inv-rows');
           const rows = [];
           container.querySelectorAll('.batch-inv-row').forEach((el) => {
@@ -4181,6 +4437,7 @@
           }
           rows.forEach((r) => {
             const { periodMonth, periodEndMonth } = extractPeriodRange(r.stageLabel);
+            const isInvest = r.eventType === 'invest';
             applyInvLogRecord({
               id: uid('ilog'),
               investmentId: proj.id,
@@ -4190,6 +4447,8 @@
               stageLabel: r.stageLabel,
               ...(periodMonth ? { periodMonth } : {}),
               ...(periodEndMonth ? { periodEndMonth } : {}),
+              ...(isInvest ? { fundingSource: batchFundingSource } : {}),
+              ...(isInvest && proj.sourceInvestmentId ? { sourceInvestmentId: proj.sourceInvestmentId } : {}),
               amountTWD: r.amountTWD,
               account: acc,
               applyMode,
@@ -5150,8 +5409,8 @@
         const cRows = state.cash.map((c) => ({ id: c.id, bank: c.bank, currency: c.currency, amount: c.amount, note: c.note || '' }));
         XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(cRows.length ? cRows : [{ id: '', bank: '', currency: 'TWD', amount: 0, note: '' }]), '銀行現金');
 
-        const iRows = state.investments.map((i) => ({ id: i.id, name: i.name, principal: i.principal, cycleMonths: i.cycleMonths, minRate: i.minRate, maxRate: i.maxRate, principalRecoverable: i.principalRecoverable !== false ? '可收回' : '不可收回', tags: normalizeInvTags(i.tags).join(', '), note: i.note || '' }));
-        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(iRows.length ? iRows : [{ id: '', name: '', principal: 0, cycleMonths: 12, minRate: 0, maxRate: 0, tags: '', note: '' }]), '實體投資');
+        const iRows = state.investments.map((i) => ({ id: i.id, name: i.name, principal: i.principal, cycleMonths: i.cycleMonths, minRate: i.minRate, maxRate: i.maxRate, sourceInvestmentId: i.sourceInvestmentId || '', tags: normalizeInvTags(i.tags).join(', '), note: i.note || '' }));
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(iRows.length ? iRows : [{ id: '', name: '', principal: 0, cycleMonths: 12, minRate: 0, maxRate: 0, sourceInvestmentId: '', tags: '', note: '' }]), '實體投資');
 
         const incRows = (state.fixedIncomes || []).map((f) => ({ id: f.id, name: f.name, category: f.category, currency: f.currency, amount: f.amount, cycleMonths: f.cycleMonths, payday: f.payday || '', account: f.account || '', note: f.note || '' }));
         XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(incRows.length ? incRows : [{ id: '', name: '', category: '薪資收入', currency: 'TWD', amount: 0, cycleMonths: 1, payday: '', account: '', note: '' }]), '固定收入');
@@ -5159,8 +5418,8 @@
         const irecRows = (state.incomeReceipts || []).map((r) => ({ id: r.id, date: r.date, name: r.name, category: r.category || '', currency: r.currency || 'TWD', expectedAmount: r.expectedAmount, actualAmount: r.actualAmount, account: r.account || '', depositMode: r.depositMode || 'new_deposit', note: r.note || '' }));
         XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(irecRows.length ? irecRows : [{ id: '', date: '', name: '', category: '', currency: 'TWD', expectedAmount: 0, actualAmount: 0, account: '', depositMode: 'new_deposit', note: '' }]), '實際入帳紀錄');
 
-        const ilogRows = (state.investmentLogs || []).map((l) => ({ id: l.id, investmentId: l.investmentId || '', investmentName: l.investmentName || '', date: l.date, eventType: l.eventType || 'payout', stageLabel: l.stageLabel || '', amountTWD: l.amountTWD, account: l.account || '', applyMode: l.applyMode || 'history_only', note: l.note || '' }));
-        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(ilogRows.length ? ilogRows : [{ id: '', investmentId: '', investmentName: '', date: '', eventType: 'invest', stageLabel: '', amountTWD: 0, account: '', applyMode: 'history_only', note: '' }]), '實體投資異動紀錄');
+        const ilogRows = (state.investmentLogs || []).map((l) => ({ id: l.id, investmentId: l.investmentId || '', investmentName: l.investmentName || '', date: l.date, eventType: l.eventType || 'payout', stageLabel: l.stageLabel || '', fundingSource: l.fundingSource || '', sourceInvestmentId: l.sourceInvestmentId || '', amountTWD: l.amountTWD, account: l.account || '', applyMode: l.applyMode || 'history_only', note: l.note || '' }));
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(ilogRows.length ? ilogRows : [{ id: '', investmentId: '', investmentName: '', date: '', eventType: 'invest', stageLabel: '', fundingSource: '', sourceInvestmentId: '', amountTWD: 0, account: '', applyMode: 'history_only', note: '' }]), '實體投資異動紀錄');
 
         const fExpRows = (state.fixedExpenses || []).map((f) => ({ id: f.id, name: f.name, category: f.category, currency: f.currency, amount: f.amount, cycleMonths: f.cycleMonths, payday: f.payday || '', account: f.account || '', note: f.note || '' }));
         XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(fExpRows.length ? fExpRows : [{ id: '', name: '', category: '居住與房貸', currency: 'TWD', amount: 0, cycleMonths: 1, payday: '', account: '', note: '' }]), '固定支出');
@@ -5220,10 +5479,10 @@
             if (stockSheet) state.stocks = stockSheet.filter((r) => r.symbol).map((r) => ({ id: r.id || uid('s'), symbol: String(r.symbol), name: String(r.name || r.symbol), market: String(r.market || 'US'), account: String(r.account || ''), currency: String(r.currency || 'USD'), shares: safeNum(r.shares), avgCost: safeNum(r.avgCost), currentPrice: safeNum(r.currentPrice) }));
             if (stTradeSheet) state.stockTrades = stTradeSheet.filter((r) => r.symbol).map((r) => ({ id: r.id || uid('strd'), date: String(r.date || todayISO()), tradeType: String(r.tradeType || 'BUY'), market: String(r.market || 'TW'), symbol: String(r.symbol).toUpperCase(), name: String(r.name || ''), currency: String(r.currency || 'TWD'), shares: safeNum(r.shares), price: safeNum(r.price), fee: safeNum(r.fee), tax: safeNum(r.tax), netAmount: safeNum(r.netAmount), realizedPnlTWD: safeNum(r.realizedPnlTWD), account: String(r.account || ''), applyMode: String(r.applyMode || 'history_only'), note: String(r.note || '') }));
             if (cashSheet) state.cash = cashSheet.filter((r) => r.bank).map((r) => ({ id: r.id || uid('c'), bank: String(r.bank), currency: String(r.currency || 'TWD'), amount: safeNum(r.amount), note: String(r.note || '') }));
-            if (invSheet) state.investments = invSheet.filter((r) => r.name).map((r) => ({ id: r.id || uid('i'), name: String(r.name), principal: safeNum(r.principal), cycleMonths: Math.max(1, safeNum(r.cycleMonths, 12)), minRate: safeNum(r.minRate), maxRate: safeNum(r.maxRate), principalRecoverable: !(r.principalRecoverable === false || String(r.principalRecoverable) === 'false' || String(r.principalRecoverable) === '不可收回'), tags: normalizeInvTags(r.tags ?? r['標籤']), note: String(r.note || '') }));
+            if (invSheet) state.investments = invSheet.filter((r) => r.name).map((r) => ({ id: r.id || uid('i'), name: String(r.name), principal: safeNum(r.principal), cycleMonths: Math.max(1, safeNum(r.cycleMonths, 12)), minRate: safeNum(r.minRate), maxRate: safeNum(r.maxRate), principalRecoverable: false, ...(r.sourceInvestmentId ? { sourceInvestmentId: String(r.sourceInvestmentId) } : {}), tags: normalizeInvTags(r.tags ?? r['標籤']), note: String(r.note || '') }));
             if (incSheet) state.fixedIncomes = incSheet.filter((r) => r.name || r['收入名稱']).map((r) => ({ id: r.id || uid('inc'), name: String(r.name || r['收入名稱']), category: String(r.category || r['類別'] || '固定收入'), currency: String(r.currency || r['幣別'] || 'TWD'), amount: safeNum(r.amount ?? r['單期金額']), cycleMonths: Math.max(1, safeNum(r.cycleMonths ?? r['發放週期(月)'], 1)), payday: String(r.payday || r['每月發放日'] || ''), account: String(r.account || r['入帳帳戶'] || ''), note: String(r.note || r['備註'] || '') }));
             if (irecSheet) state.incomeReceipts = irecSheet.filter((r) => r.name && safeNum(r.actualAmount) > 0).map((r) => ({ id: r.id || uid('irec'), date: String(r.date || todayISO()), name: String(r.name), category: String(r.category || '固定收入'), currency: String(r.currency || 'TWD'), expectedAmount: safeNum(r.expectedAmount, safeNum(r.actualAmount)), actualAmount: safeNum(r.actualAmount), account: String(r.account || ''), depositMode: String(r.depositMode || 'new_deposit'), note: String(r.note || '') }));
-            if (ilogSheet) state.investmentLogs = ilogSheet.filter((r) => r.investmentName && safeNum(r.amountTWD) > 0).map((r) => ({ id: r.id || uid('ilog'), investmentId: String(r.investmentId || ''), investmentName: String(r.investmentName), date: String(r.date || todayISO()), eventType: String(r.eventType || 'payout'), stageLabel: String(r.stageLabel || ''), amountTWD: safeNum(r.amountTWD), account: String(r.account || ''), applyMode: String(r.applyMode || 'history_only'), note: String(r.note || '') }));
+            if (ilogSheet) state.investmentLogs = ilogSheet.filter((r) => r.investmentName && safeNum(r.amountTWD) > 0).map((r) => ({ id: r.id || uid('ilog'), investmentId: String(r.investmentId || ''), investmentName: String(r.investmentName), date: String(r.date || todayISO()), eventType: String(r.eventType || 'payout'), stageLabel: String(r.stageLabel || ''), ...(r.fundingSource ? { fundingSource: String(r.fundingSource) } : {}), ...(r.sourceInvestmentId ? { sourceInvestmentId: String(r.sourceInvestmentId) } : {}), amountTWD: safeNum(r.amountTWD), account: String(r.account || ''), applyMode: String(r.applyMode || 'history_only'), note: String(r.note || '') }));
             if (fExpSheet) state.fixedExpenses = fExpSheet.filter((r) => r.name || r['項目名稱']).map((r) => ({ id: r.id || uid('fexp'), name: String(r.name || r['項目名稱']), category: String(r.category || r['類別'] || '固定支出'), currency: String(r.currency || r['幣別'] || 'TWD'), amount: safeNum(r.amount ?? r['單期金額']), cycleMonths: Math.max(1, safeNum(r.cycleMonths ?? r['扣款週期(月)'], 1)), payday: String(r.payday || r['扣款日'] || ''), account: String(r.account || r['扣款帳戶'] || ''), deductStatus: String(r.deductStatus || r['扣款狀態'] || 'unpaid'), note: String(r.note || r['備註'] || '') }));
             if (rExpSheet) state.randomExpenses = rExpSheet.filter((r) => r.title || r['支出項目']).map((r) => ({ id: r.id || uid('rexp'), date: String(r.date || r['日期'] || todayISO()), category: String(r.category || r['類別'] || '其他隨機支出'), title: String(r.title || r['支出項目']), currency: String(r.currency || r['幣別'] || 'TWD'), amount: safeNum(r.amount ?? r['原幣金額']), account: String(r.account || r['支付帳戶'] || ''), deductStatus: String(r.deductStatus || r['扣款狀態'] || 'unpaid'), note: String(r.note || r['備註'] || '') }));
             if (fxTradeSheet) state.fxTrades = fxTradeSheet.filter((r) => r.date && safeNum(r.amount) > 0).map((r) => ({ id: r.id || uid('fx'), date: String(r.date), side: String(r.side || 'BUY').toUpperCase(), currency: String(r.currency || 'USD'), amount: safeNum(r.amount), rate: safeNum(r.rate), feeTWD: safeNum(r.feeTWD), account: String(r.account || ''), note: String(r.note || '') }));
