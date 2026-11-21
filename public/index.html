@@ -3553,12 +3553,61 @@
         });
       }
 
-      function nextInvStageLabel(invId, eventType) {
+      function shiftYearMonth(yyyyMm, deltaMonths) {
+        const m = String(yyyyMm || '').match(/^(\d{4})[-/](\d{1,2})$/);
+        if (!m) return '';
+        const base = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1 + deltaMonths, 1));
+        return `${base.getUTCFullYear()}-${String(base.getUTCMonth() + 1).padStart(2, '0')}`;
+      }
+
+      function shiftIsoDateByMonths(isoDate, deltaMonths) {
+        const m = String(isoDate || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+        if (!m) return todayISO();
+        const year = Number(m[1]);
+        const monthIdx = Number(m[2]) - 1 + deltaMonths;
+        const day = Number(m[3]);
+        const targetFirst = new Date(Date.UTC(year, monthIdx, 1));
+        const maxDay = new Date(Date.UTC(targetFirst.getUTCFullYear(), targetFirst.getUTCMonth() + 1, 0)).getUTCDate();
+        const clampedDay = Math.min(day, maxDay);
+        return `${targetFirst.getUTCFullYear()}-${String(targetFirst.getUTCMonth() + 1).padStart(2, '0')}-${String(clampedDay).padStart(2, '0')}`;
+      }
+
+      function defaultPayoutLabelForDate(isoDate) {
+        const d = String(isoDate || todayISO());
+        const ym = d.slice(0, 7);
+        const prevYm = shiftYearMonth(ym, -1) || ym;
+        return `${prevYm} 分潤`;
+      }
+
+      function extractPeriodMonth(stageLabel) {
+        const m = String(stageLabel || '').match(/\b(\d{4})[-/](\d{1,2})\b/);
+        if (!m) return '';
+        const mo = Number(m[2]);
+        if (mo < 1 || mo > 12) return '';
+        return `${m[1]}-${String(mo).padStart(2, '0')}`;
+      }
+
+      function incrementStageLabel(prevStage) {
+        const s = String(prevStage || '').trim();
+        if (!s) return '';
+        if (/\b\d{4}[-/]\d{1,2}\b/.test(s)) {
+          return s.replace(/\b(\d{4})([-/.])(\d{1,2})\b/, (_, y, sep, mo) => {
+            const nextYm = shiftYearMonth(`${y}-${mo}`, 1);
+            return nextYm ? (sep === '/' ? nextYm.replace('-', '/') : nextYm) : `${y}${sep}${mo}`;
+          });
+        }
+        if (/(第\s*)(\d+)(\s*次)/.test(s)) {
+          return s.replace(/(第\s*)(\d+)(\s*次)/, (_, p1, num, p3) => `${p1}${Number(num) + 1}${p3}`);
+        }
+        return s;
+      }
+
+      function nextInvStageLabel(invId, eventType, dateVal = todayISO()) {
         const count = (state.investmentLogs || []).filter((l) => l.investmentId === invId && l.eventType === eventType).length + 1;
         if (eventType === 'invest') return `第 ${count} 次投入`;
         if (eventType === 'withdraw') return `第 ${count} 次撤資`;
         if (eventType === 'settle') return '全額結算出場';
-        return `第 ${count} 次分紅結算`;
+        return defaultPayoutLabelForDate(dateVal);
       }
 
       function applyInvLogRecord(rec) {
@@ -3611,8 +3660,8 @@
           : (inv || list[0] || null);
         const initInvId = initInv ? initInv.id : (isEdit ? (editLog.investmentId || '') : '');
         const initType = isEdit ? (editLog.eventType || 'payout') : (defaultAmt > 0 ? 'payout' : 'invest');
-        const initStage = isEdit ? (editLog.stageLabel || '') : (initInv ? nextInvStageLabel(initInv.id, initType) : '第 1 次投入');
         const initDate = isEdit ? (editLog.date || todayISO()) : todayISO();
+        const initStage = isEdit ? (editLog.stageLabel || '') : (initInv ? nextInvStageLabel(initInv.id, initType, initDate) : '第 1 次投入');
         const initAmt = isEdit ? safeNum(editLog.amountTWD) : defaultAmt;
         const initAcc = isEdit ? (editLog.account || '') : '';
         const initMode = isEdit ? (editLog.applyMode || 'history_only') : 'sync_live';
@@ -3639,8 +3688,8 @@
             </div>
           </div>
           <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div><label class="block text-xs font-medium text-zinc-600 mb-1">日期（可選過去歷史日）</label><input name="date" type="date" required value="${escapeHtml(initDate)}" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" /></div>
-            <div><label class="block text-xs font-medium text-zinc-600 mb-1">次別／階段名稱</label><input id="invlog-stage" name="stageLabel" value="${escapeHtml(initStage)}" placeholder="例如：第1次投入、第2次撤資" class="w-full h-9 px-3 rounded-lg hairline text-sm" /></div>
+            <div><label class="block text-xs font-medium text-zinc-600 mb-1">日期（可選過去歷史日）</label><input id="invlog-date" name="date" type="date" required value="${escapeHtml(initDate)}" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" /></div>
+            <div><label class="block text-xs font-medium text-zinc-600 mb-1">次別／說明</label><input id="invlog-stage" name="stageLabel" value="${escapeHtml(initStage)}" placeholder="例如：2021-05 分潤、第 1 次投入" class="w-full h-9 px-3 rounded-lg hairline text-sm" /></div>
             <div><label class="block text-xs font-medium text-zinc-600 mb-1">金額 (TWD)</label><input name="amountTWD" type="number" step="1" min="1" required value="${initAmt > 0 ? initAmt : ''}" placeholder="輸入台幣金額" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" /></div>
           </div>
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -3664,13 +3713,16 @@
           const invId = String(fd.get('investmentId') || '');
           const proj = (state.investments || []).find((x) => x.id === invId);
           if (!proj) { showToast('請先建立實體投資專案'); return; }
+          const stageLabel = String(fd.get('stageLabel') || '').trim();
+          const periodMonth = extractPeriodMonth(stageLabel);
           const rec = {
             id: isEdit ? editLog.id : uid('ilog'),
             investmentId: proj.id,
             investmentName: proj.name,
             date: String(fd.get('date') || todayISO()),
             eventType: String(fd.get('eventType') || 'payout'),
-            stageLabel: String(fd.get('stageLabel') || '').trim(),
+            stageLabel,
+            ...(periodMonth ? { periodMonth } : {}),
             amountTWD: safeNum(fd.get('amountTWD')),
             account: resolveModalAccount(fd),
             applyMode: String(fd.get('applyMode') || 'sync_live'),
@@ -3706,14 +3758,25 @@
         if (!isEdit) {
           const projSel = document.getElementById('invlog-project');
           const typeSel = document.getElementById('invlog-type');
+          const dateIn = document.getElementById('invlog-date');
           const stageInput = document.getElementById('invlog-stage');
-          const refreshStage = () => {
-            if (projSel && typeSel && stageInput) {
-              stageInput.value = nextInvStageLabel(projSel.value, typeSel.value);
+          let stageEdited = false;
+          if (stageInput) {
+            stageInput.addEventListener('input', () => {
+              stageEdited = Boolean(stageInput.value.trim());
+            });
+          }
+          const refreshStage = (force = false) => {
+            if (projSel && typeSel && stageInput && (force || !stageEdited)) {
+              stageInput.value = nextInvStageLabel(projSel.value, typeSel.value, dateIn ? dateIn.value : todayISO());
+              if (force) stageEdited = false;
             }
           };
-          if (projSel) projSel.addEventListener('change', refreshStage);
-          if (typeSel) typeSel.addEventListener('change', refreshStage);
+          if (projSel) projSel.addEventListener('change', () => refreshStage(false));
+          if (typeSel) typeSel.addEventListener('change', () => refreshStage(true));
+          if (dateIn) dateIn.addEventListener('change', () => {
+            if (typeSel && typeSel.value === 'payout') refreshStage(false);
+          });
         }
       }
 
@@ -3752,7 +3815,7 @@
               <button id="btn-batch-inv-add-row" type="button" class="text-xs font-medium text-zinc-700 hover:text-zinc-900">＋ 加一列</button>
             </div>
             <div class="grid grid-cols-12 gap-1.5 px-0.5 text-[11px] font-medium text-zinc-500">
-              <span class="col-span-3">日期</span>
+              <span class="col-span-3">入帳日期</span>
               <span class="col-span-3">異動類型</span>
               <span class="col-span-3">次別／說明</span>
               <span class="col-span-2">金額 TWD</span>
@@ -3782,6 +3845,7 @@
             return;
           }
           rows.forEach((r) => {
+            const periodMonth = extractPeriodMonth(r.stageLabel);
             applyInvLogRecord({
               id: uid('ilog'),
               investmentId: proj.id,
@@ -3789,6 +3853,7 @@
               date: r.date,
               eventType: r.eventType,
               stageLabel: r.stageLabel,
+              ...(periodMonth ? { periodMonth } : {}),
               amountTWD: r.amountTWD,
               account: acc,
               applyMode,
@@ -3813,11 +3878,11 @@
         const projSel = document.getElementById('batch-inv-project');
         const container = document.getElementById('batch-inv-rows');
 
-        const formatBatchInvStage = (eventType, seq) => {
+        const formatBatchInvStage = (eventType, seq, dateVal) => {
           if (eventType === 'invest') return `第 ${seq} 次投入`;
           if (eventType === 'withdraw') return `第 ${seq} 次撤資`;
           if (eventType === 'settle') return '全額結算出場';
-          return `第 ${seq} 次分紅結算`;
+          return defaultPayoutLabelForDate(dateVal);
         };
 
         const syncBatchInvStageLabels = () => {
@@ -3829,12 +3894,13 @@
             }
           });
           container.querySelectorAll('.batch-inv-row').forEach((row) => {
+            const dateEl = row.querySelector('.bi-date');
             const typeEl = row.querySelector('.bi-type');
             const stageEl = row.querySelector('.bi-stage');
             const t = typeEl ? typeEl.value : 'invest';
             baseCounts[t] = (baseCounts[t] || 0) + 1;
             if (stageEl && stageEl.dataset.manual !== '1') {
-              stageEl.value = formatBatchInvStage(t, baseCounts[t]);
+              stageEl.value = formatBatchInvStage(t, baseCounts[t], dateEl ? dateEl.value : todayISO());
             }
           });
         };
@@ -3850,10 +3916,11 @@
               <option value="payout" ${typeVal === 'payout' ? 'selected' : ''}>分紅結算</option>
               <option value="settle" ${typeVal === 'settle' ? 'selected' : ''}>全額結算</option>
             </select>
-            <input type="text" value="${escapeHtml(stageVal)}" placeholder="如：第 1 次投入" class="bi-stage col-span-3 h-8 px-2 rounded-lg hairline bg-white text-xs" />
+            <input type="text" value="${escapeHtml(stageVal)}" placeholder="如：2021-05 分潤" class="bi-stage col-span-3 h-8 px-2 rounded-lg hairline bg-white text-xs" />
             <input type="number" step="1" min="0" placeholder="金額 TWD" class="bi-amt col-span-2 h-8 px-1.5 rounded-lg hairline bg-white text-xs font-mono-num" />
             <button type="button" class="bi-del col-span-1 h-8 text-zinc-400 hover:text-rose-700 text-xs font-medium" title="移除">✕</button>
           `;
+          const dateEl = row.querySelector('.bi-date');
           const typeEl = row.querySelector('.bi-type');
           const stageEl = row.querySelector('.bi-stage');
           if (isManualStage && stageVal) {
@@ -3861,6 +3928,11 @@
           }
           stageEl.addEventListener('input', () => {
             stageEl.dataset.manual = stageEl.value.trim() ? '1' : '';
+          });
+          dateEl.addEventListener('change', () => {
+            if (typeEl.value === 'payout' && stageEl.dataset.manual !== '1') {
+              syncBatchInvStageLabels();
+            }
           });
           typeEl.addEventListener('change', () => {
             stageEl.dataset.manual = '';
@@ -3891,15 +3963,25 @@
             return;
           }
           const prevDate = lastRow.querySelector('.bi-date').value || todayISO();
+          const nextDate = shiftIsoDateByMonths(prevDate, 1);
           const prevType = lastRow.querySelector('.bi-type').value || 'invest';
           const prevStageEl = lastRow.querySelector('.bi-stage');
           const prevStage = prevStageEl ? prevStageEl.value.trim() : '';
 
-          if (prevStageEl && prevStageEl.dataset.manual === '1' && prevStage) {
-            const incremented = prevStage.replace(/(第\s*)(\d+)(\s*次)/, (_, p1, num, p3) => `${p1}${Number(num) + 1}${p3}`);
-            addInvRow(prevType, incremented, prevDate, true);
+          if (prevType === 'payout') {
+            if (prevStage && /\b\d{4}[-/]\d{1,2}\b/.test(prevStage)) {
+              const nextStage = incrementStageLabel(prevStage);
+              const keepManual = prevStageEl && prevStageEl.dataset.manual === '1';
+              addInvRow(prevType, nextStage, nextDate, keepManual);
+            } else if (prevStageEl && prevStageEl.dataset.manual === '1' && prevStage) {
+              addInvRow(prevType, incrementStageLabel(prevStage), nextDate, true);
+            } else {
+              addInvRow(prevType, '', nextDate, false);
+            }
+          } else if (prevStageEl && prevStageEl.dataset.manual === '1' && prevStage) {
+            addInvRow(prevType, incrementStageLabel(prevStage), nextDate, true);
           } else {
-            addInvRow(prevType, '', prevDate, false);
+            addInvRow(prevType, '', nextDate, false);
           }
         });
       }
