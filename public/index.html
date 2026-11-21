@@ -2088,13 +2088,6 @@
           </div>
         `;
 
-        const cycleLabel = (m) => {
-          const n = safeNum(m, 12);
-          if (n === 1) return '每 1 個月一結';
-          if (n === 12) return '每 1 年一結';
-          return `每 ${n} 個月一結`;
-        };
-
         const grid = document.getElementById('inv-cards-grid');
         if (state.investments.length === 0) {
           grid.innerHTML = '<div class="col-span-full py-8 text-center text-zinc-400 text-sm">尚無實體投資項目</div>';
@@ -3551,6 +3544,13 @@
           renderAll();
           showToast(isEdit ? '已更新投資項目' : '已新增投資項目');
         });
+      }
+
+      function cycleLabel(m) {
+        const n = safeNum(m, 12);
+        if (n === 1) return '每 1 個月一結';
+        if (n === 12) return '每 1 年一結';
+        return `每 ${n} 個月一結`;
       }
 
       function shiftYearMonth(yyyyMm, deltaMonths) {
