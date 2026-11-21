@@ -517,6 +517,7 @@
             </div>
 
             <div id="inv-summary-cards" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"></div>
+            <div id="inv-tag-filter-bar" class="hidden flex flex-wrap items-center gap-1.5"></div>
             <div id="inv-cards-grid" class="grid grid-cols-1 md:grid-cols-3 gap-4"></div>
           </div>
 
@@ -1264,6 +1265,27 @@
       let expCatFilter = 'ALL';
       let fxFilterCur = 'ALL';
       let invLogFilter = 'ALL';
+      let invTagFilter = 'ALL';
+      const DEFAULT_INV_TAGS = ['進行中', '已結算', '暫停分紅', '實體店面', '合夥股權', '房地產', '借貸債權', '設備租賃', '貴金屬', '其他'];
+      function normalizeInvTags(raw) {
+        const arr = Array.isArray(raw)
+          ? raw
+          : String(raw || '').split(/[,，、\n]/);
+        return [...new Set(arr.map((t) => String(t || '').trim()).filter(Boolean))];
+      }
+      function getAllInvTagOptions() {
+        const extra = [];
+        (state.investments || []).forEach((i) => {
+          normalizeInvTags(i.tags).forEach((t) => extra.push(t));
+        });
+        return [...new Set([...DEFAULT_INV_TAGS, ...extra])];
+      }
+      function invTagBadgeClass(tag) {
+        if (tag === '進行中') return 'bg-emerald-50 text-emerald-700';
+        if (tag === '已結算') return 'bg-zinc-200/80 text-zinc-700';
+        if (tag === '暫停分紅') return 'bg-amber-50 text-amber-800';
+        return 'bg-sky-50 text-sky-700';
+      }
       let chartAllocation = null;
       let chartCurrency = null;
       let chartTrend = null;
@@ -2088,12 +2110,54 @@
           </div>
         `;
 
+        const tagFilterBar = document.getElementById('inv-tag-filter-bar');
+        const tagCounts = {};
+        (state.investments || []).forEach((i) => {
+          normalizeInvTags(i.tags).forEach((t) => {
+            tagCounts[t] = (tagCounts[t] || 0) + 1;
+          });
+        });
+        const activeTags = Object.keys(tagCounts);
+        if (invTagFilter !== 'ALL' && !tagCounts[invTagFilter]) {
+          invTagFilter = 'ALL';
+        }
+        if (tagFilterBar) {
+          if (activeTags.length === 0) {
+            tagFilterBar.classList.add('hidden');
+            tagFilterBar.innerHTML = '';
+          } else {
+            tagFilterBar.classList.remove('hidden');
+            const makeBtn = (val, label) => {
+              const active = invTagFilter === val;
+              const cls = active
+                ? 'bg-zinc-900 text-white'
+                : 'bg-[#f7f7f5] hover:bg-zinc-200/70 text-zinc-700 hairline';
+              return `<button type="button" data-inv-tag-filter="${escapeHtml(val)}" class="h-7 px-2.5 rounded-lg text-xs font-medium transition-colors duration-150 ${cls}">${escapeHtml(label)}</button>`;
+            };
+            tagFilterBar.innerHTML =
+              makeBtn('ALL', `全部 (${state.investments.length})`) +
+              activeTags.map((t) => makeBtn(t, `${t} (${tagCounts[t]})`)).join('');
+            tagFilterBar.querySelectorAll('[data-inv-tag-filter]').forEach((btn) => {
+              btn.addEventListener('click', () => {
+                invTagFilter = btn.getAttribute('data-inv-tag-filter') || 'ALL';
+                renderInvestments(computeTotals(state));
+              });
+            });
+          }
+        }
+
         const grid = document.getElementById('inv-cards-grid');
         if (state.investments.length === 0) {
           grid.innerHTML = '<div class="col-span-full py-8 text-center text-zinc-400 text-sm">尚無實體投資項目</div>';
           return;
         }
-        grid.innerHTML = state.investments.map((inv) => {
+        const visibleInvestments = invTagFilter === 'ALL'
+          ? state.investments
+          : state.investments.filter((i) => normalizeInvTags(i.tags).includes(invTagFilter));
+        if (visibleInvestments.length === 0) {
+          grid.innerHTML = '<div class="col-span-full py-8 text-center text-zinc-400 text-sm">此標籤下尚無實體投資項目</div>';
+        } else {
+        grid.innerHTML = visibleInvestments.map((inv) => {
           const p = safeNum(inv.principal);
           const cyc = Math.max(1, safeNum(inv.cycleMonths, 12));
           const minR = safeNum(inv.minRate);
@@ -2106,6 +2170,10 @@
           const recoverable = inv.principalRecoverable !== false;
           const avgMonthly = (annMin + annMax) / 24;
           const paybackMonths = (!recoverable && avgMonthly > 0) ? (p / avgMonthly) : null;
+          const tags = normalizeInvTags(inv.tags);
+          const tagsHtml = tags.length
+            ? `<div class="mt-1.5 flex flex-wrap items-center gap-1">${tags.map((t) => `<span class="text-[11px] px-1.5 py-0.5 rounded font-medium ${invTagBadgeClass(t)}">${escapeHtml(t)}</span>`).join('')}</div>`
+            : '';
 
           return `
             <div class="rounded-xl hairline p-5 bg-white flex flex-col justify-between gap-4">
@@ -2117,6 +2185,7 @@
                       <span class="text-[11px] px-1.5 py-0.5 rounded ${recoverable ? 'bg-zinc-100 text-zinc-600' : 'bg-amber-50 text-amber-800'}">${recoverable ? '可收回本金' : '不可收回本金'}</span>
                     </div>
                     <div class="mt-0.5 text-xs text-zinc-500">${cycleLabel(cyc)}${!recoverable ? ' · 不計入總資產淨值' : ''}</div>
+                    ${tagsHtml}
                   </div>
                   <div class="text-right shrink-0">
                     <button type="button" data-action="edit-inv" data-id="${escapeHtml(inv.id)}" class="text-zinc-600 hover:text-zinc-900 text-xs font-medium mr-2">編輯</button>
@@ -2151,6 +2220,7 @@
             </div>
           `;
         }).join('');
+        }
 
         // Sync project filter dropdown
         const filterSel = document.getElementById('filter-inv-log');
@@ -3508,7 +3578,10 @@
 
       function openInvModal(item = null) {
         const isEdit = Boolean(item);
-        const inv = item || { name: '', principal: 0, cycleMonths: 1, minRate: 3, maxRate: 5, principalRecoverable: true, note: '' };
+        const inv = item || { name: '', principal: 0, cycleMonths: 1, minRate: 3, maxRate: 5, principalRecoverable: true, tags: ['進行中'], note: '' };
+        const selectedTags = new Set(normalizeInvTags(inv.tags));
+        const allTagOptions = [...new Set([...getAllInvTagOptions(), ...selectedTags])];
+
         const html = `
           <div><label class="block text-xs font-medium text-zinc-600 mb-1">投資項目名稱</label><input name="name" required value="${escapeHtml(inv.name)}" class="w-full h-9 px-3 rounded-lg hairline text-sm" /></div>
           <div class="grid grid-cols-2 gap-3">
@@ -3526,6 +3599,15 @@
               <option value="false" ${inv.principalRecoverable === false ? 'selected' : ''}>無法收回本金（不計入淨值，僅計入現金流與回本試算）</option>
             </select>
           </div>
+          <div class="space-y-2">
+            <label class="block text-xs font-medium text-zinc-600">標籤（可多選或自行新增）</label>
+            <input id="inv-tags-hidden" type="hidden" name="tags" value="${escapeHtml([...selectedTags].join(','))}" />
+            <div id="inv-tag-chips" class="flex flex-wrap gap-1.5"></div>
+            <div class="flex items-center gap-1.5">
+              <input id="inv-tag-custom-input" type="text" placeholder="輸入自訂標籤（如：朋友合夥、餐飲）" class="flex-1 h-8 px-2.5 rounded-lg hairline text-xs bg-white" />
+              <button id="inv-tag-custom-add" type="button" class="h-8 px-3 rounded-lg bg-[#f7f7f5] hover:bg-zinc-200/70 hairline text-xs font-medium text-zinc-700 whitespace-nowrap">＋ 新增標籤</button>
+            </div>
+          </div>
           <div><label class="block text-xs font-medium text-zinc-600 mb-1">備註</label><input name="note" value="${escapeHtml(inv.note)}" class="w-full h-9 px-3 rounded-lg hairline text-sm" /></div>
         `;
         openFormModal(isEdit ? '編輯實體投資' : '新增實體投資', html, (fd) => {
@@ -3537,6 +3619,7 @@
             minRate: safeNum(fd.get('minRate')),
             maxRate: safeNum(fd.get('maxRate')),
             principalRecoverable: String(fd.get('principalRecoverable')) !== 'false',
+            tags: normalizeInvTags(fd.get('tags')),
             note: String(fd.get('note')).trim()
           };
           state.investments = isEdit ? state.investments.map((x) => (x.id === inv.id ? record : x)) : [...state.investments, record];
@@ -3544,6 +3627,55 @@
           renderAll();
           showToast(isEdit ? '已更新投資項目' : '已新增投資項目');
         });
+
+        const chipsWrap = document.getElementById('inv-tag-chips');
+        const hiddenTagsInput = document.getElementById('inv-tags-hidden');
+        const customTagInput = document.getElementById('inv-tag-custom-input');
+        const customTagAddBtn = document.getElementById('inv-tag-custom-add');
+
+        const renderTagChips = () => {
+          if (!chipsWrap || !hiddenTagsInput) return;
+          hiddenTagsInput.value = [...selectedTags].join(',');
+          chipsWrap.innerHTML = allTagOptions.map((t) => {
+            const active = selectedTags.has(t);
+            const cls = active
+              ? 'bg-zinc-900 text-white'
+              : 'bg-[#f7f7f5] hover:bg-zinc-200/70 text-zinc-700 hairline';
+            return `<button type="button" data-tag-chip="${escapeHtml(t)}" class="h-7 px-2.5 rounded-lg text-xs font-medium transition-colors duration-150 ${cls}">${active ? '✓ ' : ''}${escapeHtml(t)}</button>`;
+          }).join('');
+          chipsWrap.querySelectorAll('[data-tag-chip]').forEach((btn) => {
+            btn.addEventListener('click', () => {
+              const tag = btn.getAttribute('data-tag-chip');
+              if (!tag) return;
+              if (selectedTags.has(tag)) selectedTags.delete(tag);
+              else selectedTags.add(tag);
+              renderTagChips();
+            });
+          });
+        };
+
+        const addCustomTags = () => {
+          if (!customTagInput) return;
+          const added = normalizeInvTags(customTagInput.value);
+          if (!added.length) return;
+          added.forEach((t) => {
+            if (!allTagOptions.includes(t)) allTagOptions.push(t);
+            selectedTags.add(t);
+          });
+          customTagInput.value = '';
+          renderTagChips();
+        };
+
+        if (customTagAddBtn) customTagAddBtn.addEventListener('click', addCustomTags);
+        if (customTagInput) {
+          customTagInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              addCustomTags();
+            }
+          });
+        }
+        renderTagChips();
       }
 
       function cycleLabel(m) {
@@ -5028,8 +5160,8 @@
         const cRows = state.cash.map((c) => ({ id: c.id, bank: c.bank, currency: c.currency, amount: c.amount, note: c.note || '' }));
         XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(cRows.length ? cRows : [{ id: '', bank: '', currency: 'TWD', amount: 0, note: '' }]), '銀行現金');
 
-        const iRows = state.investments.map((i) => ({ id: i.id, name: i.name, principal: i.principal, cycleMonths: i.cycleMonths, minRate: i.minRate, maxRate: i.maxRate, principalRecoverable: i.principalRecoverable !== false ? '可收回' : '不可收回', note: i.note || '' }));
-        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(iRows.length ? iRows : [{ id: '', name: '', principal: 0, cycleMonths: 12, minRate: 0, maxRate: 0, note: '' }]), '實體投資');
+        const iRows = state.investments.map((i) => ({ id: i.id, name: i.name, principal: i.principal, cycleMonths: i.cycleMonths, minRate: i.minRate, maxRate: i.maxRate, principalRecoverable: i.principalRecoverable !== false ? '可收回' : '不可收回', tags: normalizeInvTags(i.tags).join(', '), note: i.note || '' }));
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(iRows.length ? iRows : [{ id: '', name: '', principal: 0, cycleMonths: 12, minRate: 0, maxRate: 0, tags: '', note: '' }]), '實體投資');
 
         const incRows = (state.fixedIncomes || []).map((f) => ({ id: f.id, name: f.name, category: f.category, currency: f.currency, amount: f.amount, cycleMonths: f.cycleMonths, payday: f.payday || '', account: f.account || '', note: f.note || '' }));
         XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(incRows.length ? incRows : [{ id: '', name: '', category: '薪資收入', currency: 'TWD', amount: 0, cycleMonths: 1, payday: '', account: '', note: '' }]), '固定收入');
@@ -5098,7 +5230,7 @@
             if (stockSheet) state.stocks = stockSheet.filter((r) => r.symbol).map((r) => ({ id: r.id || uid('s'), symbol: String(r.symbol), name: String(r.name || r.symbol), market: String(r.market || 'US'), account: String(r.account || ''), currency: String(r.currency || 'USD'), shares: safeNum(r.shares), avgCost: safeNum(r.avgCost), currentPrice: safeNum(r.currentPrice) }));
             if (stTradeSheet) state.stockTrades = stTradeSheet.filter((r) => r.symbol).map((r) => ({ id: r.id || uid('strd'), date: String(r.date || todayISO()), tradeType: String(r.tradeType || 'BUY'), market: String(r.market || 'TW'), symbol: String(r.symbol).toUpperCase(), name: String(r.name || ''), currency: String(r.currency || 'TWD'), shares: safeNum(r.shares), price: safeNum(r.price), fee: safeNum(r.fee), tax: safeNum(r.tax), netAmount: safeNum(r.netAmount), realizedPnlTWD: safeNum(r.realizedPnlTWD), account: String(r.account || ''), applyMode: String(r.applyMode || 'history_only'), note: String(r.note || '') }));
             if (cashSheet) state.cash = cashSheet.filter((r) => r.bank).map((r) => ({ id: r.id || uid('c'), bank: String(r.bank), currency: String(r.currency || 'TWD'), amount: safeNum(r.amount), note: String(r.note || '') }));
-            if (invSheet) state.investments = invSheet.filter((r) => r.name).map((r) => ({ id: r.id || uid('i'), name: String(r.name), principal: safeNum(r.principal), cycleMonths: Math.max(1, safeNum(r.cycleMonths, 12)), minRate: safeNum(r.minRate), maxRate: safeNum(r.maxRate), principalRecoverable: !(r.principalRecoverable === false || String(r.principalRecoverable) === 'false' || String(r.principalRecoverable) === '不可收回'), note: String(r.note || '') }));
+            if (invSheet) state.investments = invSheet.filter((r) => r.name).map((r) => ({ id: r.id || uid('i'), name: String(r.name), principal: safeNum(r.principal), cycleMonths: Math.max(1, safeNum(r.cycleMonths, 12)), minRate: safeNum(r.minRate), maxRate: safeNum(r.maxRate), principalRecoverable: !(r.principalRecoverable === false || String(r.principalRecoverable) === 'false' || String(r.principalRecoverable) === '不可收回'), tags: normalizeInvTags(r.tags ?? r['標籤']), note: String(r.note || '') }));
             if (incSheet) state.fixedIncomes = incSheet.filter((r) => r.name || r['收入名稱']).map((r) => ({ id: r.id || uid('inc'), name: String(r.name || r['收入名稱']), category: String(r.category || r['類別'] || '固定收入'), currency: String(r.currency || r['幣別'] || 'TWD'), amount: safeNum(r.amount ?? r['單期金額']), cycleMonths: Math.max(1, safeNum(r.cycleMonths ?? r['發放週期(月)'], 1)), payday: String(r.payday || r['每月發放日'] || ''), account: String(r.account || r['入帳帳戶'] || ''), note: String(r.note || r['備註'] || '') }));
             if (irecSheet) state.incomeReceipts = irecSheet.filter((r) => r.name && safeNum(r.actualAmount) > 0).map((r) => ({ id: r.id || uid('irec'), date: String(r.date || todayISO()), name: String(r.name), category: String(r.category || '固定收入'), currency: String(r.currency || 'TWD'), expectedAmount: safeNum(r.expectedAmount, safeNum(r.actualAmount)), actualAmount: safeNum(r.actualAmount), account: String(r.account || ''), depositMode: String(r.depositMode || 'new_deposit'), note: String(r.note || '') }));
             if (ilogSheet) state.investmentLogs = ilogSheet.filter((r) => r.investmentName && safeNum(r.amountTWD) > 0).map((r) => ({ id: r.id || uid('ilog'), investmentId: String(r.investmentId || ''), investmentName: String(r.investmentName), date: String(r.date || todayISO()), eventType: String(r.eventType || 'payout'), stageLabel: String(r.stageLabel || ''), amountTWD: safeNum(r.amountTWD), account: String(r.account || ''), applyMode: String(r.applyMode || 'history_only'), note: String(r.note || '') }));
