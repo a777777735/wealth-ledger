@@ -511,7 +511,7 @@
             <div class="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <h2 class="text-base font-semibold text-zinc-900">實體與專案投資</h2>
-                <p class="text-xs text-zinc-500 mt-0.5">追蹤投入本金、結算週期與預估年化現金流，並登記實際入帳</p>
+                <p class="text-xs text-zinc-500 mt-0.5">追蹤預計投入、結算週期與預估年化現金流（不計入總資產淨值，待實際回報入帳銀行時才計入資產）</p>
               </div>
               <button id="btn-add-inv" type="button" class="btn-focus h-8 px-3.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-medium transition-colors duration-150">新增投資項目</button>
             </div>
@@ -1147,7 +1147,7 @@
         });
 
         let investmentsTWD = 0;
-        let nonRecoverableInvTWD = 0;
+        let plannedInvestmentsTWD = 0;
         let annualIncomeMin = 0;
         let annualIncomeMax = 0;
         (data.investments || []).forEach((inv) => {
@@ -1155,16 +1155,13 @@
           const cyc = Math.max(1, safeNum(inv.cycleMonths, 12));
           const minR = safeNum(inv.minRate);
           const maxR = safeNum(inv.maxRate);
-          const recoverable = inv.principalRecoverable !== false;
-          if (recoverable) {
-            investmentsTWD += p;
-            totalByCurrencyTWD.TWD += p;
-          } else {
-            nonRecoverableInvTWD += p;
-          }
+          plannedInvestmentsTWD += p;
           annualIncomeMin += p * (minR / 100) * (12 / cyc);
           annualIncomeMax += p * (maxR / 100) * (12 / cyc);
         });
+        const invReturnedTotalTWD = (data.investmentLogs || [])
+          .filter((l) => l.eventType === 'payout' || l.eventType === 'withdraw' || l.eventType === 'settle')
+          .reduce((s, l) => s + safeNum(l.amountTWD), 0);
 
         let fixedIncomeAnnualTWD = 0;
         (data.fixedIncomes || []).forEach((inc) => {
@@ -1193,13 +1190,15 @@
           }
         });
 
-        const netWorthTWD = cashTWD + stocksTWD + investmentsTWD;
+        const netWorthTWD = cashTWD + stocksTWD;
         return {
           cashTWD,
           stocksTWD,
           stocksPnlTWD,
           investmentsTWD,
-          nonRecoverableInvTWD,
+          plannedInvestmentsTWD,
+          nonRecoverableInvTWD: plannedInvestmentsTWD,
+          invReturnedTotalTWD,
           annualIncomeMin,
           annualIncomeMax,
           fixedIncomeMonthlyTWD,
@@ -1780,10 +1779,9 @@
         pnlEl.textContent = `未實現損益 ${pnl >= 0 ? '+' : ''}${fmtTWD(pnl)}`;
         pnlEl.className = 'mt-2 text-xs font-mono-num ' + (pnl >= 0 ? 'text-rose-700' : 'text-emerald-700');
 
-        document.getElementById('kpi-total-inv').textContent = fmtTWD(totals.investmentsTWD);
-        document.getElementById('kpi-inv-pct').textContent = ((totals.investmentsTWD / nw) * 100).toFixed(1) + '%';
-        const nonRecNote = totals.nonRecoverableInvTWD > 0 ? ` · 另有 ${fmtCompactWan(totals.nonRecoverableInvTWD)} 不可收回本金不計淨值` : '';
-        document.getElementById('kpi-inv-annual').textContent = `預估年收益 ${fmtCompactWan(totals.annualIncomeMin)} ～ ${fmtCompactWan(totals.annualIncomeMax)}${nonRecNote}`;
+        document.getElementById('kpi-total-inv').textContent = fmtTWD(totals.plannedInvestmentsTWD);
+        document.getElementById('kpi-inv-pct').textContent = '不計淨值';
+        document.getElementById('kpi-inv-annual').textContent = `預估年收益 ${fmtCompactWan(totals.annualIncomeMin)} ～ ${fmtCompactWan(totals.annualIncomeMax)} · 已領回報 ${fmtCompactWan(totals.invReturnedTotalTWD)}`;
 
         document.getElementById('kpi-fixed-income').textContent = `每月 ${fmtTWD(totals.fixedIncomeMonthlyTWD)} ｜ 每年 ${fmtCompactWan(totals.fixedIncomeAnnualTWD)}`;
         const combMin = totals.fixedIncomeMonthlyTWD + totals.annualIncomeMin / 12;
@@ -1791,11 +1789,10 @@
         document.getElementById('kpi-combined-cashflow').textContent = `${fmtTWD(combMin)} ～ ${fmtTWD(combMax)} / 月`;
         document.getElementById('kpi-expense-summary').textContent = `固定 ${fmtTWD(totals.fixedExpenseMonthlyTWD)} ｜ 本月隨機 ${fmtTWD(totals.randomExpenseThisMonthTWD)}`;
 
-        // Ranked Horizontal Bars for Allocation
+        // Ranked Horizontal Bars for Allocation (Liquid Net Worth: Cash + Stocks)
         const allocItems = [
-          { label: '實體與專案投資', val: totals.investmentsTWD, color: '#18181b' },
-          { label: '銀行與券商現金', val: totals.cashTWD, color: '#52525b' },
-          { label: '股票與黃金 ETF', val: totals.stocksTWD, color: '#a1a1aa' }
+          { label: '銀行與券商現金', val: totals.cashTWD, color: '#18181b' },
+          { label: '股票與黃金 ETF', val: totals.stocksTWD, color: '#71717a' }
         ].sort((a, b) => b.val - a.val);
 
         document.getElementById('allocation-bars').innerHTML = allocItems.map((item) => {
@@ -1826,10 +1823,10 @@
         chartAllocation = new Chart(ctxAlloc, {
           type: 'doughnut',
           data: {
-            labels: ['實體與專案投資', '銀行與券商現金', '股票與黃金 ETF'],
+            labels: ['銀行與券商現金', '股票與黃金 ETF'],
             datasets: [{
-              data: [Math.round(totals.investmentsTWD), Math.round(totals.cashTWD), Math.round(totals.stocksTWD)],
-              backgroundColor: ['#18181b', '#52525b', '#a1a1aa'],
+              data: [Math.round(totals.cashTWD), Math.round(totals.stocksTWD)],
+              backgroundColor: ['#18181b', '#a1a1aa'],
               borderWidth: 2,
               borderColor: '#ffffff'
             }]
@@ -2093,12 +2090,12 @@
         const monthlyMax = totals.annualIncomeMax / 12;
         document.getElementById('inv-summary-cards').innerHTML = `
           <div class="p-4 rounded-lg bg-[#f7f7f5] hairline">
-            <div class="text-xs text-zinc-500">可收回本金（計入總資產）</div>
-            <div class="mt-1 text-lg font-semibold text-zinc-900 font-mono-num">${fmtTWD(totals.investmentsTWD)}</div>
+            <div class="text-xs text-zinc-500">預計投入總額（不計淨值）</div>
+            <div class="mt-1 text-lg font-semibold text-zinc-900 font-mono-num">${fmtTWD(totals.plannedInvestmentsTWD)}</div>
           </div>
           <div class="p-4 rounded-lg bg-[#f7f7f5] hairline">
-            <div class="text-xs text-zinc-500">無法收回投入（不計淨值）</div>
-            <div class="mt-1 text-lg font-semibold text-zinc-600 font-mono-num">${fmtTWD(totals.nonRecoverableInvTWD)}</div>
+            <div class="text-xs text-zinc-500">累計已領回報（分紅／收回）</div>
+            <div class="mt-1 text-lg font-semibold text-emerald-700 font-mono-num">${fmtTWD(totals.invReturnedTotalTWD)}</div>
           </div>
           <div class="p-4 rounded-lg bg-[#f7f7f5] hairline">
             <div class="text-xs text-zinc-500">預估平均月現金流</div>
@@ -2167,9 +2164,8 @@
           const annMin = perMin * (12 / cyc);
           const annMax = perMax * (12 / cyc);
           const avgPer = Math.round((perMin + perMax) / 2);
-          const recoverable = inv.principalRecoverable !== false;
           const avgMonthly = (annMin + annMax) / 24;
-          const paybackMonths = (!recoverable && avgMonthly > 0) ? (p / avgMonthly) : null;
+          const paybackMonths = (p > 0 && avgMonthly > 0) ? (p / avgMonthly) : null;
           const tags = normalizeInvTags(inv.tags);
           const tagsHtml = tags.length
             ? `<div class="mt-1.5 flex flex-wrap items-center gap-1">${tags.map((t) => `<span class="text-[11px] px-1.5 py-0.5 rounded font-medium ${invTagBadgeClass(t)}">${escapeHtml(t)}</span>`).join('')}</div>`
@@ -2182,9 +2178,8 @@
                   <div>
                     <div class="flex items-center gap-1.5 flex-wrap">
                       <h3 class="font-semibold text-zinc-900 text-sm">${escapeHtml(inv.name)}</h3>
-                      <span class="text-[11px] px-1.5 py-0.5 rounded ${recoverable ? 'bg-zinc-100 text-zinc-600' : 'bg-amber-50 text-amber-800'}">${recoverable ? '可收回本金' : '不可收回本金'}</span>
                     </div>
-                    <div class="mt-0.5 text-xs text-zinc-500">${cycleLabel(cyc)}${!recoverable ? ' · 不計入總資產淨值' : ''}</div>
+                    <div class="mt-0.5 text-xs text-zinc-500">${cycleLabel(cyc)} · 不計入總資產淨值</div>
                     ${tagsHtml}
                   </div>
                   <div class="text-right shrink-0">
@@ -2193,7 +2188,7 @@
                   </div>
                 </div>
                 <div class="mt-4 space-y-2 text-xs font-mono-num">
-                  <div class="flex justify-between"><span class="font-sans text-zinc-500">目前在投本金</span><span class="font-medium text-zinc-900">${fmtTWD(p)}</span></div>
+                  <div class="flex justify-between"><span class="font-sans text-zinc-500">預計投入</span><span class="font-medium text-zinc-900">${fmtTWD(p)}</span></div>
                   <div class="flex justify-between"><span class="font-sans text-zinc-500">單期報酬率</span><span class="font-medium text-rose-700">${minR}% ～ ${maxR}%</span></div>
                   <div class="flex justify-between"><span class="font-sans text-zinc-500">單期預估收益</span><span class="text-zinc-700">${fmtTWD(perMin)} ～ ${fmtTWD(perMax)}</span></div>
                   <div class="flex justify-between"><span class="font-sans text-zinc-500">年化預估收益</span><span class="font-medium text-emerald-700">${fmtCompactWan(annMin)} ～ ${fmtCompactWan(annMax)}</span></div>
@@ -2204,11 +2199,12 @@
                     const sumInv = logs.filter((l) => l.eventType === 'invest').reduce((s, l) => s + safeNum(l.amountTWD), 0);
                     const sumWd = logs.filter((l) => l.eventType === 'withdraw' || l.eventType === 'settle').reduce((s, l) => s + safeNum(l.amountTWD), 0);
                     const sumPay = logs.filter((l) => l.eventType === 'payout').reduce((s, l) => s + safeNum(l.amountTWD), 0);
-                    const pctBack = (!recoverable && p > 0) ? Math.min(999, (sumPay / p) * 100) : null;
+                    const baseAmt = sumInv > 0 ? sumInv : p;
+                    const pctBack = baseAmt > 0 ? Math.min(999, ((sumPay + sumWd) / baseAmt) * 100) : null;
                     return `<div class="pt-2 mt-2 hairline-t space-y-1 text-[11px]">` +
                       (sumInv > 0 ? `<div class="flex justify-between"><span class="font-sans text-zinc-400">紀錄累計投入</span><span class="text-zinc-700">${fmtTWD(sumInv)}</span></div>` : '') +
                       (sumWd > 0 ? `<div class="flex justify-between"><span class="font-sans text-zinc-400">紀錄累計撤資／結算</span><span class="text-amber-700">${fmtTWD(sumWd)}</span></div>` : '') +
-                      (sumPay > 0 ? `<div class="flex justify-between"><span class="font-sans text-zinc-400">累計已領分紅</span><span class="text-emerald-700 font-medium">${fmtTWD(sumPay)}${pctBack !== null ? ` (${pctBack.toFixed(1)}%)` : ''}</span></div>` : '') +
+                      (sumPay > 0 ? `<div class="flex justify-between"><span class="font-sans text-zinc-400">累計已領分紅</span><span class="text-emerald-700 font-medium">${fmtTWD(sumPay)}${pctBack !== null ? `（總回收 ${pctBack.toFixed(1)}%）` : ''}</span></div>` : '') +
                       `</div>`;
                   })()}
                 </div>
@@ -3578,26 +3574,20 @@
 
       function openInvModal(item = null) {
         const isEdit = Boolean(item);
-        const inv = item || { name: '', principal: 0, cycleMonths: 1, minRate: 3, maxRate: 5, principalRecoverable: true, tags: ['進行中'], note: '' };
+        const inv = item || { name: '', principal: 0, cycleMonths: 1, minRate: 3, maxRate: 5, principalRecoverable: false, tags: ['進行中'], note: '' };
         const selectedTags = new Set(normalizeInvTags(inv.tags));
         const allTagOptions = [...new Set([...getAllInvTagOptions(), ...selectedTags])];
 
         const html = `
           <div><label class="block text-xs font-medium text-zinc-600 mb-1">投資項目名稱</label><input name="name" required value="${escapeHtml(inv.name)}" class="w-full h-9 px-3 rounded-lg hairline text-sm" /></div>
           <div class="grid grid-cols-2 gap-3">
-            <div><label class="block text-xs font-medium text-zinc-600 mb-1">投入本金 (台幣)</label><input name="principal" type="number" step="1" min="0" required value="${safeNum(inv.principal)}" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" /></div>
+            <div><label class="block text-xs font-medium text-zinc-600 mb-1">預計投入 (台幣)</label><input name="principal" type="number" step="1" min="0" required value="${safeNum(inv.principal)}" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" /></div>
             <div><label class="block text-xs font-medium text-zinc-600 mb-1">結算週期 (月)</label><input name="cycleMonths" type="number" step="1" min="1" max="60" required value="${safeNum(inv.cycleMonths, 1)}" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" /></div>
           </div>
+          <p class="text-[11px] text-zinc-500 -mt-1">預計投入僅作為分紅試算與回本進度基準，不計入總資產淨值；待實際收到分紅或收回款項入帳銀行時才計入資產。</p>
           <div class="grid grid-cols-2 gap-3">
             <div><label class="block text-xs font-medium text-zinc-600 mb-1">單期低標報酬 (%)</label><input name="minRate" type="number" step="0.1" required value="${safeNum(inv.minRate)}" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" /></div>
             <div><label class="block text-xs font-medium text-zinc-600 mb-1">單期高標報酬 (%)</label><input name="maxRate" type="number" step="0.1" required value="${safeNum(inv.maxRate)}" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" /></div>
-          </div>
-          <div>
-            <label class="block text-xs font-medium text-zinc-600 mb-1">本金回收屬性（影響總資產淨值計算）</label>
-            <select name="principalRecoverable" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white">
-              <option value="true" ${inv.principalRecoverable !== false ? 'selected' : ''}>可收回本金（計入總資產淨值，如房地產／可退股權）</option>
-              <option value="false" ${inv.principalRecoverable === false ? 'selected' : ''}>無法收回本金（不計入淨值，僅計入現金流與回本試算）</option>
-            </select>
           </div>
           <div class="space-y-2">
             <label class="block text-xs font-medium text-zinc-600">標籤（可多選或自行新增）</label>
@@ -3618,7 +3608,7 @@
             cycleMonths: Math.max(1, safeNum(fd.get('cycleMonths'), 1)),
             minRate: safeNum(fd.get('minRate')),
             maxRate: safeNum(fd.get('maxRate')),
-            principalRecoverable: String(fd.get('principalRecoverable')) !== 'false',
+            principalRecoverable: false,
             tags: normalizeInvTags(fd.get('tags')),
             note: String(fd.get('note')).trim()
           };
