@@ -3572,34 +3572,167 @@
         return `${targetFirst.getUTCFullYear()}-${String(targetFirst.getUTCMonth() + 1).padStart(2, '0')}-${String(clampedDay).padStart(2, '0')}`;
       }
 
-      function defaultPayoutLabelForDate(isoDate) {
+      function formatMonthRange(startYm, endYm) {
+        if (!startYm || !endYm || startYm === endYm) return endYm || startYm || '';
+        if (startYm.slice(0, 4) === endYm.slice(0, 4)) {
+          return `${startYm}~${endYm.slice(5, 7)}`;
+        }
+        return `${startYm}~${endYm}`;
+      }
+
+      function formatPayoutLabelByCycle(endYm, cycleMonths = 1) {
+        const cyc = Math.max(1, Math.round(safeNum(cycleMonths, 1)));
+        if (!endYm) return '分潤';
+        const year = Number(endYm.slice(0, 4));
+        const endMo = Number(endYm.slice(5, 7));
+        const startYm = shiftYearMonth(endYm, -(cyc - 1)) || endYm;
+
+        if (cyc === 1) return `${endYm} 分潤`;
+        if (cyc === 3) {
+          const q = Math.ceil(endMo / 3);
+          return `${year} Q${q} 分潤`;
+        }
+        if (cyc === 6) {
+          if (endMo === 6) return `${year} 上半年 分潤`;
+          if (endMo === 12) return `${year} 下半年 分潤`;
+          return `${formatMonthRange(startYm, endYm)} 分潤`;
+        }
+        if (cyc === 12) {
+          return `${year} 年度分潤`;
+        }
+        return `${formatMonthRange(startYm, endYm)} 分潤`;
+      }
+
+      function defaultPayoutLabelForDate(isoDate, cycleMonths = 1) {
         const d = String(isoDate || todayISO());
         const ym = d.slice(0, 7);
-        const prevYm = shiftYearMonth(ym, -1) || ym;
-        return `${prevYm} 分潤`;
+        const endYm = shiftYearMonth(ym, -1) || ym;
+        return formatPayoutLabelByCycle(endYm, cycleMonths);
       }
 
-      function extractPeriodMonth(stageLabel) {
-        const m = String(stageLabel || '').match(/\b(\d{4})[-/](\d{1,2})\b/);
-        if (!m) return '';
-        const mo = Number(m[2]);
-        if (mo < 1 || mo > 12) return '';
-        return `${m[1]}-${String(mo).padStart(2, '0')}`;
+      function extractPeriodRange(stageLabel) {
+        const s = String(stageLabel || '').trim();
+        if (!s) return { periodMonth: '', periodEndMonth: '' };
+
+        let m = s.match(/\b(\d{4})[-/](\d{1,2})\s*[~～-]\s*(\d{4})[-/](\d{1,2})\b/);
+        if (m) {
+          const m1 = Number(m[2]);
+          const m2 = Number(m[4]);
+          if (m1 >= 1 && m1 <= 12 && m2 >= 1 && m2 <= 12) {
+            return {
+              periodMonth: `${m[1]}-${String(m1).padStart(2, '0')}`,
+              periodEndMonth: `${m[3]}-${String(m2).padStart(2, '0')}`
+            };
+          }
+        }
+
+        m = s.match(/\b(\d{4})[-/](\d{1,2})\s*[~～]\s*(\d{1,2})\b/);
+        if (m) {
+          const m1 = Number(m[2]);
+          const m2 = Number(m[3]);
+          if (m1 >= 1 && m1 <= 12 && m2 >= 1 && m2 <= 12) {
+            return {
+              periodMonth: `${m[1]}-${String(m1).padStart(2, '0')}`,
+              periodEndMonth: `${m[1]}-${String(m2).padStart(2, '0')}`
+            };
+          }
+        }
+
+        m = s.match(/\b(\d{4})\s*Q([1-4])\b/i);
+        if (m) {
+          const q = Number(m[2]);
+          const sMo = String((q - 1) * 3 + 1).padStart(2, '0');
+          const eMo = String(q * 3).padStart(2, '0');
+          return { periodMonth: `${m[1]}-${sMo}`, periodEndMonth: `${m[1]}-${eMo}` };
+        }
+
+        m = s.match(/\b(\d{4})\s*(上半年|下半年)/);
+        if (m) {
+          return m[2] === '上半年'
+            ? { periodMonth: `${m[1]}-01`, periodEndMonth: `${m[1]}-06` }
+            : { periodMonth: `${m[1]}-07`, periodEndMonth: `${m[1]}-12` };
+        }
+
+        m = s.match(/\b(\d{4})\s*年度/);
+        if (m) {
+          return { periodMonth: `${m[1]}-01`, periodEndMonth: `${m[1]}-12` };
+        }
+
+        m = s.match(/\b(\d{4})[-/](\d{1,2})\b/);
+        if (m) {
+          const mo = Number(m[2]);
+          if (mo >= 1 && mo <= 12) {
+            return { periodMonth: `${m[1]}-${String(mo).padStart(2, '0')}`, periodEndMonth: '' };
+          }
+        }
+
+        return { periodMonth: '', periodEndMonth: '' };
       }
 
-      function incrementStageLabel(prevStage) {
+      function incrementStageLabel(prevStage, cycleMonths = 1) {
         const s = String(prevStage || '').trim();
         if (!s) return '';
+        const cyc = Math.max(1, Math.round(safeNum(cycleMonths, 1)));
+
+        if (/\b\d{4}[-/]\d{1,2}\s*[~～]\s*\d{4}[-/]\d{1,2}\b/.test(s)) {
+          return s.replace(/\b(\d{4})[-/](\d{1,2})\s*[~～]\s*(\d{4})[-/](\d{1,2})\b/, (_, y1, m1, y2, m2) => {
+            const ns = shiftYearMonth(`${y1}-${m1}`, cyc);
+            const ne = shiftYearMonth(`${y2}-${m2}`, cyc);
+            return formatMonthRange(ns, ne);
+          });
+        }
+
+        if (/\b\d{4}[-/]\d{1,2}\s*[~～]\s*\d{1,2}\b/.test(s)) {
+          return s.replace(/\b(\d{4})[-/](\d{1,2})\s*[~～]\s*(\d{1,2})\b/, (_, y, m1, m2) => {
+            const ns = shiftYearMonth(`${y}-${m1}`, cyc);
+            const ne = shiftYearMonth(`${y}-${m2}`, cyc);
+            return formatMonthRange(ns, ne);
+          });
+        }
+
+        if (/\b\d{4}\s*Q[1-4]\b/i.test(s)) {
+          return s.replace(/\b(\d{4})(\s*)Q([1-4])\b/i, (_, y, sp, q) => {
+            const totalQ = Number(y) * 4 + (Number(q) - 1) + Math.max(1, Math.round(cyc / 3));
+            return `${Math.floor(totalQ / 4)}${sp}Q${(totalQ % 4) + 1}`;
+          });
+        }
+
+        if (/\b\d{4}\s*(上半年|下半年)/.test(s)) {
+          return s.replace(/\b(\d{4})(\s*)(上半年|下半年)/, (_, y, sp, half) => {
+            return half === '上半年' ? `${y}${sp}下半年` : `${Number(y) + 1}${sp}上半年`;
+          });
+        }
+
+        if (/\b\d{4}\s*年度/.test(s)) {
+          return s.replace(/\b(\d{4})(\s*年度)/, (_, y, suffix) => `${Number(y) + Math.max(1, Math.round(cyc / 12))}${suffix}`);
+        }
+
         if (/\b\d{4}[-/]\d{1,2}\b/.test(s)) {
           return s.replace(/\b(\d{4})([-/.])(\d{1,2})\b/, (_, y, sep, mo) => {
-            const nextYm = shiftYearMonth(`${y}-${mo}`, 1);
+            const nextYm = shiftYearMonth(`${y}-${mo}`, cyc);
             return nextYm ? (sep === '/' ? nextYm.replace('-', '/') : nextYm) : `${y}${sep}${mo}`;
           });
         }
+
         if (/(第\s*)(\d+)(\s*次)/.test(s)) {
           return s.replace(/(第\s*)(\d+)(\s*次)/, (_, p1, num, p3) => `${p1}${Number(num) + 1}${p3}`);
         }
         return s;
+      }
+
+      function getInvEstimateMeta(invId) {
+        const inv = (state.investments || []).find((x) => x.id === invId) || null;
+        if (!inv) {
+          return { inv: null, principal: 0, cycleMonths: 1, minRate: 0, maxRate: 0, perMin: 0, perMax: 0, perAvg: 0 };
+        }
+        const principal = safeNum(inv.principal);
+        const cycleMonths = Math.max(1, Math.round(safeNum(inv.cycleMonths, 1)));
+        const minRate = safeNum(inv.minRate);
+        const maxRate = safeNum(inv.maxRate);
+        const perMin = Math.round(principal * (minRate / 100));
+        const perMax = Math.round(principal * (maxRate / 100));
+        const perAvg = Math.round((perMin + perMax) / 2);
+        return { inv, principal, cycleMonths, minRate, maxRate, perMin, perMax, perAvg };
       }
 
       function nextInvStageLabel(invId, eventType, dateVal = todayISO()) {
@@ -3607,7 +3740,8 @@
         if (eventType === 'invest') return `第 ${count} 次投入`;
         if (eventType === 'withdraw') return `第 ${count} 次撤資`;
         if (eventType === 'settle') return '全額結算出場';
-        return defaultPayoutLabelForDate(dateVal);
+        const { cycleMonths } = getInvEstimateMeta(invId);
+        return defaultPayoutLabelForDate(dateVal, cycleMonths);
       }
 
       function applyInvLogRecord(rec) {
@@ -3687,10 +3821,11 @@
               </select>
             </div>
           </div>
+          <div id="invlog-estimate-bar" class="hidden rounded-lg bg-[#f7f7f5] hairline px-3 py-2 text-[11px] text-zinc-600 flex flex-wrap items-center justify-between gap-2"></div>
           <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div><label class="block text-xs font-medium text-zinc-600 mb-1">日期（可選過去歷史日）</label><input id="invlog-date" name="date" type="date" required value="${escapeHtml(initDate)}" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" /></div>
+            <div><label class="block text-xs font-medium text-zinc-600 mb-1">入帳日期（可選歷史日）</label><input id="invlog-date" name="date" type="date" required value="${escapeHtml(initDate)}" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" /></div>
             <div><label class="block text-xs font-medium text-zinc-600 mb-1">次別／說明</label><input id="invlog-stage" name="stageLabel" value="${escapeHtml(initStage)}" placeholder="例如：2021-05 分潤、第 1 次投入" class="w-full h-9 px-3 rounded-lg hairline text-sm" /></div>
-            <div><label class="block text-xs font-medium text-zinc-600 mb-1">金額 (TWD)</label><input name="amountTWD" type="number" step="1" min="1" required value="${initAmt > 0 ? initAmt : ''}" placeholder="輸入台幣金額" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" /></div>
+            <div><label class="block text-xs font-medium text-zinc-600 mb-1">金額 (TWD)</label><input id="invlog-amount" name="amountTWD" type="number" step="1" min="1" required value="${initAmt > 0 ? initAmt : ''}" placeholder="輸入台幣金額" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" /></div>
           </div>
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
@@ -3714,7 +3849,7 @@
           const proj = (state.investments || []).find((x) => x.id === invId);
           if (!proj) { showToast('請先建立實體投資專案'); return; }
           const stageLabel = String(fd.get('stageLabel') || '').trim();
-          const periodMonth = extractPeriodMonth(stageLabel);
+          const { periodMonth, periodEndMonth } = extractPeriodRange(stageLabel);
           const rec = {
             id: isEdit ? editLog.id : uid('ilog'),
             investmentId: proj.id,
@@ -3723,6 +3858,7 @@
             eventType: String(fd.get('eventType') || 'payout'),
             stageLabel,
             ...(periodMonth ? { periodMonth } : {}),
+            ...(periodEndMonth ? { periodEndMonth } : {}),
             amountTWD: safeNum(fd.get('amountTWD')),
             account: resolveModalAccount(fd),
             applyMode: String(fd.get('applyMode') || 'sync_live'),
@@ -3755,11 +3891,63 @@
             customIn.required = show;
           });
         }
+
+        const projSel = document.getElementById('invlog-project');
+        const typeSel = document.getElementById('invlog-type');
+        const dateIn = document.getElementById('invlog-date');
+        const stageInput = document.getElementById('invlog-stage');
+        const amtInput = document.getElementById('invlog-amount');
+        const estBar = document.getElementById('invlog-estimate-bar');
+
+        const refreshEstimateBar = () => {
+          if (!projSel || !estBar) return;
+          const meta = getInvEstimateMeta(projSel.value);
+          if (!meta.inv) {
+            estBar.classList.add('hidden');
+            return;
+          }
+          const t = typeSel ? typeSel.value : 'payout';
+          const rangeText = meta.perMax > 0
+            ? `單期預估分紅 <strong class="font-mono-num text-zinc-900">${fmtTWD(meta.perMin)} ～ ${fmtTWD(meta.perMax)}</strong>`
+            : '尚未設定單期報酬率';
+          let btnsHtml = '';
+          if (t === 'payout' && meta.perMax > 0) {
+            btnsHtml = `
+              <div class="flex items-center gap-1">
+                <button type="button" data-fill-amt="${meta.perMin}" class="px-2 py-0.5 rounded bg-white hover:bg-zinc-100 hairline text-zinc-700 font-medium">低標</button>
+                <button type="button" data-fill-amt="${meta.perAvg}" class="px-2 py-0.5 rounded bg-white hover:bg-zinc-100 hairline text-zinc-900 font-medium">中位數</button>
+                <button type="button" data-fill-amt="${meta.perMax}" class="px-2 py-0.5 rounded bg-white hover:bg-zinc-100 hairline text-zinc-700 font-medium">高標</button>
+              </div>
+            `;
+          } else if ((t === 'settle' || t === 'withdraw') && meta.principal > 0) {
+            btnsHtml = `
+              <div class="flex items-center gap-1">
+                <button type="button" data-fill-amt="${Math.round(meta.principal)}" class="px-2 py-0.5 rounded bg-white hover:bg-zinc-100 hairline text-zinc-900 font-medium">帶入在投本金</button>
+              </div>
+            `;
+          }
+          estBar.innerHTML = `
+            <div>本金 <span class="font-mono-num text-zinc-800">${fmtTWD(meta.principal)}</span> · ${cycleLabel(meta.cycleMonths)} · ${rangeText}</div>
+            ${btnsHtml}
+          `;
+          estBar.classList.remove('hidden');
+          estBar.querySelectorAll('[data-fill-amt]').forEach((btn) => {
+            btn.addEventListener('click', () => {
+              if (amtInput) amtInput.value = btn.getAttribute('data-fill-amt');
+            });
+          });
+          if (amtInput) {
+            amtInput.placeholder = (t === 'payout' && meta.perMax > 0)
+              ? `預估 ${meta.perMin.toLocaleString('en-US')} ~ ${meta.perMax.toLocaleString('en-US')}`
+              : '輸入台幣金額';
+          }
+        };
+
+        refreshEstimateBar();
+        if (projSel) projSel.addEventListener('change', refreshEstimateBar);
+        if (typeSel) typeSel.addEventListener('change', refreshEstimateBar);
+
         if (!isEdit) {
-          const projSel = document.getElementById('invlog-project');
-          const typeSel = document.getElementById('invlog-type');
-          const dateIn = document.getElementById('invlog-date');
-          const stageInput = document.getElementById('invlog-stage');
           let stageEdited = false;
           if (stageInput) {
             stageInput.addEventListener('input', () => {
@@ -3802,6 +3990,7 @@
               <input name="accountCustom" placeholder="輸入自訂帳戶名稱" class="hidden mt-2 w-full h-9 px-3 rounded-lg hairline text-sm" />
             </div>
           </div>
+          <div id="batch-inv-estimate-bar" class="rounded-lg bg-[#f7f7f5] hairline px-3 py-2 text-[11px] text-zinc-600"></div>
           <div>
             <label class="block text-xs font-medium text-zinc-600 mb-1">本金與銀行餘額處理方式</label>
             <select name="applyMode" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white">
@@ -3845,7 +4034,7 @@
             return;
           }
           rows.forEach((r) => {
-            const periodMonth = extractPeriodMonth(r.stageLabel);
+            const { periodMonth, periodEndMonth } = extractPeriodRange(r.stageLabel);
             applyInvLogRecord({
               id: uid('ilog'),
               investmentId: proj.id,
@@ -3854,6 +4043,7 @@
               eventType: r.eventType,
               stageLabel: r.stageLabel,
               ...(periodMonth ? { periodMonth } : {}),
+              ...(periodEndMonth ? { periodEndMonth } : {}),
               amountTWD: r.amountTWD,
               account: acc,
               applyMode,
@@ -3876,17 +4066,26 @@
         }
 
         const projSel = document.getElementById('batch-inv-project');
+        const estBar = document.getElementById('batch-inv-estimate-bar');
         const container = document.getElementById('batch-inv-rows');
 
-        const formatBatchInvStage = (eventType, seq, dateVal) => {
+        const formatBatchInvStage = (eventType, seq, dateVal, cycleMonths) => {
           if (eventType === 'invest') return `第 ${seq} 次投入`;
           if (eventType === 'withdraw') return `第 ${seq} 次撤資`;
           if (eventType === 'settle') return '全額結算出場';
-          return defaultPayoutLabelForDate(dateVal);
+          return defaultPayoutLabelForDate(dateVal, cycleMonths);
         };
 
-        const syncBatchInvStageLabels = () => {
+        const syncBatchInvMeta = () => {
           const invId = projSel ? projSel.value : '';
+          const meta = getInvEstimateMeta(invId);
+          if (estBar && meta.inv) {
+            const rangeText = meta.perMax > 0
+              ? `單期預估分紅 <strong class="font-mono-num text-zinc-900">${fmtTWD(meta.perMin)} ～ ${fmtTWD(meta.perMax)}</strong>（中位數 <span class="font-mono-num">${fmtTWD(meta.perAvg)}</span>）`
+              : '尚未設定單期報酬率';
+            estBar.innerHTML = `本金 <span class="font-mono-num text-zinc-800">${fmtTWD(meta.principal)}</span> · ${cycleLabel(meta.cycleMonths)} · ${rangeText} · 加一列自動推 ${meta.cycleMonths} 個月`;
+          }
+
           const baseCounts = { invest: 0, withdraw: 0, payout: 0, settle: 0 };
           (state.investmentLogs || []).forEach((l) => {
             if (l.investmentId === invId && Object.prototype.hasOwnProperty.call(baseCounts, l.eventType)) {
@@ -3897,10 +4096,16 @@
             const dateEl = row.querySelector('.bi-date');
             const typeEl = row.querySelector('.bi-type');
             const stageEl = row.querySelector('.bi-stage');
+            const amtEl = row.querySelector('.bi-amt');
             const t = typeEl ? typeEl.value : 'invest';
             baseCounts[t] = (baseCounts[t] || 0) + 1;
             if (stageEl && stageEl.dataset.manual !== '1') {
-              stageEl.value = formatBatchInvStage(t, baseCounts[t], dateEl ? dateEl.value : todayISO());
+              stageEl.value = formatBatchInvStage(t, baseCounts[t], dateEl ? dateEl.value : todayISO(), meta.cycleMonths);
+            }
+            if (amtEl) {
+              amtEl.placeholder = (t === 'payout' && meta.perMax > 0)
+                ? `約 ${fmtCompactWan(meta.perMin)}~${fmtCompactWan(meta.perMax)}`
+                : '金額 TWD';
             }
           });
         };
@@ -3931,23 +4136,23 @@
           });
           dateEl.addEventListener('change', () => {
             if (typeEl.value === 'payout' && stageEl.dataset.manual !== '1') {
-              syncBatchInvStageLabels();
+              syncBatchInvMeta();
             }
           });
           typeEl.addEventListener('change', () => {
             stageEl.dataset.manual = '';
-            syncBatchInvStageLabels();
+            syncBatchInvMeta();
           });
           row.querySelector('.bi-del').addEventListener('click', () => {
             row.remove();
-            syncBatchInvStageLabels();
+            syncBatchInvMeta();
           });
           container.appendChild(row);
-          syncBatchInvStageLabels();
+          syncBatchInvMeta();
         };
 
         if (projSel) {
-          projSel.addEventListener('change', syncBatchInvStageLabels);
+          projSel.addEventListener('change', syncBatchInvMeta);
         }
 
         // Pre-populate 3 illustrative starter rows (1st invest, 2nd invest, payout)
@@ -3962,24 +4167,25 @@
             addInvRow('invest');
             return;
           }
+          const meta = getInvEstimateMeta(projSel ? projSel.value : '');
+          const cyc = meta.cycleMonths;
           const prevDate = lastRow.querySelector('.bi-date').value || todayISO();
-          const nextDate = shiftIsoDateByMonths(prevDate, 1);
           const prevType = lastRow.querySelector('.bi-type').value || 'invest';
+          const stepMonths = prevType === 'payout' ? cyc : 1;
+          const nextDate = shiftIsoDateByMonths(prevDate, stepMonths);
           const prevStageEl = lastRow.querySelector('.bi-stage');
           const prevStage = prevStageEl ? prevStageEl.value.trim() : '';
 
           if (prevType === 'payout') {
-            if (prevStage && /\b\d{4}[-/]\d{1,2}\b/.test(prevStage)) {
-              const nextStage = incrementStageLabel(prevStage);
+            if (prevStage) {
+              const nextStage = incrementStageLabel(prevStage, cyc);
               const keepManual = prevStageEl && prevStageEl.dataset.manual === '1';
               addInvRow(prevType, nextStage, nextDate, keepManual);
-            } else if (prevStageEl && prevStageEl.dataset.manual === '1' && prevStage) {
-              addInvRow(prevType, incrementStageLabel(prevStage), nextDate, true);
             } else {
               addInvRow(prevType, '', nextDate, false);
             }
           } else if (prevStageEl && prevStageEl.dataset.manual === '1' && prevStage) {
-            addInvRow(prevType, incrementStageLabel(prevStage), nextDate, true);
+            addInvRow(prevType, incrementStageLabel(prevStage, 1), nextDate, true);
           } else {
             addInvRow(prevType, '', nextDate, false);
           }
