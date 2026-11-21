@@ -3789,9 +3789,12 @@
       function openInvLogModal(inv = null, defaultAmt = 0, editLog = null) {
         const isEdit = Boolean(editLog);
         const list = state.investments || [];
+        const filteredInv = invLogFilter && invLogFilter !== 'ALL'
+          ? (list.find((x) => x.id === invLogFilter) || null)
+          : null;
         const initInv = isEdit
           ? (list.find((x) => x.id === editLog.investmentId || x.name === editLog.investmentName) || list[0] || null)
-          : (inv || list[0] || null);
+          : (inv || filteredInv || list[0] || null);
         const initInvId = initInv ? initInv.id : (isEdit ? (editLog.investmentId || '') : '');
         const initType = isEdit ? (editLog.eventType || 'payout') : (defaultAmt > 0 ? 'payout' : 'invest');
         const initDate = isEdit ? (editLog.date || todayISO()) : todayISO();
@@ -3835,7 +3838,7 @@
             </div>
             <div>
               <label class="block text-xs font-medium text-zinc-600 mb-1">本金與銀行餘額處理方式</label>
-              <select name="applyMode" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white">
+              <select id="invlog-apply-mode" name="applyMode" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white">
                 <option value="sync_live" ${initMode === 'sync_live' ? 'selected' : ''}>即時新異動 — 自動更新專案本金與銀行餘額</option>
                 <option value="history_only" ${initMode === 'history_only' ? 'selected' : ''}>補登歷史紀錄 — 僅記帳，不重複加減現有本金與餘額</option>
               </select>
@@ -3947,6 +3950,14 @@
         if (projSel) projSel.addEventListener('change', refreshEstimateBar);
         if (typeSel) typeSel.addEventListener('change', refreshEstimateBar);
 
+        const applyModeSel = document.getElementById('invlog-apply-mode');
+        let applyModeManual = false;
+        if (applyModeSel) {
+          applyModeSel.addEventListener('change', () => {
+            applyModeManual = true;
+          });
+        }
+
         let stageEdited = false;
         if (stageInput) {
           stageInput.addEventListener('input', () => {
@@ -3964,8 +3975,13 @@
         if (typeSel) typeSel.addEventListener('change', () => refreshStage(true));
         if (dateIn) {
           const onDateUpdate = () => {
-            if (typeSel && typeSel.value === 'payout' && /^\d{4}-\d{2}-\d{2}$/.test(dateIn.value)) {
-              refreshStage(false);
+            if (/^\d{4}-\d{2}-\d{2}$/.test(dateIn.value)) {
+              if (!isEdit && !applyModeManual && applyModeSel) {
+                applyModeSel.value = dateIn.value < todayISO() ? 'history_only' : 'sync_live';
+              }
+              if (typeSel && typeSel.value === 'payout') {
+                refreshStage(false);
+              }
             }
           };
           dateIn.addEventListener('input', onDateUpdate);
@@ -3979,8 +3995,11 @@
           showToast('請先新增至少一個實體投資專案');
           return;
         }
+        const initBatchInvId = (invLogFilter && invLogFilter !== 'ALL' && list.some((x) => x.id === invLogFilter))
+          ? invLogFilter
+          : list[0].id;
         const invOptions = list.map((x) =>
-          `<option value="${escapeHtml(x.id)}">${escapeHtml(x.name)}（在投 ${fmtTWD(x.principal)}）</option>`
+          `<option value="${escapeHtml(x.id)}" ${x.id === initBatchInvId ? 'selected' : ''}>${escapeHtml(x.name)}（在投 ${fmtTWD(x.principal)}）</option>`
         ).join('');
 
         const html = `
