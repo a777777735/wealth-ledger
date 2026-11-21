@@ -3947,24 +3947,29 @@
         if (projSel) projSel.addEventListener('change', refreshEstimateBar);
         if (typeSel) typeSel.addEventListener('change', refreshEstimateBar);
 
-        if (!isEdit) {
-          let stageEdited = false;
-          if (stageInput) {
-            stageInput.addEventListener('input', () => {
-              stageEdited = Boolean(stageInput.value.trim());
-            });
+        let stageEdited = false;
+        if (stageInput) {
+          stageInput.addEventListener('input', () => {
+            stageEdited = Boolean(stageInput.value.trim());
+          });
+        }
+        const refreshStage = (force = false) => {
+          if (projSel && typeSel && stageInput && (force || !stageEdited)) {
+            const dVal = dateIn && /^\d{4}-\d{2}-\d{2}$/.test(dateIn.value) ? dateIn.value : todayISO();
+            stageInput.value = nextInvStageLabel(projSel.value, typeSel.value, dVal);
+            if (force) stageEdited = false;
           }
-          const refreshStage = (force = false) => {
-            if (projSel && typeSel && stageInput && (force || !stageEdited)) {
-              stageInput.value = nextInvStageLabel(projSel.value, typeSel.value, dateIn ? dateIn.value : todayISO());
-              if (force) stageEdited = false;
+        };
+        if (projSel) projSel.addEventListener('change', () => refreshStage(false));
+        if (typeSel) typeSel.addEventListener('change', () => refreshStage(true));
+        if (dateIn) {
+          const onDateUpdate = () => {
+            if (typeSel && typeSel.value === 'payout' && /^\d{4}-\d{2}-\d{2}$/.test(dateIn.value)) {
+              refreshStage(false);
             }
           };
-          if (projSel) projSel.addEventListener('change', () => refreshStage(false));
-          if (typeSel) typeSel.addEventListener('change', () => refreshStage(true));
-          if (dateIn) dateIn.addEventListener('change', () => {
-            if (typeSel && typeSel.value === 'payout') refreshStage(false);
-          });
+          dateIn.addEventListener('input', onDateUpdate);
+          dateIn.addEventListener('change', onDateUpdate);
         }
       }
 
@@ -4134,11 +4139,13 @@
           stageEl.addEventListener('input', () => {
             stageEl.dataset.manual = stageEl.value.trim() ? '1' : '';
           });
-          dateEl.addEventListener('change', () => {
-            if (typeEl.value === 'payout' && stageEl.dataset.manual !== '1') {
+          const onRowDateUpdate = () => {
+            if (typeEl.value === 'payout' && stageEl.dataset.manual !== '1' && /^\d{4}-\d{2}-\d{2}$/.test(dateEl.value)) {
               syncBatchInvMeta();
             }
-          });
+          };
+          dateEl.addEventListener('input', onRowDateUpdate);
+          dateEl.addEventListener('change', onRowDateUpdate);
           typeEl.addEventListener('change', () => {
             stageEl.dataset.manual = '';
             syncBatchInvMeta();
