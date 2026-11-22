@@ -276,7 +276,8 @@ async function handleAiProxy(request, env) {
     let usedModel = '';
 
     if (provider === 'gemini') {
-      usedModel = String(body.model || 'gemini-2.5-flash').trim();
+      const reqModel = String(body.model || '').trim();
+      usedModel = (!reqModel || reqModel === 'gemini-2.5-flash') ? 'gemini-3.8-flash' : reqModel;
       text = await callGemini({ apiKey, model: usedModel, systemPrompt, prompt, attachments, expectJson });
     } else if (provider === 'anthropic') {
       usedModel = String(body.model || 'claude-sonnet-4-20250514').trim();

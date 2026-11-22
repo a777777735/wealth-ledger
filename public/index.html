@@ -1492,7 +1492,7 @@
               </div>
               <div class="space-y-1.5">
                 <label for="cfg-ai-model" class="block text-xs font-medium text-zinc-700">模型名稱 (Model ID)</label>
-                <input id="cfg-ai-model" type="text" placeholder="gemini-2.5-flash" class="w-full h-9 px-3 rounded-lg hairline bg-white text-xs font-mono-num" />
+                <input id="cfg-ai-model" type="text" placeholder="gemini-3.8-flash" class="w-full h-9 px-3 rounded-lg hairline bg-white text-xs font-mono-num" />
               </div>
               <div class="space-y-1.5">
                 <label for="cfg-ai-key" class="block text-xs font-medium text-zinc-700">API Key（僅存本機，不寫入雲端帳本）</label>
@@ -8481,7 +8481,7 @@
       // AI SETTINGS & UNIVERSAL MIGRATION WIZARD ENGINE
       // ============================================================
       const AI_PROVIDER_DEFAULTS = {
-        gemini: 'gemini-2.5-flash',
+        gemini: 'gemini-3.8-flash',
         openai: 'gpt-4o-mini',
         anthropic: 'claude-sonnet-4-20250514',
         custom: ''
@@ -8498,6 +8498,10 @@
 
       function syncAiConfigUI() {
         const provider = appConfig.aiProvider || 'gemini';
+        if (provider === 'gemini' && appConfig.aiModel === 'gemini-2.5-flash') {
+          appConfig.aiModel = 'gemini-3.8-flash';
+          saveConfig();
+        }
         const model = appConfig.aiModel || AI_PROVIDER_DEFAULTS[provider] || '';
         const key = appConfig.aiApiKey || '';
         const baseUrl = appConfig.aiBaseUrl || '';
