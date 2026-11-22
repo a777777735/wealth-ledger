@@ -507,7 +507,10 @@
                 <h2 class="text-base font-semibold text-zinc-900">銀行與券商現金帳戶</h2>
                 <p class="text-xs text-zinc-500 mt-0.5">跨台幣、美金、港幣、人民幣即時換算折合台幣</p>
               </div>
-              <button id="btn-add-cash" type="button" class="btn-focus h-8 px-3.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-medium transition-colors duration-150">新增現金帳戶</button>
+              <div class="flex flex-wrap items-center gap-2">
+                <button id="btn-cash-transfer" type="button" class="btn-focus h-8 px-3.5 rounded-lg bg-white hover:bg-zinc-50 text-zinc-800 hairline text-xs font-medium transition-colors duration-150">帳戶轉帳</button>
+                <button id="btn-add-cash" type="button" class="btn-focus h-8 px-3.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-medium transition-colors duration-150">新增現金帳戶</button>
+              </div>
             </div>
 
             <div id="cash-currency-pills" class="grid grid-cols-2 sm:grid-cols-4 gap-3"></div>
@@ -648,6 +651,18 @@
         <section id="tab-expenses" class="tab-panel hidden space-y-6">
           <div id="expense-summary-cards" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"></div>
 
+          <!-- Monthly Budget Management -->
+          <div class="bg-white rounded-xl p-6 hairline space-y-4">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 class="text-base font-semibold text-zinc-900">月度預算管理</h2>
+                <p id="budget-subtitle" class="text-xs text-zinc-500 mt-0.5">設定每月總預算與各分類預算上限，即時追蹤進度與超支預警</p>
+              </div>
+              <button id="btn-edit-budgets" type="button" class="btn-focus h-8 px-3.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-medium transition-colors duration-150">設定月預算</button>
+            </div>
+            <div id="budget-progress-body" class="space-y-3"></div>
+          </div>
+
           <div class="bg-white rounded-xl p-6 hairline space-y-4">
             <div class="flex flex-wrap items-center justify-between gap-3">
               <div>
@@ -678,36 +693,66 @@
             </div>
           </div>
 
+          <!-- Monthly Calendar View -->
           <div class="bg-white rounded-xl p-6 hairline space-y-4">
             <div class="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <h2 class="text-base font-semibold text-zinc-900">隨機與單筆支出</h2>
-                <p class="text-xs text-zinc-500 mt-0.5">日常餐飲、購物、旅遊、醫療與臨時消費，支援月份與類別篩選</p>
+                <h2 class="text-base font-semibold text-zinc-900">月曆收支檢視</h2>
+                <p id="exp-cal-summary" class="text-xs text-zinc-500 mt-0.5 font-mono-num">點擊任一日期可立即篩選當日明細</p>
+              </div>
+              <div class="flex items-center gap-1.5">
+                <button id="btn-exp-cal-prev" type="button" class="btn-focus h-7 px-2.5 rounded-lg bg-[#f7f7f5] hover:bg-zinc-200/70 text-xs text-zinc-700">← 上月</button>
+                <span id="exp-cal-title" class="px-2 text-xs font-semibold font-mono-num text-zinc-900 min-w-[84px] text-center"></span>
+                <button id="btn-exp-cal-next" type="button" class="btn-focus h-7 px-2.5 rounded-lg bg-[#f7f7f5] hover:bg-zinc-200/70 text-xs text-zinc-700">下月 →</button>
+                <button id="btn-exp-cal-today" type="button" class="btn-focus h-7 px-2.5 rounded-lg bg-white hover:bg-zinc-50 hairline text-xs text-zinc-600 ml-1">本月</button>
+              </div>
+            </div>
+            <div class="grid grid-cols-7 gap-1 text-center text-[11px] font-medium text-zinc-400">
+              <div>日</div><div>一</div><div>二</div><div>三</div><div>四</div><div>五</div><div>六</div>
+            </div>
+            <div id="expense-calendar-grid" class="grid grid-cols-7 gap-1"></div>
+          </div>
+
+          <div class="bg-white rounded-xl p-6 hairline space-y-4">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 class="text-base font-semibold text-zinc-900">隨機與單筆支出（含跨年複合搜尋）</h2>
+                <p class="text-xs text-zinc-500 mt-0.5">支援關鍵字搜尋品項／備註／帳戶、自訂日期區間、月份與類別篩選</p>
               </div>
               <div class="flex flex-wrap items-center gap-2">
-                <input id="filter-exp-month" type="month" class="h-8 px-2.5 rounded-lg hairline text-xs bg-white text-zinc-700" />
-                <select id="filter-exp-cat" class="h-8 px-2.5 rounded-lg hairline text-xs bg-white text-zinc-700">
-                  <option value="ALL">全部類別</option>
-                  <option value="居住與房貸">居住與房貸</option>
-                  <option value="保險與醫療">保險與醫療</option>
-                  <option value="水電與通訊">水電與通訊</option>
-                  <option value="訂閱與會員">訂閱與會員</option>
-                  <option value="家庭與孝親">家庭與孝親</option>
-                  <option value="交通與車貸">交通與車貸</option>
-                  <option value="餐飲美食">餐飲美食</option>
-                  <option value="交通旅遊">交通旅遊</option>
-                  <option value="購物消費">購物消費</option>
-                  <option value="醫療保健">醫療保健</option>
-                  <option value="休閒娛樂">休閒娛樂</option>
-                  <option value="居家修繕">居家修繕</option>
-                  <option value="社交禮金">社交禮金</option>
-                  <option value="其他固定支出">其他固定支出</option>
-                  <option value="其他隨機支出">其他隨機支出</option>
-                </select>
-                <button id="btn-clear-exp-filter" type="button" class="btn-focus h-8 px-2.5 rounded-lg bg-[#f7f7f5] hover:bg-zinc-200/70 text-zinc-600 text-xs font-medium transition-colors duration-150">全部期間</button>
                 <button id="btn-batch-edit-exp-cat" type="button" class="btn-focus h-8 px-3 rounded-lg bg-white hover:bg-zinc-50 text-zinc-800 hairline text-xs font-medium transition-colors duration-150">批次修改類別</button>
                 <button id="btn-add-random-exp" type="button" class="btn-focus h-8 px-3.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-medium transition-colors duration-150">新增隨機支出</button>
               </div>
+            </div>
+
+            <!-- Multi-criteria Search Bar -->
+            <div class="flex flex-wrap items-center gap-2 p-3 rounded-lg bg-[#f7f7f5] hairline">
+              <input id="filter-exp-q" type="search" placeholder="關鍵字搜尋（品項、備註、帳戶...）" class="h-8 px-2.5 rounded-lg hairline text-xs bg-white text-zinc-800 flex-1 min-w-[170px]" />
+              <input id="filter-exp-month" type="month" title="指定月份" class="h-8 px-2 rounded-lg hairline text-xs bg-white text-zinc-700" />
+              <div class="inline-flex items-center gap-1 text-xs text-zinc-500">
+                <input id="filter-exp-from" type="date" title="起始日期" class="h-8 px-2 rounded-lg hairline text-xs bg-white text-zinc-700 font-mono-num" />
+                <span>～</span>
+                <input id="filter-exp-to" type="date" title="結束日期" class="h-8 px-2 rounded-lg hairline text-xs bg-white text-zinc-700 font-mono-num" />
+              </div>
+              <select id="filter-exp-cat" class="h-8 px-2.5 rounded-lg hairline text-xs bg-white text-zinc-700">
+                <option value="ALL">全部類別</option>
+                <option value="居住與房貸">居住與房貸</option>
+                <option value="保險與醫療">保險與醫療</option>
+                <option value="水電與通訊">水電與通訊</option>
+                <option value="訂閱與會員">訂閱與會員</option>
+                <option value="家庭與孝親">家庭與孝親</option>
+                <option value="交通與車貸">交通與車貸</option>
+                <option value="餐飲美食">餐飲美食</option>
+                <option value="交通旅遊">交通旅遊</option>
+                <option value="購物消費">購物消費</option>
+                <option value="醫療保健">醫療保健</option>
+                <option value="休閒娛樂">休閒娛樂</option>
+                <option value="居家修繕">居家修繕</option>
+                <option value="社交禮金">社交禮金</option>
+                <option value="其他固定支出">其他固定支出</option>
+                <option value="其他隨機支出">其他隨機支出</option>
+              </select>
+              <button id="btn-clear-exp-filter" type="button" class="btn-focus h-8 px-2.5 rounded-lg bg-white hover:bg-zinc-100 hairline text-zinc-600 text-xs font-medium transition-colors duration-150">重設篩選</button>
             </div>
 
             <div id="random-exp-bar" class="text-xs text-zinc-600 font-mono-num"></div>
@@ -1515,7 +1560,8 @@
           investmentLogs: [],
           stockTrades: [],
           snapshots: [],
-          ledger: []
+          ledger: [],
+          budgets: { monthlyTotal: 0, byCategory: {} }
         };
       }
 
@@ -1716,6 +1762,10 @@
       let stockTradeTypeFilter = 'ALL';
       let expMonthFilter = '';
       let expCatFilter = 'ALL';
+      let expQueryFilter = '';
+      let expFromFilter = '';
+      let expToFilter = '';
+      let expCalMonth = todayISO().slice(0, 7);
       let fxFilterCur = 'ALL';
       let invLogFilter = 'ALL';
       let invTagFilter = 'ALL';
@@ -3222,14 +3272,37 @@
           }).join('');
         }
 
+        if (typeof renderBudgetPanel === 'function') renderBudgetPanel();
+        if (typeof renderExpenseCalendar === 'function') renderExpenseCalendar();
+
+        const qLower = String(expQueryFilter || '').trim().toLowerCase();
         const randList = [...(state.randomExpenses || [])]
-          .filter((r) => (!expMonthFilter || String(r.date || '').startsWith(expMonthFilter)) && (expCatFilter === 'ALL' || r.category === expCatFilter))
+          .filter((r) => {
+            const d = String(r.date || '');
+            if (expMonthFilter && !d.startsWith(expMonthFilter)) return false;
+            if (expFromFilter && d < expFromFilter) return false;
+            if (expToFilter && d > expToFilter) return false;
+            if (expCatFilter !== 'ALL' && r.category !== expCatFilter) return false;
+            if (qLower) {
+              const hay = `${r.title || ''} ${r.note || ''} ${r.account || ''} ${r.category || ''}`.toLowerCase();
+              if (!hay.includes(qLower)) return false;
+            }
+            return true;
+          })
           .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
 
         let filteredSumTWD = 0;
         randList.forEach((r) => { filteredSumTWD += safeNum(r.amount) * rateOf(r.currency || 'TWD'); });
+        const avgPerItem = randList.length > 0 ? filteredSumTWD / randList.length : 0;
+        const activeFilterTags = [];
+        if (qLower) activeFilterTags.push(`關鍵字「${escapeHtml(expQueryFilter.trim())}」`);
+        if (expMonthFilter) activeFilterTags.push(`月份 ${escapeHtml(expMonthFilter)}`);
+        if (expFromFilter || expToFilter) activeFilterTags.push(`區間 ${escapeHtml(expFromFilter || '...')} ～ ${escapeHtml(expToFilter || '...')}`);
+        if (expCatFilter !== 'ALL') activeFilterTags.push(`類別 ${escapeHtml(expCatFilter)}`);
         document.getElementById('random-exp-bar').innerHTML =
-          `篩選筆數 <span class="text-zinc-900 font-medium">${randList.length} 筆</span> · 合計 <span class="text-rose-700 font-medium">${fmtTWD(filteredSumTWD)}</span>`;
+          `符合條件 <span class="text-zinc-900 font-medium">${randList.length} 筆</span> · 合計 <span class="text-rose-700 font-medium">${fmtTWD(filteredSumTWD)}</span>` +
+          (randList.length > 0 ? ` · 單筆均額 <span class="text-zinc-700">${fmtTWD(avgPerItem)}</span>` : '') +
+          (activeFilterTags.length > 0 ? ` <span class="text-zinc-400 font-sans ml-1">(${activeFilterTags.join(' · ')})</span>` : '');
 
         const randTbody = document.getElementById('random-exp-tbody');
         if (randList.length === 0) {
@@ -7096,8 +7169,12 @@
               fixedExpenses: Array.isArray(parsed.fixedExpenses) ? parsed.fixedExpenses : [],
               randomExpenses: Array.isArray(parsed.randomExpenses) ? parsed.randomExpenses : [],
               fxTrades: Array.isArray(parsed.fxTrades) ? parsed.fxTrades : [],
+              incomeReceipts: Array.isArray(parsed.incomeReceipts) ? parsed.incomeReceipts : [],
+              investmentLogs: Array.isArray(parsed.investmentLogs) ? parsed.investmentLogs : [],
+              stockTrades: Array.isArray(parsed.stockTrades) ? parsed.stockTrades : [],
               snapshots: Array.isArray(parsed.snapshots) ? parsed.snapshots : [],
-              ledger: Array.isArray(parsed.ledger) ? parsed.ledger : []
+              ledger: Array.isArray(parsed.ledger) ? parsed.ledger : [],
+              budgets: (parsed.budgets && typeof parsed.budgets === 'object') ? parsed.budgets : { monthlyTotal: 0, byCategory: {} }
             };
             saveState();
             renderAll();
@@ -7427,12 +7504,307 @@
 
       document.getElementById('filter-exp-month').addEventListener('change', (e) => { expMonthFilter = e.target.value; renderExpenses(computeTotals(state)); });
       document.getElementById('filter-exp-cat').addEventListener('change', (e) => { expCatFilter = e.target.value; renderExpenses(computeTotals(state)); });
+      const expQEl = document.getElementById('filter-exp-q');
+      if (expQEl) expQEl.addEventListener('input', (e) => { expQueryFilter = e.target.value; renderExpenses(computeTotals(state)); });
+      const expFromEl = document.getElementById('filter-exp-from');
+      if (expFromEl) expFromEl.addEventListener('change', (e) => { expFromFilter = e.target.value; renderExpenses(computeTotals(state)); });
+      const expToEl = document.getElementById('filter-exp-to');
+      if (expToEl) expToEl.addEventListener('change', (e) => { expToFilter = e.target.value; renderExpenses(computeTotals(state)); });
       document.getElementById('btn-clear-exp-filter').addEventListener('click', () => {
-        expMonthFilter = ''; expCatFilter = 'ALL';
+        expMonthFilter = ''; expCatFilter = 'ALL'; expQueryFilter = ''; expFromFilter = ''; expToFilter = '';
         document.getElementById('filter-exp-month').value = '';
         document.getElementById('filter-exp-cat').value = 'ALL';
+        if (expQEl) expQEl.value = '';
+        if (expFromEl) expFromEl.value = '';
+        if (expToEl) expToEl.value = '';
         renderExpenses(computeTotals(state));
       });
+
+      // --- Monthly Budget Management ---
+      function renderBudgetPanel() {
+        const body = document.getElementById('budget-progress-body');
+        const sub = document.getElementById('budget-subtitle');
+        if (!body) return;
+        const b = (state.budgets && typeof state.budgets === 'object') ? state.budgets : { monthlyTotal: 0, byCategory: {} };
+        const byCat = (b.byCategory && typeof b.byCategory === 'object') ? b.byCategory : {};
+        const targetYm = expMonthFilter || expCalMonth || todayISO().slice(0, 7);
+        const rateOf = (cur) => (cur === 'TWD' ? 1 : safeNum(state.fx[cur], 1));
+
+        let monthTotalSpent = 0;
+        const catSpent = {};
+        (state.randomExpenses || []).forEach((r) => {
+          if (!String(r.date || '').startsWith(targetYm)) return;
+          const twd = safeNum(r.amount) * rateOf(r.currency || 'TWD');
+          monthTotalSpent += twd;
+          const c = r.category || '其他隨機支出';
+          catSpent[c] = (catSpent[c] || 0) + twd;
+        });
+
+        const totalBudget = safeNum(b.monthlyTotal);
+        const catBudgets = Object.entries(byCat).filter(([, v]) => safeNum(v) > 0);
+        if (sub) {
+          sub.textContent = `${targetYm} 實際已支出 ${fmtTWD(monthTotalSpent)} · 切換月份或點擊「設定月預算」調整上限`;
+        }
+
+        if (totalBudget <= 0 && catBudgets.length === 0) {
+          body.innerHTML = `<div class="rounded-lg bg-[#f7f7f5] hairline px-4 py-3 text-xs text-zinc-500">尚未設定月度預算。點擊右上角「<strong>設定月預算</strong>」，即可設定每月總花費上限與各分類預算，即時追蹤剩餘額度與超支警告。</div>`;
+          return;
+        }
+
+        const buildBar = (label, spent, limit, isMain = false) => {
+          const pct = limit > 0 ? (spent / limit) * 100 : 0;
+          const rem = limit - spent;
+          const over = rem < 0;
+          const warn = !over && pct >= 80;
+          const barCls = over ? 'bg-rose-600' : warn ? 'bg-amber-500' : 'bg-emerald-600';
+          const statusTxt = over
+            ? `<span class="text-rose-700 font-semibold">超支 ${fmtTWD(Math.abs(rem))}</span>`
+            : `<span class="text-emerald-700 font-medium">剩餘 ${fmtTWD(rem)}</span>`;
+          return `
+            <div class="${isMain ? 'p-3.5 rounded-lg bg-[#f7f7f5] hairline' : 'p-2.5 rounded-lg bg-white hairline'}">
+              <div class="flex flex-wrap items-center justify-between gap-2 text-xs">
+                <span class="${isMain ? 'font-semibold text-zinc-900' : 'font-medium text-zinc-800'}">${escapeHtml(label)}</span>
+                <div class="font-mono-num flex items-center gap-2">
+                  <span class="text-zinc-700">${fmtTWD(spent)} / ${fmtTWD(limit)}</span>
+                  <span class="text-[11px] text-zinc-400">(${pct.toFixed(0)}%)</span>
+                  <span>${statusTxt}</span>
+                </div>
+              </div>
+              <div class="mt-2 h-2 rounded-full bg-zinc-200/70 overflow-hidden">
+                <div class="h-full rounded-full ${barCls} transition-all" style="width:${Math.min(100, Math.max(0, pct)).toFixed(1)}%"></div>
+              </div>
+            </div>
+          `;
+        };
+
+        let html = '';
+        if (totalBudget > 0) html += buildBar(`${targetYm} 總支出預算`, monthTotalSpent, totalBudget, true);
+        if (catBudgets.length > 0) {
+          html += `<div class="grid grid-cols-1 md:grid-cols-2 gap-2.5">${catBudgets.map(([cat, lim]) => buildBar(cat, catSpent[cat] || 0, safeNum(lim), false)).join('')}</div>`;
+        }
+        body.innerHTML = html;
+      }
+
+      function openBudgetModal() {
+        const b = (state.budgets && typeof state.budgets === 'object') ? state.budgets : { monthlyTotal: 0, byCategory: {} };
+        const byCat = (b.byCategory && typeof b.byCategory === 'object') ? b.byCategory : {};
+        const catInputs = ALL_EXPENSE_CATEGORIES.map((cat) => `
+          <div class="flex items-center justify-between gap-2">
+            <label class="text-xs text-zinc-700 truncate">${escapeHtml(cat)}</label>
+            <input name="cat_${escapeHtml(cat)}" type="number" min="0" step="100" value="${safeNum(byCat[cat]) || ''}" placeholder="不限" class="w-28 h-8 px-2.5 rounded-lg hairline text-xs font-mono-num text-right" />
+          </div>
+        `).join('');
+        const html = `
+          <div class="space-y-3">
+            <div>
+              <label class="block text-xs font-medium text-zinc-700 mb-1">每月總支出預算上限 (TWD，填 0 表示不設定)</label>
+              <input name="monthlyTotal" type="number" min="0" step="500" value="${safeNum(b.monthlyTotal) || ''}" placeholder="例如 45000" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" />
+            </div>
+            <div class="pt-2 border-t border-zinc-900/[0.06] space-y-2">
+              <div class="text-xs font-medium text-zinc-700">各分類月預算上限 (TWD，留空表示不限)</div>
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-64 overflow-y-auto pr-1">${catInputs}</div>
+            </div>
+          </div>
+        `;
+        openFormModal('設定月度預算上限', html, (fd) => {
+          const monthlyTotal = Math.max(0, safeNum(fd.get('monthlyTotal')));
+          const nextByCat = {};
+          ALL_EXPENSE_CATEGORIES.forEach((cat) => {
+            const v = Math.max(0, safeNum(fd.get('cat_' + cat)));
+            if (v > 0) nextByCat[cat] = v;
+          });
+          state.budgets = { monthlyTotal, byCategory: nextByCat };
+          saveState();
+          renderAll();
+          showToast('已更新月度預算設定');
+        });
+      }
+
+      const btnEditBudgets = document.getElementById('btn-edit-budgets');
+      if (btnEditBudgets) btnEditBudgets.addEventListener('click', openBudgetModal);
+
+      // --- Monthly Calendar Cashflow View ---
+      function renderExpenseCalendar() {
+        const grid = document.getElementById('expense-calendar-grid');
+        const titleEl = document.getElementById('exp-cal-title');
+        const sumEl = document.getElementById('exp-cal-summary');
+        if (!grid || !titleEl) return;
+        const ym = /^\d{4}-\d{2}$/.test(expCalMonth) ? expCalMonth : todayISO().slice(0, 7);
+        const [y, m] = ym.split('-').map(Number);
+        titleEl.textContent = `${y} 年 ${String(m).padStart(2, '0')} 月`;
+
+        const rateOf = (cur) => (cur === 'TWD' ? 1 : safeNum(state.fx[cur], 1));
+        const dayExp = {};
+        const dayInc = {};
+        let monthExp = 0;
+        let monthInc = 0;
+
+        (state.randomExpenses || []).forEach((r) => {
+          const d = normalizeDateStr(r.date);
+          if (!d || !d.startsWith(ym)) return;
+          const twd = safeNum(r.amount) * rateOf(r.currency || 'TWD');
+          dayExp[d] = (dayExp[d] || 0) + twd;
+          monthExp += twd;
+        });
+        (state.incomeReceipts || []).forEach((r) => {
+          const d = normalizeDateStr(r.date);
+          if (!d || !d.startsWith(ym)) return;
+          const twd = safeNum(r.actualAmount) * rateOf(r.currency || 'TWD');
+          dayInc[d] = (dayInc[d] || 0) + twd;
+          monthInc += twd;
+        });
+        (state.investmentLogs || []).forEach((l) => {
+          if (l.eventType !== 'payout') return;
+          const d = normalizeDateStr(l.date);
+          if (!d || !d.startsWith(ym)) return;
+          const twd = safeNum(l.amountTWD);
+          dayInc[d] = (dayInc[d] || 0) + twd;
+          monthInc += twd;
+        });
+
+        if (sumEl) {
+          const net = monthInc - monthExp;
+          sumEl.innerHTML = `${ym} 收入 <span class="text-rose-700 font-medium">${fmtTWD(monthInc)}</span> · 支出 <span class="text-emerald-700 font-medium">${fmtTWD(monthExp)}</span> · 結餘 <span class="${net >= 0 ? 'text-rose-700' : 'text-emerald-700'} font-semibold">${net >= 0 ? '+' : ''}${fmtTWD(net)}</span>（點日期篩選當日明細）`;
+        }
+
+        const firstWeekday = new Date(y, m - 1, 1).getDay();
+        const daysInMonth = new Date(y, m, 0).getDate();
+        const today = todayISO();
+        let cells = '';
+        for (let i = 0; i < firstWeekday; i++) {
+          cells += `<div class="min-h-[58px] rounded-lg bg-[#f7f7f5]/40"></div>`;
+        }
+        for (let d = 1; d <= daysInMonth; d++) {
+          const iso = `${ym}-${String(d).padStart(2, '0')}`;
+          const eAmt = dayExp[iso] || 0;
+          const iAmt = dayInc[iso] || 0;
+          const isToday = iso === today;
+          const isSelected = expFromFilter === iso && expToFilter === iso;
+          const fmtShort = (v) => v >= 10000 ? `${(v / 10000).toFixed(1)}萬` : Math.round(v).toLocaleString('zh-TW');
+          cells += `
+            <button type="button" data-cal-day="${iso}" class="min-h-[58px] p-1.5 rounded-lg text-left transition-colors flex flex-col justify-between ${isSelected ? 'bg-zinc-900 text-white' : isToday ? 'bg-[#f7f7f5] ring-1 ring-zinc-900/40' : 'bg-white hover:bg-[#f7f7f5] hairline'}">
+              <div class="text-[11px] font-mono-num font-medium ${isSelected ? 'text-white' : isToday ? 'text-zinc-900 font-bold' : 'text-zinc-600'}">${d}</div>
+              <div class="space-y-0.5 font-mono-num text-[10px] leading-tight">
+                ${iAmt > 0 ? `<div class="truncate ${isSelected ? 'text-rose-300' : 'text-rose-700'}">+${fmtShort(iAmt)}</div>` : ''}
+                ${eAmt > 0 ? `<div class="truncate ${isSelected ? 'text-emerald-300' : 'text-emerald-700'}">-${fmtShort(eAmt)}</div>` : ''}
+              </div>
+            </button>
+          `;
+        }
+        grid.innerHTML = cells;
+      }
+
+      function shiftCalMonth(delta) {
+        const ym = /^\d{4}-\d{2}$/.test(expCalMonth) ? expCalMonth : todayISO().slice(0, 7);
+        const [y, m] = ym.split('-').map(Number);
+        const dt = new Date(y, m - 1 + delta, 1);
+        expCalMonth = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}`;
+        renderExpenseCalendar();
+        renderBudgetPanel();
+      }
+      const btnCalPrev = document.getElementById('btn-exp-cal-prev');
+      if (btnCalPrev) btnCalPrev.addEventListener('click', () => shiftCalMonth(-1));
+      const btnCalNext = document.getElementById('btn-exp-cal-next');
+      if (btnCalNext) btnCalNext.addEventListener('click', () => shiftCalMonth(1));
+      const btnCalToday = document.getElementById('btn-exp-cal-today');
+      if (btnCalToday) btnCalToday.addEventListener('click', () => { expCalMonth = todayISO().slice(0, 7); renderExpenseCalendar(); renderBudgetPanel(); });
+
+      const calGridEl = document.getElementById('expense-calendar-grid');
+      if (calGridEl) {
+        calGridEl.addEventListener('click', (e) => {
+          const btn = e.target.closest('[data-cal-day]');
+          if (!btn) return;
+          const iso = btn.dataset.calDay;
+          if (expFromFilter === iso && expToFilter === iso) {
+            expFromFilter = ''; expToFilter = '';
+          } else {
+            expMonthFilter = '';
+            expFromFilter = iso; expToFilter = iso;
+          }
+          document.getElementById('filter-exp-month').value = expMonthFilter;
+          if (expFromEl) expFromEl.value = expFromFilter;
+          if (expToEl) expToEl.value = expToFilter;
+          renderExpenses(computeTotals(state));
+        });
+      }
+
+      // --- Account Transfer Modal (Does NOT distort Income/Expense) ---
+      function openCashTransferModal() {
+        const list = state.cash || [];
+        if (list.length < 2) {
+          showToast('請先至少建立 2 個現金帳戶再使用帳戶轉帳功能');
+          return;
+        }
+        const opts = (selId) => list.map((c) => `<option value="${escapeHtml(c.id)}" ${c.id === selId ? 'selected' : ''}>${escapeHtml(c.bank)} (${escapeHtml(c.currency)} · 餘額 ${fmtNum(c.amount, c.currency === 'TWD' ? 0 : 2)})</option>`).join('');
+        const html = `
+          <div class="rounded-lg bg-[#f7f7f5] hairline px-3 py-2 text-[11px] text-zinc-600">
+            帳戶間轉帳會同時調整兩邊帳戶餘額，<strong>不會</strong>被計入收入或支出（避免重複計算）。
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div><label class="block text-xs font-medium text-zinc-600 mb-1">轉出帳戶</label><select id="trf-from" name="fromId" class="w-full h-9 px-2.5 rounded-lg hairline text-xs bg-white">${opts(list[0].id)}</select></div>
+            <div><label class="block text-xs font-medium text-zinc-600 mb-1">轉入帳戶</label><select id="trf-to" name="toId" class="w-full h-9 px-2.5 rounded-lg hairline text-xs bg-white">${opts(list[1].id)}</select></div>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div><label class="block text-xs font-medium text-zinc-600 mb-1">轉帳日期</label><input name="date" type="date" required value="${todayISO()}" class="w-full h-9 px-2.5 rounded-lg hairline text-xs font-mono-num" /></div>
+            <div><label class="block text-xs font-medium text-zinc-600 mb-1">轉出金額</label><input id="trf-out-amt" name="outAmount" type="number" step="0.01" min="0.01" required placeholder="50000" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" /></div>
+            <div><label class="block text-xs font-medium text-zinc-600 mb-1">轉入金額 (跨幣別可改)</label><input id="trf-in-amt" name="inAmount" type="number" step="0.01" min="0.01" placeholder="同轉出金額" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" /></div>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div><label class="block text-xs font-medium text-zinc-600 mb-1">轉帳手續費（選填，由轉出帳戶扣除）</label><input name="fee" type="number" step="0.01" min="0" value="0" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" /></div>
+            <div><label class="block text-xs font-medium text-zinc-600 mb-1">備註</label><input name="note" placeholder="例如：交割款調度、繳卡費" class="w-full h-9 px-3 rounded-lg hairline text-sm" /></div>
+          </div>
+        `;
+        openFormModal('銀行與券商帳戶轉帳', html, (fd) => {
+          const fromId = String(fd.get('fromId'));
+          const toId = String(fd.get('toId'));
+          if (fromId === toId) { showToast('轉出與轉入帳戶不能相同'); return; }
+          const fromAcc = state.cash.find((c) => c.id === fromId);
+          const toAcc = state.cash.find((c) => c.id === toId);
+          if (!fromAcc || !toAcc) return;
+          const date = String(fd.get('date') || todayISO());
+          const outAmt = Math.abs(safeNum(fd.get('outAmount')));
+          const inAmtRaw = safeNum(fd.get('inAmount'));
+          const inAmt = inAmtRaw > 0 ? inAmtRaw : outAmt;
+          const fee = Math.max(0, safeNum(fd.get('fee')));
+          const note = String(fd.get('note') || '').trim();
+          if (outAmt <= 0) return;
+
+          fromAcc.amount = Number((safeNum(fromAcc.amount) - outAmt - fee).toFixed(2));
+          toAcc.amount = Number((safeNum(toAcc.amount) + inAmt).toFixed(2));
+
+          if (!Array.isArray(state.ledger)) state.ledger = [];
+          state.ledger.push({
+            id: uid('led'),
+            date,
+            type: '帳戶轉帳',
+            title: `${fromAcc.bank} → ${toAcc.bank}`,
+            amountTWD: 0,
+            note: `${fromAcc.currency} ${outAmt} → ${toAcc.currency} ${inAmt}${fee > 0 ? `（手續費 ${fromAcc.currency} ${fee}）` : ''}${note ? ` · ${note}` : ''}`
+          });
+
+          if (fee > 0) {
+            if (!Array.isArray(state.randomExpenses)) state.randomExpenses = [];
+            state.randomExpenses.push({
+              id: uid('rexp'),
+              date,
+              category: '其他隨機支出',
+              title: `轉帳手續費 (${fromAcc.bank} → ${toAcc.bank})`,
+              currency: fromAcc.currency || 'TWD',
+              amount: fee,
+              account: fromAcc.bank,
+              deductStatus: 'paid',
+              note: note || '帳戶轉帳手續費'
+            });
+          }
+
+          saveState();
+          renderAll();
+          showToast(`已完成轉帳：${fromAcc.bank} → ${toAcc.bank}（${fromAcc.currency} ${outAmt}）`);
+        });
+      }
+
+      const btnCashTransfer = document.getElementById('btn-cash-transfer');
+      if (btnCashTransfer) btnCashTransfer.addEventListener('click', openCashTransferModal);
 
       document.getElementById('btn-fetch-fx').addEventListener('click', async () => {
         const fxBtn = document.getElementById('btn-fetch-fx');
@@ -8532,6 +8904,24 @@
         renderTableMappingEditor();
       }
 
+      function decodeCsvBytesSmart(bytes) {
+        // Check UTF-8 BOM
+        if (bytes.length >= 3 && bytes[0] === 0xEF && bytes[1] === 0xBB && bytes[2] === 0xBF) {
+          return { text: new TextDecoder('utf-8').decode(bytes), encoding: 'UTF-8 (BOM)' };
+        }
+        try {
+          const text = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+          return { text, encoding: 'UTF-8' };
+        } catch (e) {
+          try {
+            const text = new TextDecoder('big5').decode(bytes);
+            return { text, encoding: 'Big5 (自動防亂碼)' };
+          } catch (e2) {
+            return { text: new TextDecoder('utf-8').decode(bytes), encoding: 'UTF-8' };
+          }
+        }
+      }
+
       const migFileInput = document.getElementById('migrate-file-input');
       if (migFileInput) {
         migFileInput.addEventListener('change', (e) => {
@@ -8544,10 +8934,19 @@
           const reader = new FileReader();
           reader.onload = () => {
             try {
-              const wb = XLSX.read(new Uint8Array(reader.result), { type: 'array' });
+              const bytes = new Uint8Array(reader.result);
+              let wb;
+              let encNote = '';
+              if (/\.csv$/i.test(file.name)) {
+                const decoded = decodeCsvBytesSmart(bytes);
+                wb = XLSX.read(decoded.text, { type: 'string' });
+                encNote = decoded.encoding;
+              } else {
+                wb = XLSX.read(bytes, { type: 'array' });
+              }
               migrateTableWorkbook = wb;
               document.getElementById('migrate-table-file-info').classList.remove('hidden');
-              document.getElementById('migrate-table-filename').textContent = file.name;
+              document.getElementById('migrate-table-filename').textContent = encNote ? `${file.name} [${encNote}]` : file.name;
               const sheetSel = document.getElementById('migrate-table-sheet-select');
               if (wb.SheetNames.length > 1 && sheetSel) {
                 sheetSel.classList.remove('hidden');
@@ -8556,7 +8955,7 @@
                 sheetSel.classList.add('hidden');
               }
               loadTableSheet(wb.SheetNames[0]);
-              showToast(`已讀取 ${file.name}，可點「AI 自動解析」或「套用規則產生預覽」`);
+              showToast(`已讀取 ${file.name}${encNote ? `（${encNote}）` : ''}，可點「AI 自動解析」或「套用規則產生預覽」`);
             } catch (err) {
               showToast(`無法解析檔案：${err.message}`);
             }
