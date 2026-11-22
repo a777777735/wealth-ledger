@@ -4978,13 +4978,23 @@
         }
       }
 
+      const ALL_EXPENSE_CATEGORIES = [
+        '居住與房貸', '保險與醫療', '水電與通訊', '訂閱與會員', '家庭與孝親', '交通與車貸',
+        '餐飲美食', '交通旅遊', '購物消費', '醫療保健', '休閒娛樂', '居家修繕', '社交禮金',
+        '其他固定支出', '其他隨機支出'
+      ];
+      function buildExpenseCategoryOptionsHtml(selected) {
+        const list = [...new Set([...ALL_EXPENSE_CATEGORIES, ...(selected ? [selected] : [])])];
+        return list.map((c) => `<option value="${escapeHtml(c)}" ${c === selected ? 'selected' : ''}>${escapeHtml(c)}</option>`).join('');
+      }
+
       function openFixedExpenseModal(item = null) {
         const isEdit = Boolean(item);
         const e = item || { name: '', category: '居住與房貸', currency: 'TWD', amount: 0, cycleMonths: 1, payday: '每月 1 號', account: '', deductStatus: 'unpaid', note: '' };
         const html = `
           <div class="grid grid-cols-2 gap-3">
             <div><label class="block text-xs font-medium text-zinc-600 mb-1">固定支出名稱</label><input name="name" required value="${escapeHtml(e.name)}" class="w-full h-9 px-3 rounded-lg hairline text-sm" /></div>
-            <div><label class="block text-xs font-medium text-zinc-600 mb-1">類別</label><select name="category" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white"><option value="居住與房貸" ${e.category === '居住與房貸' ? 'selected' : ''}>居住與房貸</option><option value="保險與醫療" ${e.category === '保險與醫療' ? 'selected' : ''}>保險與醫療</option><option value="水電與通訊" ${e.category === '水電與通訊' ? 'selected' : ''}>水電與通訊</option><option value="訂閱與會員" ${e.category === '訂閱與會員' ? 'selected' : ''}>訂閱與會員</option><option value="家庭與孝親" ${e.category === '家庭與孝親' ? 'selected' : ''}>家庭與孝親</option><option value="交通與車貸" ${e.category === '交通與車貸' ? 'selected' : ''}>交通與車貸</option><option value="其他固定支出" ${e.category === '其他固定支出' ? 'selected' : ''}>其他固定支出</option></select></div>
+            <div><label class="block text-xs font-medium text-zinc-600 mb-1">類別</label><select name="category" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white">${buildExpenseCategoryOptionsHtml(e.category)}</select></div>
           </div>
           <div class="grid grid-cols-3 gap-3">
             <div><label class="block text-xs font-medium text-zinc-600 mb-1">幣別（連動帳戶）</label><select name="currency" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white">${buildCurrencyOptionsHtml(e.currency, true)}</select></div>
@@ -5036,7 +5046,7 @@
         const html = `
           <div class="grid grid-cols-2 gap-3">
             <div><label class="block text-xs font-medium text-zinc-600 mb-1">消費日期</label><input name="date" type="date" required value="${escapeHtml(r.date)}" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" /></div>
-            <div><label class="block text-xs font-medium text-zinc-600 mb-1">類別</label><select name="category" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white"><option value="餐飲美食" ${r.category === '餐飲美食' ? 'selected' : ''}>餐飲美食</option><option value="交通旅遊" ${r.category === '交通旅遊' ? 'selected' : ''}>交通旅遊</option><option value="購物消費" ${r.category === '購物消費' ? 'selected' : ''}>購物消費</option><option value="醫療保健" ${r.category === '醫療保健' ? 'selected' : ''}>醫療保健</option><option value="休閒娛樂" ${r.category === '休閒娛樂' ? 'selected' : ''}>休閒娛樂</option><option value="居家修繕" ${r.category === '居家修繕' ? 'selected' : ''}>居家修繕</option><option value="社交禮金" ${r.category === '社交禮金' ? 'selected' : ''}>社交禮金</option><option value="其他隨機支出" ${r.category === '其他隨機支出' ? 'selected' : ''}>其他隨機支出</option></select></div>
+            <div><label class="block text-xs font-medium text-zinc-600 mb-1">類別</label><select name="category" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white">${buildExpenseCategoryOptionsHtml(r.category)}</select></div>
           </div>
           <div class="relative">
             <label class="block text-xs font-medium text-zinc-600 mb-1">支出項目名稱（可輸入關鍵字搜尋快選）</label>
