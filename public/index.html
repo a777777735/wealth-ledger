@@ -5281,6 +5281,7 @@
               <input id="batch-ym-end" type="month" value="${defaultEndYm}" class="h-8 px-2 rounded-lg hairline bg-white text-xs font-mono-num" />
               <input id="batch-day" type="number" min="1" max="28" value="${isInc ? 5 : 1}" class="w-16 h-8 px-2 rounded-lg hairline bg-white text-xs font-mono-num" title="每月幾號" />
               <span class="text-xs text-zinc-500">號</span>
+              <input id="batch-gen-amt" type="number" step="0.01" min="0" value="${initAmt > 0 ? initAmt : ''}" placeholder="帶入金額" title="展開月份時預設帶入的單期金額（可依歷史調價前／後修改）" class="w-28 h-8 px-2 rounded-lg hairline bg-white text-xs font-mono-num" />
               <button id="btn-batch-gen-months" type="button" class="btn-focus h-8 px-3 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-medium">展開月份</button>
             </div>
           </div>
@@ -5408,6 +5409,11 @@
         };
 
         const getCurrentDefaultAmt = () => {
+          const genAmtEl = document.getElementById('batch-gen-amt');
+          if (genAmtEl && genAmtEl.value !== '') {
+            const v = safeNum(genAmtEl.value);
+            if (v >= 0) return v;
+          }
           const t = templates.find((x) => x.id === tplSel.value);
           return t ? safeNum(t.amount) : 0;
         };
@@ -5458,6 +5464,8 @@
             }
           }
           const defAmt = safeNum(t.amount);
+          const genAmtEl = document.getElementById('batch-gen-amt');
+          if (genAmtEl) genAmtEl.value = defAmt > 0 ? defAmt : '';
           rowsContainer.querySelectorAll('.bh-amt').forEach((inp) => {
             if (!inp.value || safeNum(inp.value) === 0 || safeNum(inp.value) === initAmt) {
               inp.value = defAmt > 0 ? defAmt : '';
