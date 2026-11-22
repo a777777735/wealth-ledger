@@ -331,18 +331,23 @@
             <div class="lg:col-span-8 bg-white rounded-xl p-6 hairline flex flex-col justify-between gap-3">
               <div class="flex flex-wrap items-start justify-between gap-2">
                 <div>
-                  <h2 class="text-sm font-semibold text-zinc-900">總資產淨值成長曲線</h2>
-                  <p id="ov-trend-delta-bar" class="text-xs text-zinc-500 mt-0.5 font-mono-num">切換日／週／月／年檢視資產變化</p>
+                  <h2 class="text-sm font-semibold text-zinc-900">資產與收支成長曲線</h2>
+                  <p id="ov-trend-delta-bar" class="text-xs text-zinc-500 mt-0.5 font-mono-num">自動從最早歷史紀錄延伸至今，可切換淨值與收支檢視</p>
                 </div>
                 <div class="flex flex-wrap items-center gap-1.5">
                   <div class="trend-range-group inline-flex rounded-lg bg-[#f7f7f5] p-0.5 hairline">
-                    <button type="button" data-trend-range="day" class="trend-range-btn h-6 px-2 rounded-md text-[11px] font-medium bg-zinc-900 text-white">日</button>
+                    <button type="button" data-trend-range="day" class="trend-range-btn h-6 px-2 rounded-md text-[11px] font-medium text-zinc-600">日</button>
                     <button type="button" data-trend-range="week" class="trend-range-btn h-6 px-2 rounded-md text-[11px] font-medium text-zinc-600">週</button>
-                    <button type="button" data-trend-range="month" class="trend-range-btn h-6 px-2 rounded-md text-[11px] font-medium text-zinc-600">月</button>
+                    <button type="button" data-trend-range="month" class="trend-range-btn h-6 px-2 rounded-md text-[11px] font-medium bg-zinc-900 text-white">月</button>
                     <button type="button" data-trend-range="year" class="trend-range-btn h-6 px-2 rounded-md text-[11px] font-medium text-zinc-600">年</button>
                     <button type="button" data-trend-range="all" class="trend-range-btn h-6 px-2 rounded-md text-[11px] font-medium text-zinc-600">全部</button>
                   </div>
-                  <button type="button" data-trend-mode-toggle class="trend-mode-btn btn-focus h-7 px-2.5 rounded-lg bg-white hover:bg-zinc-50 hairline text-[11px] font-medium text-zinc-700">分類對比</button>
+                  <div class="trend-mode-group inline-flex rounded-lg bg-[#f7f7f5] p-0.5 hairline">
+                    <button type="button" data-trend-mode="overview" class="trend-mode-btn h-6 px-2 rounded-md text-[11px] font-medium bg-zinc-900 text-white">收支＋淨值</button>
+                    <button type="button" data-trend-mode="cashflow" class="trend-mode-btn h-6 px-2 rounded-md text-[11px] font-medium text-zinc-600">收支流</button>
+                    <button type="button" data-trend-mode="total" class="trend-mode-btn h-6 px-2 rounded-md text-[11px] font-medium text-zinc-600">總淨值</button>
+                    <button type="button" data-trend-mode="breakdown" class="trend-mode-btn h-6 px-2 rounded-md text-[11px] font-medium text-zinc-600">資產分類</button>
+                  </div>
                   <button id="btn-go-history" type="button" class="btn-focus text-xs font-medium text-zinc-500 hover:text-zinc-900 ml-1">詳細對比 →</button>
                 </div>
               </div>
@@ -819,24 +824,53 @@
             <div class="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <h2 class="text-base font-semibold text-zinc-900">資產成長曲線與區間對比</h2>
-                <p class="text-xs text-zinc-500 mt-0.5">系統每日首次開啟自動記錄快照，可切換日／週／月／年比較本期與前期變化</p>
+                <p id="hist-trend-subtitle" class="text-xs text-zinc-500 mt-0.5">整合歷史淨值快照、薪資獎金、投資分潤／股利與各項支出，時間軸自動從最早歷史紀錄延伸至今</p>
               </div>
               <div class="flex flex-wrap items-center gap-2">
                 <div class="trend-range-group inline-flex rounded-lg bg-[#f7f7f5] p-0.5 hairline">
-                  <button type="button" data-trend-range="day" class="trend-range-btn h-7 px-2.5 rounded-md text-xs font-medium bg-zinc-900 text-white">日</button>
+                  <button type="button" data-trend-range="day" class="trend-range-btn h-7 px-2.5 rounded-md text-xs font-medium text-zinc-600">日</button>
                   <button type="button" data-trend-range="week" class="trend-range-btn h-7 px-2.5 rounded-md text-xs font-medium text-zinc-600">週</button>
-                  <button type="button" data-trend-range="month" class="trend-range-btn h-7 px-2.5 rounded-md text-xs font-medium text-zinc-600">月</button>
+                  <button type="button" data-trend-range="month" class="trend-range-btn h-7 px-2.5 rounded-md text-xs font-medium bg-zinc-900 text-white">月</button>
                   <button type="button" data-trend-range="year" class="trend-range-btn h-7 px-2.5 rounded-md text-xs font-medium text-zinc-600">年</button>
                   <button type="button" data-trend-range="all" class="trend-range-btn h-7 px-2.5 rounded-md text-xs font-medium text-zinc-600">全部</button>
                 </div>
-                <button type="button" data-trend-mode-toggle class="trend-mode-btn btn-focus h-8 px-3 rounded-lg bg-white hover:bg-zinc-50 hairline text-xs font-medium text-zinc-700">分類對比</button>
+                <div class="trend-mode-group inline-flex rounded-lg bg-[#f7f7f5] p-0.5 hairline">
+                  <button type="button" data-trend-mode="overview" class="trend-mode-btn h-7 px-2.5 rounded-md text-xs font-medium bg-zinc-900 text-white">收支＋淨值</button>
+                  <button type="button" data-trend-mode="cashflow" class="trend-mode-btn h-7 px-2.5 rounded-md text-xs font-medium text-zinc-600">收支現金流</button>
+                  <button type="button" data-trend-mode="total" class="trend-mode-btn h-7 px-2.5 rounded-md text-xs font-medium text-zinc-600">總淨值</button>
+                  <button type="button" data-trend-mode="breakdown" class="trend-mode-btn h-7 px-2.5 rounded-md text-xs font-medium text-zinc-600">資產分類</button>
+                </div>
               </div>
             </div>
 
             <div id="hist-compare-cards" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3"></div>
 
-            <div class="relative h-72">
+            <div class="relative h-80">
               <canvas id="chart-history-trend"></canvas>
+            </div>
+
+            <div class="pt-2 border-t border-zinc-900/[0.06] space-y-2.5">
+              <div class="flex flex-wrap items-center justify-between gap-2">
+                <h3 class="text-xs font-semibold text-zinc-700">各期收支與淨值明細對比</h3>
+                <span id="hist-period-range-badge" class="text-[11px] font-mono-num text-zinc-400"></span>
+              </div>
+              <div class="overflow-x-auto max-h-72 overflow-y-auto rounded-lg hairline">
+                <table class="w-full text-left border-collapse text-xs">
+                  <thead class="sticky top-0 bg-[#f7f7f5] z-10">
+                    <tr class="hairline-b text-zinc-500">
+                      <th class="py-2.5 px-2.5 font-medium">期別</th>
+                      <th class="py-2.5 px-2.5 font-medium text-right">薪資／獎金</th>
+                      <th class="py-2.5 px-2.5 font-medium text-right">分潤／股利</th>
+                      <th class="py-2.5 px-2.5 font-medium text-right">總收入</th>
+                      <th class="py-2.5 px-2.5 font-medium text-right">總支出</th>
+                      <th class="py-2.5 px-2.5 font-medium text-right">淨結餘</th>
+                      <th class="py-2.5 px-2.5 font-medium text-right">儲蓄率</th>
+                      <th class="py-2.5 px-2.5 font-medium text-right">期末淨值</th>
+                    </tr>
+                  </thead>
+                  <tbody id="hist-period-tbody" class="divide-y divide-zinc-900/[0.06] font-mono-num bg-white"></tbody>
+                </table>
+              </div>
             </div>
           </div>
 
@@ -1448,8 +1482,8 @@
       let chartCurrency = null;
       let chartTrend = null;
       let chartHistoryTrend = null;
-      let trendRange = 'day';
-      let trendMode = 'total';
+      let trendRange = 'month';
+      let trendMode = 'overview';
       let currentModalSubmit = null;
       let currentConfirmAction = null;
       let toastTimer = null;
@@ -1640,7 +1674,7 @@
               renderAll();
               (function autoDailySnapshot() {
         const totals = computeTotals(state);
-        if (totals.totalTWD <= 0) return;
+        if (totals.netWorthTWD <= 0) return;
         const today = todayISO();
         if (!Array.isArray(state.snapshots)) state.snapshots = [];
         const exists = state.snapshots.some((s) => s.date === today);
@@ -1651,7 +1685,7 @@
             cashTWD: Math.round(totals.cashTWD),
             stocksTWD: Math.round(totals.stocksTWD),
             investmentsTWD: Math.round(totals.investmentsTWD),
-            totalTWD: Math.round(totals.totalTWD),
+            totalTWD: Math.round(totals.netWorthTWD),
             note: '每日自動快照'
           });
           saveState();
@@ -1681,14 +1715,14 @@
 
       document.querySelectorAll('.trend-range-btn').forEach((btn) => {
         btn.addEventListener('click', () => {
-          trendRange = btn.dataset.trendRange || 'day';
+          trendRange = btn.dataset.trendRange || 'month';
           renderTrendChartOnCanvas('chart-trend', false);
           renderTrendChartOnCanvas('chart-history-trend', true);
         });
       });
       document.querySelectorAll('.trend-mode-btn').forEach((btn) => {
         btn.addEventListener('click', () => {
-          trendMode = trendMode === 'total' ? 'breakdown' : 'total';
+          trendMode = btn.dataset.trendMode || 'overview';
           renderTrendChartOnCanvas('chart-trend', false);
           renderTrendChartOnCanvas('chart-history-trend', true);
         });
@@ -3046,25 +3080,192 @@
         return `${target.getFullYear()}-W${String(weekNo).padStart(2, '0')}`;
       }
 
-      function aggregateSnapshots(snaps, range) {
-        const sorted = [...(snaps || [])].sort((a, b) => String(a.date).localeCompare(String(b.date)));
-        if (sorted.length === 0) return [];
-        if (range === 'all') return sorted.map((s) => ({ ...s, label: s.date }));
+      function isValidISODate(s) {
+        return /^\d{4}-\d{2}-\d{2}$/.test(String(s || '').trim());
+      }
 
-        const buckets = new Map();
-        sorted.forEach((s) => {
-          let key = s.date;
-          if (range === 'day') key = String(s.date).slice(0, 10);
-          else if (range === 'week') key = getISOWeekKey(s.date);
-          else if (range === 'month') key = String(s.date).slice(0, 7);
-          else if (range === 'year') key = String(s.date).slice(0, 4);
-          buckets.set(key, { ...s, label: key });
+      function normalizeDateStr(s) {
+        const str = String(s || '').trim().slice(0, 10);
+        return isValidISODate(str) ? str : '';
+      }
+
+      function buildUnifiedTrendSeries(data, range) {
+        const fx = (data && data.fx) || { TWD: 1, USD: 33.022, HKD: 4.2097, CNY: 4.9525 };
+        const rateOf = (cur) => (cur === 'TWD' ? 1 : safeNum(fx[cur], 1));
+        const today = todayISO();
+
+        const keyOf = (dateStr) => {
+          if (range === 'week') return getISOWeekKey(dateStr);
+          if (range === 'month') return dateStr.slice(0, 7);
+          if (range === 'year') return dateStr.slice(0, 4);
+          return dateStr; // 'day' or 'all'
+        };
+
+        const rawDates = [];
+        const pushDate = (d) => {
+          const norm = normalizeDateStr(d);
+          if (norm) rawDates.push(norm);
+        };
+
+        (data.snapshots || []).forEach((s) => pushDate(s.date));
+        (data.incomeReceipts || []).forEach((r) => pushDate(r.date));
+        (data.randomExpenses || []).forEach((e) => pushDate(e.date));
+        (data.investmentLogs || []).forEach((l) => pushDate(l.date));
+        (data.stockTrades || []).forEach((t) => pushDate(t.date));
+
+        const liveTotals = computeTotals(data);
+        if (rawDates.length === 0) {
+          if (liveTotals.netWorthTWD <= 0 && liveTotals.investmentsTWD <= 0) return [];
+          rawDates.push(today);
+        }
+
+        rawDates.sort();
+        const minDate = rawDates[0];
+        const maxDate = rawDates[rawDates.length - 1] > today ? rawDates[rawDates.length - 1] : today;
+
+        // Generate ordered period keys spanning from earliest historical record to today
+        const orderedKeys = [];
+        const keySet = new Set();
+        const addKey = (k) => {
+          if (k && !keySet.has(k)) {
+            keySet.add(k);
+            orderedKeys.push(k);
+          }
+        };
+
+        if (range === 'month') {
+          let [y, m] = minDate.slice(0, 7).split('-').map(Number);
+          const [ey, em] = maxDate.slice(0, 7).split('-').map(Number);
+          let guard = 0;
+          while ((y < ey || (y === ey && m <= em)) && guard < 600) {
+            addKey(`${y}-${String(m).padStart(2, '0')}`);
+            m += 1;
+            if (m > 12) { m = 1; y += 1; }
+            guard += 1;
+          }
+        } else if (range === 'year') {
+          const sy = Number(minDate.slice(0, 4));
+          const ey = Number(maxDate.slice(0, 4));
+          for (let y = sy; y <= ey && y <= sy + 100; y++) addKey(String(y));
+        } else if (range === 'week') {
+          const startD = new Date(minDate + 'T00:00:00');
+          const endD = new Date(maxDate + 'T00:00:00');
+          const diffDays = Math.ceil((endD - startD) / 86400000);
+          if (diffDays <= 1825) {
+            const cur = new Date(startD.valueOf());
+            while (cur <= endD) {
+              const iso = `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, '0')}-${String(cur.getDate()).padStart(2, '0')}`;
+              addKey(getISOWeekKey(iso));
+              cur.setDate(cur.getDate() + 7);
+            }
+            addKey(getISOWeekKey(maxDate));
+          } else {
+            rawDates.forEach((d) => addKey(getISOWeekKey(d)));
+            addKey(getISOWeekKey(today));
+          }
+        } else {
+          // 'day' or 'all': every distinct historical date from earliest to today (no arbitrary 30-day cutoff)
+          rawDates.forEach((d) => addKey(d));
+          addKey(today);
+          orderedKeys.sort();
+        }
+
+        const bucketMap = new Map();
+        const ensureBucket = (k) => {
+          if (!bucketMap.has(k)) {
+            bucketMap.set(k, {
+              label: k,
+              salaryIncomeTWD: 0,
+              passiveIncomeTWD: 0,
+              incomeTWD: 0,
+              expenseTWD: 0,
+              netCashflowTWD: 0,
+              invOutflowTWD: 0,
+              invReturnTWD: 0,
+              cashTWD: null,
+              stocksTWD: null,
+              investmentsTWD: null,
+              totalTWD: null,
+              _snapDate: ''
+            });
+          }
+          return bucketMap.get(k);
+        };
+        orderedKeys.forEach((k) => ensureBucket(k));
+
+        // 1. Income receipts (salary, bonuses, etc.)
+        (data.incomeReceipts || []).forEach((r) => {
+          const d = normalizeDateStr(r.date);
+          if (!d) return;
+          const b = ensureBucket(keyOf(d));
+          b.salaryIncomeTWD += safeNum(r.actualAmount) * rateOf(r.currency || 'TWD');
         });
-        const arr = [...buckets.values()];
-        if (range === 'day') return arr.slice(-30);
-        if (range === 'week') return arr.slice(-26);
-        if (range === 'month') return arr.slice(-24);
-        return arr;
+
+        // 2. Physical investment logs (payouts = passive income; invest/return tracked for tooltip)
+        (data.investmentLogs || []).forEach((l) => {
+          const d = normalizeDateStr(l.date);
+          if (!d) return;
+          const b = ensureBucket(keyOf(d));
+          const amt = safeNum(l.amountTWD);
+          if (l.eventType === 'payout') b.passiveIncomeTWD += amt;
+          else if (l.eventType === 'invest') b.invOutflowTWD += amt;
+          else if (l.eventType === 'principal_return' || l.eventType === 'settle') b.invReturnTWD += amt;
+        });
+
+        // 3. Stock dividends
+        (data.stockTrades || []).forEach((t) => {
+          if (t.tradeType !== 'DIVIDEND') return;
+          const d = normalizeDateStr(t.date);
+          if (!d) return;
+          const b = ensureBucket(keyOf(d));
+          b.passiveIncomeTWD += safeNum(t.netAmount) * rateOf(t.currency || 'TWD');
+        });
+
+        // 4. Expenses (fixed expense records + single/random expenses)
+        (data.randomExpenses || []).forEach((e) => {
+          const d = normalizeDateStr(e.date);
+          if (!d) return;
+          const b = ensureBucket(keyOf(d));
+          b.expenseTWD += safeNum(e.amount) * rateOf(e.currency || 'TWD');
+        });
+
+        // 5. Historical snapshots (latest snapshot inside each period wins)
+        const sortedSnaps = [...(data.snapshots || [])]
+          .filter((s) => normalizeDateStr(s.date))
+          .sort((a, b) => String(a.date).localeCompare(String(b.date)));
+        sortedSnaps.forEach((s) => {
+          const d = normalizeDateStr(s.date);
+          const b = ensureBucket(keyOf(d));
+          if (!b._snapDate || d >= b._snapDate) {
+            b.cashTWD = safeNum(s.cashTWD);
+            b.stocksTWD = safeNum(s.stocksTWD);
+            b.investmentsTWD = safeNum(s.investmentsTWD);
+            b.totalTWD = safeNum(s.totalTWD);
+            b._snapDate = d;
+          }
+        });
+
+        // 6. Anchor current period to live totals if today doesn't already have a newer snapshot
+        const todayKey = keyOf(today);
+        if (bucketMap.has(todayKey) && (liveTotals.netWorthTWD > 0 || liveTotals.investmentsTWD > 0)) {
+          const tb = bucketMap.get(todayKey);
+          if (!tb._snapDate || tb._snapDate < today) {
+            tb.cashTWD = Math.round(liveTotals.cashTWD);
+            tb.stocksTWD = Math.round(liveTotals.stocksTWD);
+            tb.investmentsTWD = Math.round(liveTotals.investmentsTWD);
+            tb.totalTWD = Math.round(liveTotals.netWorthTWD);
+            tb._snapDate = today;
+          }
+        }
+
+        const keysFinal = [...bucketMap.keys()].sort();
+        return keysFinal.map((k) => {
+          const b = bucketMap.get(k);
+          b.incomeTWD = b.salaryIncomeTWD + b.passiveIncomeTWD;
+          b.netCashflowTWD = b.incomeTWD - b.expenseTWD;
+          b.savingsRate = b.incomeTWD > 0 ? (b.netCashflowTWD / b.incomeTWD) * 100 : null;
+          return b;
+        });
       }
 
       function syncTrendControlButtons() {
@@ -3075,106 +3276,332 @@
           btn.classList.toggle('text-zinc-600', !active);
         });
         document.querySelectorAll('.trend-mode-btn').forEach((btn) => {
-          btn.textContent = trendMode === 'total' ? '切換分類對比' : '切換總淨值線';
+          const active = btn.dataset.trendMode === trendMode;
+          btn.classList.toggle('bg-zinc-900', active);
+          btn.classList.toggle('text-white', active);
+          btn.classList.toggle('text-zinc-600', !active);
         });
       }
 
       function renderTrendChartOnCanvas(canvasId, isHistoryPage) {
         const canvas = document.getElementById(canvasId);
         if (!canvas) return;
-        const points = aggregateSnapshots(state.snapshots, trendRange);
-        const rangeNameMap = { day: '近 30 日', week: '週趨勢', month: '月趨勢', year: '年趨勢', all: '全部期間' };
+        const points = buildUnifiedTrendSeries(state, trendRange);
+        const rangeNameMap = { day: '日趨勢', week: '週趨勢', month: '月趨勢', year: '年趨勢', all: '全部日期' };
+        const firstLabel = points.length > 0 ? points[0].label : '';
+        const lastLabel = points.length > 0 ? points[points.length - 1].label : '';
 
-        const latest = points.length > 0 ? points[points.length - 1] : null;
-        const prev = points.length > 1 ? points[points.length - 2] : latest;
-        const deltaTotal = latest && prev ? safeNum(latest.totalTWD) - safeNum(prev.totalTWD) : 0;
-        const deltaPct = prev && safeNum(prev.totalTWD) > 0 ? (deltaTotal / safeNum(prev.totalTWD)) * 100 : 0;
-        const deltaCash = latest && prev ? safeNum(latest.cashTWD) - safeNum(prev.cashTWD) : 0;
-        const deltaStocks = latest && prev ? safeNum(latest.stocksTWD) - safeNum(prev.stocksTWD) : 0;
-        const deltaInv = latest && prev ? safeNum(latest.investmentsTWD) - safeNum(prev.investmentsTWD) : 0;
+        // Snapshot points (non-null) for net-worth delta calculations
+        const snapPoints = points.filter((p) => p.totalTWD !== null);
+        const latestSnap = snapPoints.length > 0 ? snapPoints[snapPoints.length - 1] : null;
+        const prevSnap = snapPoints.length > 1 ? snapPoints[snapPoints.length - 2] : latestSnap;
+        const deltaTotal = latestSnap && prevSnap ? safeNum(latestSnap.totalTWD) - safeNum(prevSnap.totalTWD) : 0;
+        const deltaPct = prevSnap && safeNum(prevSnap.totalTWD) > 0 ? (deltaTotal / safeNum(prevSnap.totalTWD)) * 100 : 0;
+        const deltaCash = latestSnap && prevSnap ? safeNum(latestSnap.cashTWD) - safeNum(prevSnap.cashTWD) : 0;
+        const deltaStocks = latestSnap && prevSnap ? safeNum(latestSnap.stocksTWD) - safeNum(prevSnap.stocksTWD) : 0;
+        const deltaInv = latestSnap && prevSnap ? safeNum(latestSnap.investmentsTWD) - safeNum(prevSnap.investmentsTWD) : 0;
+
+        // Cashflow metrics (latest vs prev period & full-history cumulative)
+        const latestPt = points.length > 0 ? points[points.length - 1] : null;
+        const prevPt = points.length > 1 ? points[points.length - 2] : null;
+        const cumIncome = points.reduce((s, p) => s + safeNum(p.incomeTWD), 0);
+        const cumSalary = points.reduce((s, p) => s + safeNum(p.salaryIncomeTWD), 0);
+        const cumPassive = points.reduce((s, p) => s + safeNum(p.passiveIncomeTWD), 0);
+        const cumExpense = points.reduce((s, p) => s + safeNum(p.expenseTWD), 0);
+        const cumNet = cumIncome - cumExpense;
+        const cumSavingsRate = cumIncome > 0 ? (cumNet / cumIncome) * 100 : null;
+
+        const fmtDelta = (val, invertColor = false) => {
+          const s = val >= 0 ? '+' : '';
+          const posCls = invertColor ? 'text-emerald-700' : 'text-rose-700';
+          const negCls = invertColor ? 'text-rose-700' : 'text-emerald-700';
+          const c = val > 0 ? posCls : val < 0 ? negCls : 'text-zinc-500';
+          return `<span class="${c}">${s}${fmtTWD(val)}</span>`;
+        };
 
         if (!isHistoryPage) {
           const bar = document.getElementById('ov-trend-delta-bar');
           if (bar) {
-            if (points.length <= 1) {
-              bar.textContent = `${rangeNameMap[trendRange]} · 目前累計 ${points.length} 筆快照（系統每日自動記錄）`;
+            if (points.length === 0) {
+              bar.textContent = `${rangeNameMap[trendRange]} · 尚無歷史資料`;
+            } else if (trendMode === 'cashflow' || trendMode === 'overview') {
+              const curNet = latestPt ? latestPt.netCashflowTWD : 0;
+              const sign = curNet >= 0 ? '+' : '';
+              const cls = curNet >= 0 ? 'text-rose-700' : 'text-emerald-700';
+              bar.innerHTML = `${escapeHtml(firstLabel)} ～ ${escapeHtml(lastLabel)}（共 ${points.length} 期）· 本期結餘 <span class="${cls} font-medium">${sign}${fmtTWD(curNet)}</span> · 累計結餘 ${cumNet >= 0 ? '+' : ''}${fmtTWD(cumNet)}`;
+            } else if (snapPoints.length <= 1) {
+              bar.textContent = `${escapeHtml(firstLabel)} ～ ${escapeHtml(lastLabel)} · 目前累計 ${snapPoints.length} 筆淨值快照`;
             } else {
               const sign = deltaTotal >= 0 ? '+' : '';
               const cls = deltaTotal >= 0 ? 'text-rose-700' : 'text-emerald-700';
-              bar.innerHTML = `${rangeNameMap[trendRange]} 較前期（${escapeHtml(prev.label)} → ${escapeHtml(latest.label)}）：<span class="${cls} font-medium">${sign}${fmtTWD(deltaTotal)} (${sign}${deltaPct.toFixed(2)}%)</span>`;
+              bar.innerHTML = `${escapeHtml(firstLabel)} ～ ${escapeHtml(lastLabel)} · 較前期（${escapeHtml(prevSnap.label)} → ${escapeHtml(latestSnap.label)}）：<span class="${cls} font-medium">${sign}${fmtTWD(deltaTotal)} (${sign}${deltaPct.toFixed(2)}%)</span>`;
             }
           }
         } else {
+          const subEl = document.getElementById('hist-trend-subtitle');
+          if (subEl && points.length > 0) {
+            subEl.textContent = `涵蓋區間 ${firstLabel} ～ ${lastLabel}（共 ${points.length} 個${rangeNameMap[trendRange]}資料點），自動整合快照、薪資入帳、分潤股利與支出`;
+          }
           const cardsEl = document.getElementById('hist-compare-cards');
           if (cardsEl) {
-            const fmtDelta = (val) => {
-              const s = val >= 0 ? '+' : '';
-              const c = val > 0 ? 'text-rose-700' : val < 0 ? 'text-emerald-700' : 'text-zinc-500';
-              return `<span class="${c}">${s}${fmtTWD(val)}</span>`;
-            };
-            const compareLabel = points.length > 1 ? `${prev.label} → ${latest.label}` : '尚待累積第 2 期對比';
-            cardsEl.innerHTML = `
-              <div class="p-4 rounded-lg bg-[#f7f7f5] hairline">
-                <div class="text-xs text-zinc-500">區間淨值變化（${escapeHtml(compareLabel)}）</div>
-                <div class="mt-1 text-base font-semibold font-mono-num">${fmtDelta(deltaTotal)} <span class="text-xs font-normal text-zinc-500">(${deltaTotal >= 0 ? '+' : ''}${deltaPct.toFixed(1)}%)</span></div>
-              </div>
-              <div class="p-4 rounded-lg bg-[#f7f7f5] hairline">
-                <div class="text-xs text-zinc-500">銀行現金增減</div>
-                <div class="mt-1 text-base font-semibold font-mono-num">${fmtDelta(deltaCash)}</div>
-              </div>
-              <div class="p-4 rounded-lg bg-[#f7f7f5] hairline">
-                <div class="text-xs text-zinc-500">股票市值增減</div>
-                <div class="mt-1 text-base font-semibold font-mono-num">${fmtDelta(deltaStocks)}</div>
-              </div>
-              <div class="p-4 rounded-lg bg-[#f7f7f5] hairline">
-                <div class="text-xs text-zinc-500">實體投資本金增減</div>
-                <div class="mt-1 text-base font-semibold font-mono-num">${fmtDelta(deltaInv)}</div>
-              </div>
-            `;
+            if (trendMode === 'cashflow' || trendMode === 'overview') {
+              const curInc = latestPt ? latestPt.incomeTWD : 0;
+              const curExp = latestPt ? latestPt.expenseTWD : 0;
+              const curNet = latestPt ? latestPt.netCashflowTWD : 0;
+              const curRate = latestPt ? latestPt.savingsRate : null;
+              const diffInc = prevPt ? curInc - prevPt.incomeTWD : null;
+              const diffExp = prevPt ? curExp - prevPt.expenseTWD : null;
+              const curPeriodTag = latestPt ? latestPt.label : '-';
+              cardsEl.innerHTML = `
+                <div class="p-4 rounded-lg bg-[#f7f7f5] hairline">
+                  <div class="text-xs text-zinc-500">本期總收入（${escapeHtml(curPeriodTag)}）</div>
+                  <div class="mt-1 text-base font-semibold font-mono-num text-rose-700">${fmtTWD(curInc)}</div>
+                  <div class="mt-1 text-[11px] text-zinc-500 font-mono-num">${diffInc !== null ? `較前期 ${fmtDelta(diffInc)}` : `薪資 ${fmtTWD(latestPt ? latestPt.salaryIncomeTWD : 0)} · 分潤 ${fmtTWD(latestPt ? latestPt.passiveIncomeTWD : 0)}`}</div>
+                </div>
+                <div class="p-4 rounded-lg bg-[#f7f7f5] hairline">
+                  <div class="text-xs text-zinc-500">本期總支出（${escapeHtml(curPeriodTag)}）</div>
+                  <div class="mt-1 text-base font-semibold font-mono-num text-emerald-700">${fmtTWD(curExp)}</div>
+                  <div class="mt-1 text-[11px] text-zinc-500 font-mono-num">${diffExp !== null ? `較前期 ${fmtDelta(diffExp, true)}` : '含固定扣款與單筆支出'}</div>
+                </div>
+                <div class="p-4 rounded-lg bg-[#f7f7f5] hairline">
+                  <div class="text-xs text-zinc-500">本期淨結餘與儲蓄率</div>
+                  <div class="mt-1 text-base font-semibold font-mono-num">${fmtDelta(curNet)} <span class="text-xs font-normal text-zinc-500">${curRate !== null ? `(${curRate.toFixed(1)}%)` : ''}</span></div>
+                  <div class="mt-1 text-[11px] text-zinc-500 font-mono-num">${latestSnap ? `最新淨值 ${fmtTWD(latestSnap.totalTWD)}` : '尚無淨值快照'}</div>
+                </div>
+                <div class="p-4 rounded-lg bg-[#f7f7f5] hairline">
+                  <div class="text-xs text-zinc-500">全期間累計淨結餘（${points.length} 期）</div>
+                  <div class="mt-1 text-base font-semibold font-mono-num">${fmtDelta(cumNet)} <span class="text-xs font-normal text-zinc-500">${cumSavingsRate !== null ? `(${cumSavingsRate.toFixed(1)}%)` : ''}</span></div>
+                  <div class="mt-1 text-[11px] text-zinc-500 font-mono-num">收 ${fmtTWD(cumIncome)} / 支 ${fmtTWD(cumExpense)}</div>
+                </div>
+              `;
+            } else {
+              const compareLabel = snapPoints.length > 1 ? `${prevSnap.label} → ${latestSnap.label}` : '尚待累積第 2 期快照對比';
+              cardsEl.innerHTML = `
+                <div class="p-4 rounded-lg bg-[#f7f7f5] hairline">
+                  <div class="text-xs text-zinc-500">區間淨值變化（${escapeHtml(compareLabel)}）</div>
+                  <div class="mt-1 text-base font-semibold font-mono-num">${fmtDelta(deltaTotal)} <span class="text-xs font-normal text-zinc-500">(${deltaTotal >= 0 ? '+' : ''}${deltaPct.toFixed(1)}%)</span></div>
+                </div>
+                <div class="p-4 rounded-lg bg-[#f7f7f5] hairline">
+                  <div class="text-xs text-zinc-500">銀行現金增減</div>
+                  <div class="mt-1 text-base font-semibold font-mono-num">${fmtDelta(deltaCash)}</div>
+                </div>
+                <div class="p-4 rounded-lg bg-[#f7f7f5] hairline">
+                  <div class="text-xs text-zinc-500">股票市值增減</div>
+                  <div class="mt-1 text-base font-semibold font-mono-num">${fmtDelta(deltaStocks)}</div>
+                </div>
+                <div class="p-4 rounded-lg bg-[#f7f7f5] hairline">
+                  <div class="text-xs text-zinc-500">實體投資本金增減</div>
+                  <div class="mt-1 text-base font-semibold font-mono-num">${fmtDelta(deltaInv)}</div>
+                </div>
+              `;
+            }
+          }
+
+          // Render period-by-period comparison table (newest first + summary footer)
+          const badgeEl = document.getElementById('hist-period-range-badge');
+          if (badgeEl) {
+            badgeEl.textContent = points.length > 0 ? `${firstLabel} ～ ${lastLabel} · 共 ${points.length} 期` : '尚無資料';
+          }
+          const periodTbody = document.getElementById('hist-period-tbody');
+          if (periodTbody) {
+            if (points.length === 0) {
+              periodTbody.innerHTML = '<tr><td colspan="8" class="py-5 text-center text-zinc-400 font-sans">尚無歷史資料</td></tr>';
+            } else {
+              const rowsHtml = [...points].reverse().map((p) => {
+                const netCls = p.netCashflowTWD > 0 ? 'text-rose-700' : p.netCashflowTWD < 0 ? 'text-emerald-700' : 'text-zinc-500';
+                const netSign = p.netCashflowTWD > 0 ? '+' : '';
+                const rateTxt = p.savingsRate !== null ? `${p.savingsRate.toFixed(1)}%` : '—';
+                const nwTxt = p.totalTWD !== null ? fmtTWD(p.totalTWD) : '—';
+                return `
+                  <tr class="hover:bg-[#f7f7f5] transition-colors">
+                    <td class="py-2 px-2.5 font-medium text-zinc-900 whitespace-nowrap">${escapeHtml(p.label)}</td>
+                    <td class="py-2 px-2.5 text-right text-zinc-700">${p.salaryIncomeTWD > 0 ? fmtTWD(p.salaryIncomeTWD) : '<span class="text-zinc-300">0</span>'}</td>
+                    <td class="py-2 px-2.5 text-right text-zinc-700">${p.passiveIncomeTWD > 0 ? fmtTWD(p.passiveIncomeTWD) : '<span class="text-zinc-300">0</span>'}</td>
+                    <td class="py-2 px-2.5 text-right font-medium text-rose-700">${fmtTWD(p.incomeTWD)}</td>
+                    <td class="py-2 px-2.5 text-right font-medium text-emerald-700">${fmtTWD(p.expenseTWD)}</td>
+                    <td class="py-2 px-2.5 text-right font-semibold ${netCls}">${netSign}${fmtTWD(p.netCashflowTWD)}</td>
+                    <td class="py-2 px-2.5 text-right text-zinc-600">${rateTxt}</td>
+                    <td class="py-2 px-2.5 text-right font-medium text-zinc-900">${nwTxt}</td>
+                  </tr>
+                `;
+              }).join('');
+              const sumNetCls = cumNet >= 0 ? 'text-rose-700' : 'text-emerald-700';
+              const summaryRow = `
+                <tr class="bg-[#f7f7f5] font-semibold border-t border-zinc-900/15">
+                  <td class="py-2.5 px-2.5 font-sans text-zinc-900">全期間合計</td>
+                  <td class="py-2.5 px-2.5 text-right text-zinc-800">${fmtTWD(cumSalary)}</td>
+                  <td class="py-2.5 px-2.5 text-right text-zinc-800">${fmtTWD(cumPassive)}</td>
+                  <td class="py-2.5 px-2.5 text-right text-rose-700">${fmtTWD(cumIncome)}</td>
+                  <td class="py-2.5 px-2.5 text-right text-emerald-700">${fmtTWD(cumExpense)}</td>
+                  <td class="py-2.5 px-2.5 text-right ${sumNetCls}">${cumNet >= 0 ? '+' : ''}${fmtTWD(cumNet)}</td>
+                  <td class="py-2.5 px-2.5 text-right text-zinc-700">${cumSavingsRate !== null ? `${cumSavingsRate.toFixed(1)}%` : '—'}</td>
+                  <td class="py-2.5 px-2.5 text-right text-zinc-900">${latestSnap ? fmtTWD(latestSnap.totalTWD) : '—'}</td>
+                </tr>
+              `;
+              periodTbody.innerHTML = summaryRow + rowsHtml;
+            }
           }
         }
 
-        const datasets = trendMode === 'total'
-          ? [{
-              label: '總資產淨值 (TWD)',
-              data: points.map((s) => safeNum(s.totalTWD)),
+        const ptRadius = points.length > 24 ? 2 : 3.5;
+        let chartType = 'line';
+        let datasets = [];
+        let useDualAxis = false;
+
+        if (trendMode === 'total') {
+          datasets = [{
+            label: '總資產淨值 (TWD)',
+            data: points.map((s) => s.totalTWD),
+            borderColor: '#18181b',
+            backgroundColor: 'rgba(24, 24, 27, 0.07)',
+            borderWidth: 2,
+            pointRadius: ptRadius,
+            pointBackgroundColor: '#18181b',
+            fill: true,
+            spanGaps: true,
+            tension: 0.3
+          }];
+        } else if (trendMode === 'breakdown') {
+          datasets = [
+            {
+              label: '銀行現金',
+              data: points.map((s) => s.cashTWD),
               borderColor: '#18181b',
-              backgroundColor: 'rgba(24, 24, 27, 0.07)',
+              backgroundColor: 'transparent',
               borderWidth: 2,
-              pointRadius: points.length > 20 ? 2 : 3.5,
-              pointBackgroundColor: '#18181b',
-              fill: true,
+              pointRadius: 2.5,
+              spanGaps: true,
               tension: 0.3
-            }]
-          : [
-              {
-                label: '銀行現金',
-                data: points.map((s) => safeNum(s.cashTWD)),
-                borderColor: '#18181b',
-                backgroundColor: 'transparent',
-                borderWidth: 2,
-                pointRadius: 2.5,
-                tension: 0.3
-              },
-              {
-                label: '股票與 ETF',
-                data: points.map((s) => safeNum(s.stocksTWD)),
-                borderColor: '#b91c1c',
-                backgroundColor: 'transparent',
-                borderWidth: 2,
-                pointRadius: 2.5,
-                tension: 0.3
-              },
-              {
-                label: '實體投資',
-                data: points.map((s) => safeNum(s.investmentsTWD)),
-                borderColor: '#047857',
-                backgroundColor: 'transparent',
-                borderWidth: 2,
-                pointRadius: 2.5,
-                tension: 0.3
-              }
-            ];
+            },
+            {
+              label: '股票與 ETF',
+              data: points.map((s) => s.stocksTWD),
+              borderColor: '#b91c1c',
+              backgroundColor: 'transparent',
+              borderWidth: 2,
+              pointRadius: 2.5,
+              spanGaps: true,
+              tension: 0.3
+            },
+            {
+              label: '實體投資',
+              data: points.map((s) => s.investmentsTWD),
+              borderColor: '#047857',
+              backgroundColor: 'transparent',
+              borderWidth: 2,
+              pointRadius: 2.5,
+              spanGaps: true,
+              tension: 0.3
+            }
+          ];
+        } else if (trendMode === 'cashflow') {
+          chartType = 'bar';
+          datasets = [
+            {
+              type: 'bar',
+              label: '總收入 (薪資+分潤/股利)',
+              data: points.map((s) => Math.round(s.incomeTWD)),
+              backgroundColor: 'rgba(190, 18, 60, 0.72)',
+              borderRadius: 4,
+              maxBarThickness: 28,
+              order: 2
+            },
+            {
+              type: 'bar',
+              label: '總支出 (固定+單筆)',
+              data: points.map((s) => Math.round(s.expenseTWD)),
+              backgroundColor: 'rgba(4, 120, 87, 0.68)',
+              borderRadius: 4,
+              maxBarThickness: 28,
+              order: 2
+            },
+            {
+              type: 'line',
+              label: '淨結餘 (收入−支出)',
+              data: points.map((s) => Math.round(s.netCashflowTWD)),
+              borderColor: '#18181b',
+              backgroundColor: '#18181b',
+              borderWidth: 2,
+              pointRadius: ptRadius,
+              tension: 0.25,
+              order: 1
+            }
+          ];
+        } else {
+          // 'overview': Dual-axis combo — Income & Expense bars (left Y) + Net Worth line (right Y)
+          chartType = 'bar';
+          useDualAxis = true;
+          datasets = [
+            {
+              type: 'bar',
+              label: '總收入',
+              data: points.map((s) => Math.round(s.incomeTWD)),
+              backgroundColor: 'rgba(190, 18, 60, 0.65)',
+              borderRadius: 4,
+              maxBarThickness: 26,
+              yAxisID: 'y',
+              order: 2
+            },
+            {
+              type: 'bar',
+              label: '總支出',
+              data: points.map((s) => Math.round(s.expenseTWD)),
+              backgroundColor: 'rgba(4, 120, 87, 0.6)',
+              borderRadius: 4,
+              maxBarThickness: 26,
+              yAxisID: 'y',
+              order: 2
+            },
+            {
+              type: 'line',
+              label: '總資產淨值',
+              data: points.map((s) => s.totalTWD),
+              borderColor: '#18181b',
+              backgroundColor: 'rgba(24, 24, 27, 0.06)',
+              borderWidth: 2.2,
+              pointRadius: ptRadius,
+              pointBackgroundColor: '#18181b',
+              spanGaps: true,
+              tension: 0.3,
+              yAxisID: 'y1',
+              order: 1
+            }
+          ];
+        }
+
+        const fmtAxisTWD = (v) => {
+          const abs = Math.abs(v);
+          if (abs >= 10000) return (v / 10000).toFixed(abs >= 100000 ? 0 : 1) + '萬';
+          if (abs >= 1000) return (v / 1000).toFixed(0) + '千';
+          return String(Math.round(v));
+        };
+
+        const scales = {
+          x: {
+            grid: { display: false },
+            ticks: { color: '#71717a', font: { size: 11, family: 'JetBrains Mono' }, maxRotation: 0, autoSkip: true, maxTicksLimit: 12 }
+          },
+          y: {
+            position: 'left',
+            grid: { color: 'rgba(24,24,27,0.06)' },
+            ticks: {
+              color: '#71717a',
+              font: { size: 11, family: 'JetBrains Mono' },
+              callback: fmtAxisTWD
+            }
+          }
+        };
+        if (useDualAxis) {
+          scales.y1 = {
+            position: 'right',
+            grid: { drawOnChartArea: false },
+            ticks: {
+              color: '#18181b',
+              font: { size: 11, family: 'JetBrains Mono' },
+              callback: fmtAxisTWD
+            }
+          };
+        }
 
         if (isHistoryPage) {
           if (chartHistoryTrend) chartHistoryTrend.destroy();
@@ -3183,7 +3610,7 @@
         }
 
         const chartInst = new Chart(canvas.getContext('2d'), {
-          type: 'line',
+          type: chartType,
           data: {
             labels: points.map((s) => s.label),
             datasets
@@ -3193,27 +3620,36 @@
             maintainAspectRatio: false,
             interaction: { mode: 'index', intersect: false },
             plugins: {
-              legend: { display: trendMode === 'breakdown', position: 'top', labels: { boxWidth: 10, font: { size: 11 } } },
+              legend: { display: trendMode !== 'total', position: 'top', labels: { boxWidth: 10, font: { size: 11 } } },
               tooltip: {
                 callbacks: {
-                  label: (ctx) => ` ${ctx.dataset.label}: ${fmtTWD(ctx.parsed.y)}`
+                  label: (ctx) => {
+                    if (ctx.parsed.y === null || ctx.parsed.y === undefined) return null;
+                    return ` ${ctx.dataset.label}: ${fmtTWD(ctx.parsed.y)}`;
+                  },
+                  afterBody: (items) => {
+                    if (!items || items.length === 0) return [];
+                    const idx = items[0].dataIndex;
+                    const p = points[idx];
+                    if (!p) return [];
+                    const lines = [];
+                    if (trendMode === 'cashflow' || trendMode === 'overview') {
+                      if (p.salaryIncomeTWD > 0 || p.passiveIncomeTWD > 0) {
+                        lines.push(`  ├ 薪資／獎金: ${fmtTWD(p.salaryIncomeTWD)}`);
+                        lines.push(`  └ 分潤／股利: ${fmtTWD(p.passiveIncomeTWD)}`);
+                      }
+                      if (p.savingsRate !== null) {
+                        lines.push(`  儲蓄率: ${p.savingsRate.toFixed(1)}%`);
+                      }
+                      if (p.invOutflowTWD > 0) lines.push(`  投資投入: ${fmtTWD(p.invOutflowTWD)}`);
+                      if (p.invReturnTWD > 0) lines.push(`  本金／結算回收: ${fmtTWD(p.invReturnTWD)}`);
+                    }
+                    return lines;
+                  }
                 }
               }
             },
-            scales: {
-              x: {
-                grid: { display: false },
-                ticks: { color: '#71717a', font: { size: 11, family: 'JetBrains Mono' }, maxRotation: 0 }
-              },
-              y: {
-                grid: { color: 'rgba(24,24,27,0.06)' },
-                ticks: {
-                  color: '#71717a',
-                  font: { size: 11, family: 'JetBrains Mono' },
-                  callback: (v) => (v / 10000).toFixed(0) + '萬'
-                }
-              }
-            }
+            scales
           }
         });
 
