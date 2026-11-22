@@ -139,6 +139,10 @@
             <svg class="w-4 h-4 shrink-0 text-zinc-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 15"/></svg>
             <span>歷史紀錄</span>
           </button>
+          <button type="button" data-tab="reports" class="tab-btn btn-focus flex items-center gap-2.5 h-9 px-2.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors duration-150">
+            <svg class="w-4 h-4 shrink-0 text-zinc-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>
+            <span>財務報表</span>
+          </button>
 
           <div class="hidden lg:block px-2.5 pt-4 pb-1.5 text-[11px] font-medium text-zinc-400">系統設定</div>
           <button type="button" data-tab="settings" class="tab-btn btn-focus flex items-center gap-2.5 h-9 px-2.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors duration-150">
@@ -931,6 +935,138 @@
           </div>
         </section>
 
+        <!-- TAB 7.5: FINANCIAL REPORTS & ANALYTICS -->
+        <section id="tab-reports" class="tab-panel hidden space-y-6">
+          <!-- Header & Controls -->
+          <div class="bg-white rounded-xl p-6 hairline space-y-4">
+            <div class="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h2 class="text-base font-semibold text-zinc-900">財務報表與深度分析</h2>
+                <p id="report-header-subtitle" class="text-xs text-zinc-500 mt-0.5">整合支出結構、被動收入覆蓋率、緊急預備金安全墊、淨值成長歸因與跨年損益對比</p>
+              </div>
+              <div class="flex flex-wrap items-center gap-2">
+                <select id="report-period-select" class="h-8 px-2.5 rounded-lg hairline bg-white text-xs font-medium text-zinc-700 font-mono-num">
+                  <option value="all">全部歷史期間</option>
+                  <option value="ytd">今年累計 (YTD)</option>
+                  <option value="last12m">近 12 個月</option>
+                  <option value="last6m">近 6 個月</option>
+                </select>
+                <button id="btn-copy-ai-prompt" type="button" class="btn-focus h-8 px-3.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-medium transition-colors duration-150 inline-flex items-center gap-1.5">
+                  <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.8L20 11l-6.1 2.2L12 19l-1.9-5.8L4 11l6.1-2.2L12 3z"/></svg>
+                  <span>一鍵複製 AI 財務健檢 Prompt</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- 4 Health KPI Cards -->
+            <div id="report-health-cards" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3"></div>
+          </div>
+
+          <!-- Expense Structure + Single Category Trend -->
+          <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            <div class="lg:col-span-7 bg-white rounded-xl p-6 hairline space-y-4">
+              <div class="flex flex-wrap items-baseline justify-between gap-2">
+                <div>
+                  <h3 class="text-sm font-semibold text-zinc-900">支出類別結構與排行</h3>
+                  <p class="text-xs text-zinc-500 mt-0.5">點擊任一類別可即時檢視該項目的月度變化趨勢</p>
+                </div>
+                <span id="report-exp-total-badge" class="text-xs font-mono-num font-semibold text-zinc-800"></span>
+              </div>
+              <div id="report-exp-cat-list" class="space-y-2.5 max-h-80 overflow-y-auto pr-1"></div>
+            </div>
+
+            <div class="lg:col-span-5 bg-white rounded-xl p-6 hairline flex flex-col justify-between gap-4">
+              <div class="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <h3 class="text-sm font-semibold text-zinc-900">單一類別月度趨勢</h3>
+                  <p id="report-cat-trend-sub" class="text-xs text-zinc-500 mt-0.5">檢視各月花費是否逐月膨脹</p>
+                </div>
+                <select id="report-cat-trend-select" class="h-8 px-2.5 rounded-lg hairline bg-white text-xs font-medium text-zinc-700"></select>
+              </div>
+              <div class="relative h-64">
+                <canvas id="chart-report-cat-trend"></canvas>
+              </div>
+            </div>
+          </div>
+
+          <!-- Active vs Passive Income Mix + Net Worth Growth Attribution -->
+          <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            <div class="lg:col-span-7 bg-white rounded-xl p-6 hairline space-y-4">
+              <div class="flex flex-wrap items-baseline justify-between gap-2">
+                <div>
+                  <h3 class="text-sm font-semibold text-zinc-900">主動收入 vs 被動收入結構（對比月支出）</h3>
+                  <p class="text-xs text-zinc-500 mt-0.5">堆疊長條呈現薪資獎金與投資分潤／股利，虛線為每月總支出</p>
+                </div>
+                <span id="report-income-mix-badge" class="text-[11px] font-mono-num text-zinc-500"></span>
+              </div>
+              <div class="relative h-64">
+                <canvas id="chart-report-income-mix"></canvas>
+              </div>
+            </div>
+
+            <div class="lg:col-span-5 bg-white rounded-xl p-6 hairline space-y-4">
+              <div>
+                <h3 class="text-sm font-semibold text-zinc-900">資產成長歸因分析</h3>
+                <p class="text-xs text-zinc-500 mt-0.5">拆解淨值變化來源：靠本業存錢、投資現金流，還是市場波動？</p>
+              </div>
+              <div id="report-attribution-panel" class="space-y-3"></div>
+            </div>
+          </div>
+
+          <!-- Annual Income Statement (Year-over-Year Comparison) -->
+          <div class="bg-white rounded-xl p-6 hairline space-y-4">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <h3 class="text-sm font-semibold text-zinc-900">年度財務損益表（跨年對比）</h3>
+                <p class="text-xs text-zinc-500 mt-0.5">每年收入、支出、儲蓄率、被動覆蓋率與年底淨值成長總覽</p>
+              </div>
+              <span id="report-annual-badge" class="text-xs font-mono-num text-zinc-400"></span>
+            </div>
+            <div class="overflow-x-auto">
+              <table class="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr class="hairline-b text-zinc-500">
+                    <th class="py-2.5 px-2 font-medium">年度</th>
+                    <th class="py-2.5 px-2 font-medium text-right">薪資／獎金</th>
+                    <th class="py-2.5 px-2 font-medium text-right">分潤／股利</th>
+                    <th class="py-2.5 px-2 font-medium text-right">年總收入</th>
+                    <th class="py-2.5 px-2 font-medium text-right">年總支出</th>
+                    <th class="py-2.5 px-2 font-medium text-right">年淨儲蓄</th>
+                    <th class="py-2.5 px-2 font-medium text-right">儲蓄率</th>
+                    <th class="py-2.5 px-2 font-medium text-right">被動覆蓋率</th>
+                    <th class="py-2.5 px-2 font-medium text-right">年底淨值</th>
+                    <th class="py-2.5 px-2 font-medium">前三大支出類別</th>
+                  </tr>
+                </thead>
+                <tbody id="report-annual-tbody" class="divide-y divide-zinc-900/[0.06] font-mono-num"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Cross-Asset Performance Comparison -->
+          <div class="bg-white rounded-xl p-6 hairline space-y-4">
+            <div>
+              <h3 class="text-sm font-semibold text-zinc-900">跨資產績效橫向對比</h3>
+              <p class="text-xs text-zinc-500 mt-0.5">比較銀行現金、股票 ETF 與實體專案投資的投入規模、已落袋現金流與報酬效率</p>
+            </div>
+            <div class="overflow-x-auto">
+              <table class="w-full text-left border-collapse text-xs sm:text-sm">
+                <thead>
+                  <tr class="hairline-b text-zinc-500 text-xs">
+                    <th class="py-2.5 px-2 font-medium">資產類別</th>
+                    <th class="py-2.5 px-2 font-medium text-right">投入成本／規模</th>
+                    <th class="py-2.5 px-2 font-medium text-right">目前市值／餘額</th>
+                    <th class="py-2.5 px-2 font-medium text-right">已落袋現金流／已實現</th>
+                    <th class="py-2.5 px-2 font-medium text-right">總報酬／效率指標</th>
+                    <th class="py-2.5 px-2 font-medium">說明</th>
+                  </tr>
+                </thead>
+                <tbody id="report-asset-compare-tbody" class="divide-y divide-zinc-900/[0.06] font-mono-num"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
         <!-- TAB 8: SETTINGS, CLOUD SYNC & BACKUP -->
         <section id="tab-settings" class="tab-panel hidden space-y-6">
           <!-- Live Quote Feed -->
@@ -1482,8 +1618,12 @@
       let chartCurrency = null;
       let chartTrend = null;
       let chartHistoryTrend = null;
+      let chartReportCatTrend = null;
+      let chartReportIncomeMix = null;
       let trendRange = 'month';
       let trendMode = 'overview';
+      let reportPeriod = 'all';
+      let reportSelectedCat = '';
       let currentModalSubmit = null;
       let currentConfirmAction = null;
       let toastTimer = null;
@@ -3767,6 +3907,607 @@
         updateCloudStatusUI();
       }
 
+      function computeFinancialReportData(data, periodKey, totals) {
+        const fx = (data && data.fx) || { TWD: 1, USD: 33.022, HKD: 4.2097, CNY: 4.9525 };
+        const rateOf = (cur) => (cur === 'TWD' ? 1 : safeNum(fx[cur], 1));
+        const allMonths = buildUnifiedTrendSeries(data, 'month');
+        const curYear = todayISO().slice(0, 4);
+
+        const yearSet = new Set();
+        allMonths.forEach((m) => yearSet.add(m.label.slice(0, 4)));
+        const availableYears = [...yearSet].sort((a, b) => b.localeCompare(a));
+
+        let filteredMonths = allMonths;
+        let periodLabel = '全部歷史期間';
+        if (periodKey === 'ytd') {
+          filteredMonths = allMonths.filter((m) => m.label.startsWith(curYear));
+          periodLabel = `${curYear} 年累計 (YTD)`;
+        } else if (periodKey === 'last12m') {
+          filteredMonths = allMonths.slice(-12);
+          periodLabel = '近 12 個月';
+        } else if (periodKey === 'last6m') {
+          filteredMonths = allMonths.slice(-6);
+          periodLabel = '近 6 個月';
+        } else if (/^\d{4}$/.test(String(periodKey))) {
+          filteredMonths = allMonths.filter((m) => m.label.startsWith(periodKey));
+          periodLabel = `${periodKey} 全年度`;
+        }
+
+        const monthSet = new Set(filteredMonths.map((m) => m.label));
+        const monthCount = Math.max(1, filteredMonths.length);
+
+        const salaryIncomeTWD = filteredMonths.reduce((s, m) => s + safeNum(m.salaryIncomeTWD), 0);
+        const passiveIncomeTWD = filteredMonths.reduce((s, m) => s + safeNum(m.passiveIncomeTWD), 0);
+        const totalIncomeTWD = salaryIncomeTWD + passiveIncomeTWD;
+        const totalExpenseTWD = filteredMonths.reduce((s, m) => s + safeNum(m.expenseTWD), 0);
+        const netSavingsTWD = totalIncomeTWD - totalExpenseTWD;
+
+        const avgMonthlyIncome = totalIncomeTWD / monthCount;
+        const avgMonthlyExpense = totalExpenseTWD / monthCount;
+        const avgMonthlyPassive = passiveIncomeTWD / monthCount;
+        const avgMonthlyNet = netSavingsTWD / monthCount;
+
+        const savingsRate = totalIncomeTWD > 0 ? (netSavingsTWD / totalIncomeTWD) * 100 : null;
+        const fiRatioTotal = avgMonthlyExpense > 0 ? (avgMonthlyPassive / avgMonthlyExpense) * 100 : null;
+        const fiRatioFixed = totals.fixedExpenseMonthlyTWD > 0 ? (avgMonthlyPassive / totals.fixedExpenseMonthlyTWD) * 100 : null;
+        const fixedRigidRatio = avgMonthlyIncome > 0 ? (totals.fixedExpenseMonthlyTWD / avgMonthlyIncome) * 100 : null;
+
+        // Emergency fund runway (months)
+        const refMonthlySpend = avgMonthlyExpense > 0 ? avgMonthlyExpense : totals.fixedExpenseMonthlyTWD;
+        const twdCash = safeNum(totals.cashByCurrency && totals.cashByCurrency.TWD);
+        const runwayTotalMonths = refMonthlySpend > 0 ? totals.cashTWD / refMonthlySpend : null;
+        const runwayTwdMonths = refMonthlySpend > 0 ? twdCash / refMonthlySpend : null;
+
+        // Expense category breakdown within filtered period
+        const catMap = new Map();
+        const catMonthlyMap = new Map();
+        (data.randomExpenses || []).forEach((e) => {
+          const d = normalizeDateStr(e.date);
+          if (!d) return;
+          const ym = d.slice(0, 7);
+          if (!monthSet.has(ym)) return;
+          const cat = String(e.category || '其他').trim() || '其他';
+          const twd = safeNum(e.amount) * rateOf(e.currency || 'TWD');
+          if (!catMap.has(cat)) catMap.set(cat, { category: cat, totalTWD: 0, count: 0 });
+          const c = catMap.get(cat);
+          c.totalTWD += twd;
+          c.count += 1;
+          if (!catMonthlyMap.has(cat)) catMonthlyMap.set(cat, new Map());
+          const mm = catMonthlyMap.get(cat);
+          mm.set(ym, (mm.get(ym) || 0) + twd);
+        });
+        const categories = [...catMap.values()]
+          .sort((a, b) => b.totalTWD - a.totalTWD)
+          .map((c) => ({
+            ...c,
+            pct: totalExpenseTWD > 0 ? (c.totalTWD / totalExpenseTWD) * 100 : 0
+          }));
+
+        // Realized stock PnL in filtered period
+        let realizedStockPnlPeriod = 0;
+        let allStockRealizedPnl = 0;
+        let allStockDividends = 0;
+        (data.stockTrades || []).forEach((t) => {
+          const d = normalizeDateStr(t.date);
+          const rpnl = safeNum(t.realizedPnlTWD);
+          allStockRealizedPnl += rpnl;
+          if (t.tradeType === 'DIVIDEND') {
+            allStockDividends += safeNum(t.netAmount) * rateOf(t.currency || 'TWD');
+          }
+          if (d && monthSet.has(d.slice(0, 7))) {
+            realizedStockPnlPeriod += rpnl;
+          }
+        });
+
+        // Net worth growth attribution
+        const snapMonths = filteredMonths.filter((m) => m.totalTWD !== null);
+        const hasAttribution = snapMonths.length >= 2;
+        const startSnap = hasAttribution ? snapMonths[0] : null;
+        const endSnap = hasAttribution ? snapMonths[snapMonths.length - 1] : null;
+        const totalNwChange = hasAttribution ? safeNum(endSnap.totalTWD) - safeNum(startSnap.totalTWD) : 0;
+        const activeSavingsContrib = salaryIncomeTWD - totalExpenseTWD;
+        const investCashflowContrib = passiveIncomeTWD + realizedStockPnlPeriod;
+        const marketFxContrib = hasAttribution ? totalNwChange - activeSavingsContrib - investCashflowContrib : 0;
+
+        // Annual Income Statement (YoY)
+        const annualMap = new Map();
+        allMonths.forEach((m) => {
+          const yr = m.label.slice(0, 4);
+          if (!annualMap.has(yr)) {
+            annualMap.set(yr, {
+              year: yr,
+              salaryTWD: 0,
+              passiveTWD: 0,
+              incomeTWD: 0,
+              expenseTWD: 0,
+              netTWD: 0,
+              endNW: null
+            });
+          }
+          const a = annualMap.get(yr);
+          a.salaryTWD += safeNum(m.salaryIncomeTWD);
+          a.passiveTWD += safeNum(m.passiveIncomeTWD);
+          a.incomeTWD += safeNum(m.incomeTWD);
+          a.expenseTWD += safeNum(m.expenseTWD);
+          a.netTWD += safeNum(m.netCashflowTWD);
+          if (m.totalTWD !== null) a.endNW = m.totalTWD;
+        });
+
+        // Top 3 expense categories per year
+        const annualCatMap = new Map();
+        (data.randomExpenses || []).forEach((e) => {
+          const d = normalizeDateStr(e.date);
+          if (!d) return;
+          const yr = d.slice(0, 4);
+          const cat = String(e.category || '其他').trim() || '其他';
+          const twd = safeNum(e.amount) * rateOf(e.currency || 'TWD');
+          if (!annualCatMap.has(yr)) annualCatMap.set(yr, new Map());
+          const ymMap = annualCatMap.get(yr);
+          ymMap.set(cat, (ymMap.get(cat) || 0) + twd);
+        });
+
+        const annualRowsAsc = [...annualMap.values()].sort((a, b) => a.year.localeCompare(b.year));
+        let prevEndNW = null;
+        annualRowsAsc.forEach((a) => {
+          a.savingsRate = a.incomeTWD > 0 ? (a.netTWD / a.incomeTWD) * 100 : null;
+          a.fiRatio = a.expenseTWD > 0 ? (a.passiveTWD / a.expenseTWD) * 100 : null;
+          a.yoyGrowthPct = (prevEndNW !== null && prevEndNW > 0 && a.endNW !== null)
+            ? ((a.endNW - prevEndNW) / prevEndNW) * 100
+            : null;
+          if (a.endNW !== null) prevEndNW = a.endNW;
+          const cMap = annualCatMap.get(a.year);
+          a.topCats = cMap
+            ? [...cMap.entries()].sort((x, y) => y[1] - x[1]).slice(0, 3).map(([k, v]) => ({ category: k, totalTWD: v }))
+            : [];
+        });
+        const annualRows = [...annualRowsAsc].reverse();
+
+        // Cross-Asset Comparison
+        let stocksCostTWD = 0;
+        (data.stocks || []).forEach((s) => {
+          stocksCostTWD += safeNum(s.shares) * safeNum(s.avgCost) * rateOf(s.currency || 'TWD');
+        });
+        const stocksTotalReturnTWD = totals.stocksPnlTWD + allStockRealizedPnl + allStockDividends;
+        const stocksTotalReturnPct = stocksCostTWD > 0 ? (stocksTotalReturnTWD / stocksCostTWD) * 100 : null;
+        const recycling = computeInvestmentRecyclingStats(data);
+
+        return {
+          periodKey,
+          periodLabel,
+          availableYears,
+          filteredMonths,
+          monthCount,
+          salaryIncomeTWD,
+          passiveIncomeTWD,
+          totalIncomeTWD,
+          totalExpenseTWD,
+          netSavingsTWD,
+          avgMonthlyIncome,
+          avgMonthlyExpense,
+          avgMonthlyPassive,
+          avgMonthlyNet,
+          savingsRate,
+          fiRatioTotal,
+          fiRatioFixed,
+          fixedRigidRatio,
+          refMonthlySpend,
+          twdCash,
+          runwayTotalMonths,
+          runwayTwdMonths,
+          categories,
+          catMonthlyMap,
+          hasAttribution,
+          startSnap,
+          endSnap,
+          totalNwChange,
+          activeSavingsContrib,
+          investCashflowContrib,
+          marketFxContrib,
+          annualRows,
+          stocksCostTWD,
+          allStockRealizedPnl,
+          allStockDividends,
+          stocksTotalReturnTWD,
+          stocksTotalReturnPct,
+          recycling
+        };
+      }
+
+      function buildAIPromptText(data, periodKey, totals) {
+        const r = computeFinancialReportData(data, periodKey, totals);
+        const nw = totals.netWorthTWD || 1;
+        const cashPct = ((totals.cashTWD / nw) * 100).toFixed(1);
+        const stockPct = ((totals.stocksTWD / nw) * 100).toFixed(1);
+        const topCatsText = r.categories.slice(0, 8)
+          .map((c, i) => `  ${i + 1}. ${c.category}：${fmtTWD(c.totalTWD)}（佔 ${c.pct.toFixed(1)}%，${c.count} 筆）`)
+          .join('\n') || '  （尚無支出明細）';
+        const recentMonthsText = r.filteredMonths.slice(-12)
+          .map((m) => `  - ${m.label}：收入 ${fmtTWD(m.incomeTWD)}（薪資 ${fmtTWD(m.salaryIncomeTWD)} / 分潤股利 ${fmtTWD(m.passiveIncomeTWD)}），支出 ${fmtTWD(m.expenseTWD)}，淨結餘 ${m.netCashflowTWD >= 0 ? '+' : ''}${fmtTWD(m.netCashflowTWD)}${m.savingsRate !== null ? `（儲蓄率 ${m.savingsRate.toFixed(1)}%）` : ''}${m.totalTWD !== null ? `，期末淨值 ${fmtTWD(m.totalTWD)}` : ''}`)
+          .join('\n') || '  （尚無月度紀錄）';
+        const annualText = r.annualRows
+          .map((a) => `  - ${a.year} 年：總收 ${fmtTWD(a.incomeTWD)} / 總支 ${fmtTWD(a.expenseTWD)} / 淨儲蓄 ${fmtTWD(a.netTWD)}${a.savingsRate !== null ? `（儲蓄率 ${a.savingsRate.toFixed(1)}%）` : ''} / 被動覆蓋率 ${a.fiRatio !== null ? `${a.fiRatio.toFixed(1)}%` : '—'}${a.endNW !== null ? ` / 年底淨值 ${fmtTWD(a.endNW)}` : ''}`)
+          .join('\n') || '  （尚無年度彙總）';
+
+        return [
+          `你是一位專業、務實且重視風險控管的個人理財與資產配置顧問。以下是我已「去識別化」的個人財務彙總數據（幣別皆已換算為台幣 TWD，實體投資採保守現金制不計入淨值，僅以實際領回分潤計入現金流），請幫我做深度財務健檢。`,
+          ``,
+          `【分析期間】${r.periodLabel}（共 ${r.monthCount} 個月，報告日期 ${todayISO()}）`,
+          ``,
+          `【一、目前資產負債結構】`,
+          `- 總資產淨值（現金＋股票）：${fmtTWD(totals.netWorthTWD)}`,
+          `- 銀行現金（台幣＋外幣）：${fmtTWD(totals.cashTWD)}（佔淨值 ${cashPct}%；其中台幣現金 ${fmtTWD(r.twdCash)}）`,
+          `- 股票與 ETF 市值：${fmtTWD(totals.stocksTWD)}（佔淨值 ${stockPct}%；總成本 ${fmtTWD(r.stocksCostTWD)}；未實現損益 ${totals.stocksPnlTWD >= 0 ? '+' : ''}${fmtTWD(totals.stocksPnlTWD)}；累計已實現＋股利 ${fmtTWD(r.allStockRealizedPnl + r.allStockDividends)}）`,
+          `- 實體與專案投資（另計不入淨值）：進行中預計投入 ${fmtTWD(totals.plannedInvestmentsTWD)}；歷史峰值淨投入 ${fmtTWD(r.recycling.trueCapitalBase)}；累計已領分潤與回收 ${fmtTWD(r.recycling.totalReturned)}${r.recycling.moic !== null ? `（累計回收倍數 ${r.recycling.moic.toFixed(2)}x）` : ''}`,
+          ``,
+          `【二、四大財務健康度指標】`,
+          `- 緊急預備金安全墊：純現金可支撐 ${r.runwayTotalMonths !== null ? `${r.runwayTotalMonths.toFixed(1)} 個月` : '尚無支出資料'}（台幣現金可撐 ${r.runwayTwdMonths !== null ? `${r.runwayTwdMonths.toFixed(1)} 個月` : '—'}；基準月支出 ${fmtTWD(r.refMonthlySpend)}）`,
+          `- 被動收入覆蓋率 (FI Ratio)：${r.fiRatioTotal !== null ? `${r.fiRatioTotal.toFixed(1)}%` : '—'}（覆蓋固定支出 ${r.fiRatioFixed !== null ? `${r.fiRatioFixed.toFixed(1)}%` : '—'}；區間月均被動收入 ${fmtTWD(r.avgMonthlyPassive)}）`,
+          `- 固定支出剛性比：${r.fixedRigidRatio !== null ? `${r.fixedRigidRatio.toFixed(1)}%` : '—'}（目前啟用固定月支出 ${fmtTWD(totals.fixedExpenseMonthlyTWD)} / 月均總收入 ${fmtTWD(r.avgMonthlyIncome)}）`,
+          `- 區間儲蓄率：${r.savingsRate !== null ? `${r.savingsRate.toFixed(1)}%` : '—'}（區間總收 ${fmtTWD(r.totalIncomeTWD)}、總支 ${fmtTWD(r.totalExpenseTWD)}、月均淨結餘 ${r.avgMonthlyNet >= 0 ? '+' : ''}${fmtTWD(r.avgMonthlyNet)}）`,
+          ``,
+          `【三、支出結構前 8 大類別】`,
+          topCatsText,
+          ``,
+          `【四、近 12 個月收支與結餘趨勢】`,
+          recentMonthsText,
+          ``,
+          `【五、跨年度損益對比】`,
+          annualText,
+          ``,
+          `【請針對以上數據提供分析】`,
+          `1. 財務健康度總評與 3 個最值得優先關注的風險或盲點（例如現金水位過高／過低、固定支出壓力、資產集中度）。`,
+          `2. 支出結構診斷：哪些類別佔比偏高或有明顯膨脹趨勢？給出具體可執行的優化目標金額。`,
+          `3. 被動收入與資產成長效率：評估目前「主動儲蓄」與「被動現金流」的平衡，以及下一筆每月結餘該如何分配（現金／ETF／實體投資）。`,
+          `4. 給出未來 6 個月內最具體、可量化的 3 項行動清單。`
+        ].join('\n');
+      }
+
+      function renderReports(totals) {
+        const panel = document.getElementById('tab-reports');
+        if (!panel) return;
+        const r = computeFinancialReportData(state, reportPeriod, totals);
+
+        // Sync period selector options (preserve available years)
+        const periodSel = document.getElementById('report-period-select');
+        if (periodSel) {
+          const baseOpts = [
+            { val: 'all', label: '全部歷史期間' },
+            { val: 'ytd', label: `今年累計 (${todayISO().slice(0, 4)})` },
+            { val: 'last12m', label: '近 12 個月' },
+            { val: 'last6m', label: '近 6 個月' },
+            ...r.availableYears.map((yr) => ({ val: yr, label: `${yr} 全年度` }))
+          ];
+          const validVals = new Set(baseOpts.map((o) => o.val));
+          if (!validVals.has(reportPeriod)) reportPeriod = 'all';
+          periodSel.innerHTML = baseOpts.map((o) => `<option value="${escapeHtml(o.val)}" ${o.val === reportPeriod ? 'selected' : ''}>${escapeHtml(o.label)}</option>`).join('');
+        }
+
+        const headerSub = document.getElementById('report-header-subtitle');
+        if (headerSub) {
+          const spanTxt = r.filteredMonths.length > 0 ? `${r.filteredMonths[0].label} ～ ${r.filteredMonths[r.filteredMonths.length - 1].label}（共 ${r.filteredMonths.length} 個月）` : '尚無歷史收支資料';
+          headerSub.textContent = `${r.periodLabel} · 區間 ${spanTxt} · 整合支出結構、被動收入覆蓋率、預備金安全墊與成長歸因`;
+        }
+
+        // 1. 4 Health KPI Cards
+        const healthEl = document.getElementById('report-health-cards');
+        if (healthEl) {
+          let runwayBadge = '<span class="px-1.5 py-0.5 rounded text-[10px] bg-zinc-200/70 text-zinc-600">尚無基準</span>';
+          if (r.runwayTotalMonths !== null) {
+            if (r.runwayTotalMonths < 3) runwayBadge = '<span class="px-1.5 py-0.5 rounded text-[10px] bg-rose-100 text-rose-700">偏緊</span>';
+            else if (r.runwayTotalMonths < 6) runwayBadge = '<span class="px-1.5 py-0.5 rounded text-[10px] bg-amber-100 text-amber-700">基本</span>';
+            else if (r.runwayTotalMonths <= 18) runwayBadge = '<span class="px-1.5 py-0.5 rounded text-[10px] bg-emerald-100 text-emerald-700">健康</span>';
+            else runwayBadge = '<span class="px-1.5 py-0.5 rounded text-[10px] bg-blue-100 text-blue-700">現金充裕</span>';
+          }
+          const rigidCls = r.fixedRigidRatio === null ? 'text-zinc-900' : r.fixedRigidRatio <= 40 ? 'text-emerald-700' : r.fixedRigidRatio <= 60 ? 'text-amber-700' : 'text-rose-700';
+          const saveCls = r.savingsRate === null ? 'text-zinc-900' : r.savingsRate >= 30 ? 'text-rose-700' : r.savingsRate >= 0 ? 'text-zinc-900' : 'text-emerald-700';
+
+          healthEl.innerHTML = `
+            <div class="p-4 rounded-lg bg-[#f7f7f5] hairline">
+              <div class="flex items-center justify-between gap-1">
+                <span class="text-xs text-zinc-500">緊急預備金安全墊</span>
+                ${runwayBadge}
+              </div>
+              <div class="mt-1 text-lg font-semibold font-mono-num text-zinc-900">${r.runwayTotalMonths !== null ? `${r.runwayTotalMonths.toFixed(1)} 個月` : '—'}</div>
+              <div class="mt-1 text-[11px] text-zinc-500 font-mono-num">台幣可撐 ${r.runwayTwdMonths !== null ? `${r.runwayTwdMonths.toFixed(1)} 月` : '—'} · 基準月支 ${fmtTWD(r.refMonthlySpend)}</div>
+            </div>
+            <div class="p-4 rounded-lg bg-[#f7f7f5] hairline">
+              <div class="text-xs text-zinc-500">被動收入覆蓋率 (FI Ratio)</div>
+              <div class="mt-1 text-lg font-semibold font-mono-num text-rose-700">${r.fiRatioTotal !== null ? `${r.fiRatioTotal.toFixed(1)}%` : '—'}</div>
+              <div class="mt-1 text-[11px] text-zinc-500 font-mono-num">覆蓋固定支出 ${r.fiRatioFixed !== null ? `${r.fiRatioFixed.toFixed(1)}%` : '—'} · 被動月均 ${fmtTWD(r.avgMonthlyPassive)}</div>
+            </div>
+            <div class="p-4 rounded-lg bg-[#f7f7f5] hairline">
+              <div class="text-xs text-zinc-500">固定支出剛性比</div>
+              <div class="mt-1 text-lg font-semibold font-mono-num ${rigidCls}">${r.fixedRigidRatio !== null ? `${r.fixedRigidRatio.toFixed(1)}%` : '—'}</div>
+              <div class="mt-1 text-[11px] text-zinc-500 font-mono-num">固定月支 ${fmtTWD(totals.fixedExpenseMonthlyTWD)} / 月均總收 ${fmtTWD(r.avgMonthlyIncome)}</div>
+            </div>
+            <div class="p-4 rounded-lg bg-[#f7f7f5] hairline">
+              <div class="text-xs text-zinc-500">區間儲蓄率與月均結餘</div>
+              <div class="mt-1 text-lg font-semibold font-mono-num ${saveCls}">${r.savingsRate !== null ? `${r.savingsRate.toFixed(1)}%` : '—'}</div>
+              <div class="mt-1 text-[11px] text-zinc-500 font-mono-num">月均結餘 ${r.avgMonthlyNet >= 0 ? '+' : ''}${fmtTWD(r.avgMonthlyNet)}（${r.monthCount} 個月）</div>
+            </div>
+          `;
+        }
+
+        // 2. Expense Category Ranking + Single Category Trend
+        const expBadge = document.getElementById('report-exp-total-badge');
+        if (expBadge) expBadge.textContent = `區間總支出 ${fmtTWD(r.totalExpenseTWD)}`;
+
+        if (!reportSelectedCat || !r.categories.some((c) => c.category === reportSelectedCat)) {
+          reportSelectedCat = r.categories.length > 0 ? r.categories[0].category : '';
+        }
+
+        const catListEl = document.getElementById('report-exp-cat-list');
+        if (catListEl) {
+          if (r.categories.length === 0) {
+            catListEl.innerHTML = '<div class="py-8 text-center text-xs text-zinc-400">此期間尚無支出紀錄</div>';
+          } else {
+            catListEl.innerHTML = r.categories.map((c, idx) => {
+              const selected = c.category === reportSelectedCat;
+              return `
+                <button type="button" data-report-cat="${escapeHtml(c.category)}" class="w-full text-left p-2.5 rounded-lg transition-colors ${selected ? 'bg-zinc-900/[0.05] hairline' : 'hover:bg-[#f7f7f5]'}">
+                  <div class="flex items-center justify-between gap-2 text-xs">
+                    <div class="flex items-center gap-2 min-w-0">
+                      <span class="w-4 text-[11px] font-mono-num text-zinc-400">${idx + 1}</span>
+                      <span class="font-medium text-zinc-900 truncate">${escapeHtml(c.category)}</span>
+                      <span class="text-[11px] text-zinc-400 font-mono-num">${c.count} 筆</span>
+                    </div>
+                    <div class="flex items-center gap-2 shrink-0 font-mono-num">
+                      <span class="font-semibold text-zinc-900">${fmtTWD(c.totalTWD)}</span>
+                      <span class="w-11 text-right text-[11px] text-zinc-500">${c.pct.toFixed(1)}%</span>
+                    </div>
+                  </div>
+                  <div class="mt-1.5 h-1.5 rounded-full bg-zinc-200/70 overflow-hidden">
+                    <div class="h-full rounded-full ${selected ? 'bg-zinc-900' : 'bg-emerald-600/75'}" style="width:${Math.min(100, Math.max(2, c.pct)).toFixed(1)}%"></div>
+                  </div>
+                </button>
+              `;
+            }).join('');
+          }
+        }
+
+        const catSel = document.getElementById('report-cat-trend-select');
+        if (catSel) {
+          if (r.categories.length === 0) {
+            catSel.innerHTML = '<option value="">無類別</option>';
+          } else {
+            catSel.innerHTML = r.categories.map((c) => `<option value="${escapeHtml(c.category)}" ${c.category === reportSelectedCat ? 'selected' : ''}>${escapeHtml(c.category)}</option>`).join('');
+          }
+        }
+
+        const fmtAxisTWD = (v) => {
+          const abs = Math.abs(v);
+          if (abs >= 10000) return (v / 10000).toFixed(abs >= 100000 ? 0 : 1) + '萬';
+          if (abs >= 1000) return (v / 1000).toFixed(0) + '千';
+          return String(Math.round(v));
+        };
+
+        // Render Single Category Monthly Trend Chart
+        const catCanvas = document.getElementById('chart-report-cat-trend');
+        if (catCanvas) {
+          if (chartReportCatTrend) chartReportCatTrend.destroy();
+          const mm = reportSelectedCat ? (r.catMonthlyMap.get(reportSelectedCat) || new Map()) : new Map();
+          const catSeries = r.filteredMonths.map((m) => Math.round(mm.get(m.label) || 0));
+          const catAvg = catSeries.length > 0 ? catSeries.reduce((a, b) => a + b, 0) / catSeries.length : 0;
+          const catSub = document.getElementById('report-cat-trend-sub');
+          if (catSub) {
+            catSub.textContent = reportSelectedCat ? `「${reportSelectedCat}」月均 ${fmtTWD(catAvg)}（共 ${r.filteredMonths.length} 個月）` : '檢視各月花費是否逐月膨脹';
+          }
+          chartReportCatTrend = new Chart(catCanvas.getContext('2d'), {
+            type: 'bar',
+            data: {
+              labels: r.filteredMonths.map((m) => m.label),
+              datasets: [{
+                label: reportSelectedCat || '支出',
+                data: catSeries,
+                backgroundColor: 'rgba(24, 24, 27, 0.78)',
+                borderRadius: 4,
+                maxBarThickness: 28
+              }]
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              plugins: {
+                legend: { display: false },
+                tooltip: { callbacks: { label: (ctx) => ` ${ctx.dataset.label}: ${fmtTWD(ctx.parsed.y)}` } }
+              },
+              scales: {
+                x: { grid: { display: false }, ticks: { color: '#71717a', font: { size: 10, family: 'JetBrains Mono' }, maxRotation: 0, autoSkip: true, maxTicksLimit: 8 } },
+                y: { grid: { color: 'rgba(24,24,27,0.06)' }, ticks: { color: '#71717a', font: { size: 10, family: 'JetBrains Mono' }, callback: fmtAxisTWD } }
+              }
+            }
+          });
+        }
+
+        // 3. Active vs Passive Income Mix Chart
+        const mixBadge = document.getElementById('report-income-mix-badge');
+        if (mixBadge) {
+          const passiveShare = r.totalIncomeTWD > 0 ? ((r.passiveIncomeTWD / r.totalIncomeTWD) * 100).toFixed(1) : '0.0';
+          mixBadge.textContent = `被動收入佔總收入 ${passiveShare}%`;
+        }
+        const mixCanvas = document.getElementById('chart-report-income-mix');
+        if (mixCanvas) {
+          if (chartReportIncomeMix) chartReportIncomeMix.destroy();
+          chartReportIncomeMix = new Chart(mixCanvas.getContext('2d'), {
+            type: 'bar',
+            data: {
+              labels: r.filteredMonths.map((m) => m.label),
+              datasets: [
+                {
+                  type: 'bar',
+                  label: '主動收入 (薪資/獎金)',
+                  data: r.filteredMonths.map((m) => Math.round(m.salaryIncomeTWD)),
+                  backgroundColor: 'rgba(24, 24, 27, 0.72)',
+                  borderRadius: 3,
+                  stack: 'inc',
+                  maxBarThickness: 28,
+                  order: 2
+                },
+                {
+                  type: 'bar',
+                  label: '被動收入 (分潤/股利)',
+                  data: r.filteredMonths.map((m) => Math.round(m.passiveIncomeTWD)),
+                  backgroundColor: 'rgba(190, 18, 60, 0.78)',
+                  borderRadius: 3,
+                  stack: 'inc',
+                  maxBarThickness: 28,
+                  order: 2
+                },
+                {
+                  type: 'line',
+                  label: '當月總支出',
+                  data: r.filteredMonths.map((m) => Math.round(m.expenseTWD)),
+                  borderColor: '#047857',
+                  backgroundColor: '#047857',
+                  borderWidth: 2,
+                  borderDash: [4, 3],
+                  pointRadius: r.filteredMonths.length > 18 ? 1.5 : 3,
+                  tension: 0.25,
+                  order: 1
+                }
+              ]
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              interaction: { mode: 'index', intersect: false },
+              plugins: {
+                legend: { display: true, position: 'top', labels: { boxWidth: 10, font: { size: 11 } } },
+                tooltip: { callbacks: { label: (ctx) => ` ${ctx.dataset.label}: ${fmtTWD(ctx.parsed.y)}` } }
+              },
+              scales: {
+                x: { stacked: true, grid: { display: false }, ticks: { color: '#71717a', font: { size: 10, family: 'JetBrains Mono' }, maxRotation: 0, autoSkip: true, maxTicksLimit: 10 } },
+                y: { stacked: true, grid: { color: 'rgba(24,24,27,0.06)' }, ticks: { color: '#71717a', font: { size: 10, family: 'JetBrains Mono' }, callback: fmtAxisTWD } }
+              }
+            }
+          });
+        }
+
+        // 4. Net Worth Growth Attribution Panel
+        const attrEl = document.getElementById('report-attribution-panel');
+        if (attrEl) {
+          const fmtSigned = (v) => {
+            const cls = v > 0 ? 'text-rose-700' : v < 0 ? 'text-emerald-700' : 'text-zinc-500';
+            return `<span class="${cls} font-semibold">${v > 0 ? '+' : ''}${fmtTWD(v)}</span>`;
+          };
+          const maxAbs = Math.max(1, Math.abs(r.activeSavingsContrib), Math.abs(r.investCashflowContrib), Math.abs(r.marketFxContrib));
+          const barW = (v) => `${Math.min(100, Math.max(4, (Math.abs(v) / maxAbs) * 100)).toFixed(1)}%`;
+
+          let takeaway = '';
+          if (r.hasAttribution) {
+            if (r.totalNwChange > 0) {
+              const invTotal = r.investCashflowContrib + r.marketFxContrib;
+              if (invTotal > r.activeSavingsContrib) {
+                takeaway = '本期間淨值成長主要由「投資現金流與資產增值」帶動，複利效應明顯。';
+              } else {
+                takeaway = '本期間淨值成長主要由「本業儲蓄（薪資減支出）」穩健累積。';
+              }
+            } else if (r.totalNwChange < 0) {
+              takeaway = '本期間淨值微幅回落，可對照上方支出結構與投資投入／市場波動。';
+            } else {
+              takeaway = '本期間淨值持平。';
+            }
+          }
+
+          attrEl.innerHTML = `
+            <div class="p-3.5 rounded-lg bg-[#f7f7f5] hairline flex items-center justify-between gap-2">
+              <div class="text-xs text-zinc-600">${r.hasAttribution ? `區間淨值變化（${escapeHtml(r.startSnap.label)} → ${escapeHtml(r.endSnap.label)}）` : '區間淨值變化（待累積 2 期快照）'}</div>
+              <div class="text-sm font-mono-num">${r.hasAttribution ? fmtSigned(r.totalNwChange) : '<span class="text-zinc-400">—</span>'}</div>
+            </div>
+            <div class="space-y-3 pt-1">
+              <div>
+                <div class="flex items-center justify-between text-xs">
+                  <span class="text-zinc-700 font-medium">① 本業儲蓄貢獻（薪資獎金 − 支出）</span>
+                  <span class="font-mono-num">${fmtSigned(r.activeSavingsContrib)}</span>
+                </div>
+                <div class="mt-1 h-2 rounded-full bg-zinc-100 overflow-hidden"><div class="h-full rounded-full ${r.activeSavingsContrib >= 0 ? 'bg-zinc-900' : 'bg-emerald-600'}" style="width:${barW(r.activeSavingsContrib)}"></div></div>
+              </div>
+              <div>
+                <div class="flex items-center justify-between text-xs">
+                  <span class="text-zinc-700 font-medium">② 投資現金流（分潤＋股利＋已實現）</span>
+                  <span class="font-mono-num">${fmtSigned(r.investCashflowContrib)}</span>
+                </div>
+                <div class="mt-1 h-2 rounded-full bg-zinc-100 overflow-hidden"><div class="h-full rounded-full bg-rose-600/80" style="width:${barW(r.investCashflowContrib)}"></div></div>
+              </div>
+              <div>
+                <div class="flex items-center justify-between text-xs">
+                  <span class="text-zinc-700 font-medium">③ 市場波動／匯率／本金調動殘差</span>
+                  <span class="font-mono-num">${r.hasAttribution ? fmtSigned(r.marketFxContrib) : '<span class="text-zinc-400">—</span>'}</span>
+                </div>
+                <div class="mt-1 h-2 rounded-full bg-zinc-100 overflow-hidden"><div class="h-full rounded-full bg-amber-500/80" style="width:${r.hasAttribution ? barW(r.marketFxContrib) : '0%'}"></div></div>
+              </div>
+            </div>
+            <p class="text-[11px] text-zinc-500 leading-relaxed pt-1 border-t border-zinc-900/[0.06]">${r.hasAttribution ? takeaway : '當系統累積 2 個不同月份以上的歷史淨值快照後，將自動算出完整的淨值成長歸因拆解。'}</p>
+          `;
+        }
+
+        // 5. Annual Income Statement Table
+        const annualBadge = document.getElementById('report-annual-badge');
+        if (annualBadge) annualBadge.textContent = r.annualRows.length > 0 ? `共 ${r.annualRows.length} 個年度` : '';
+        const annualTbody = document.getElementById('report-annual-tbody');
+        if (annualTbody) {
+          if (r.annualRows.length === 0) {
+            annualTbody.innerHTML = '<tr><td colspan="10" class="py-6 text-center text-zinc-400 font-sans">尚無年度歷史資料</td></tr>';
+          } else {
+            annualTbody.innerHTML = r.annualRows.map((a) => {
+              const netCls = a.netTWD > 0 ? 'text-rose-700' : a.netTWD < 0 ? 'text-emerald-700' : 'text-zinc-500';
+              const yoyTxt = a.yoyGrowthPct !== null ? ` <span class="text-[10px] ${a.yoyGrowthPct >= 0 ? 'text-rose-700' : 'text-emerald-700'}">(${a.yoyGrowthPct >= 0 ? '+' : ''}${a.yoyGrowthPct.toFixed(1)}%)</span>` : '';
+              const topCatsHtml = a.topCats.length > 0
+                ? a.topCats.map((c) => `<span class="inline-block px-1.5 py-0.5 rounded bg-[#f7f7f5] hairline text-[10px] text-zinc-700 mr-1 mb-0.5">${escapeHtml(c.category)} ${fmtTWD(c.totalTWD)}</span>`).join('')
+                : '<span class="text-zinc-300">—</span>';
+              return `
+                <tr class="hover:bg-[#f7f7f5] transition-colors">
+                  <td class="py-2.5 px-2 font-semibold text-zinc-900">${escapeHtml(a.year)}</td>
+                  <td class="py-2.5 px-2 text-right text-zinc-700">${fmtTWD(a.salaryTWD)}</td>
+                  <td class="py-2.5 px-2 text-right text-zinc-700">${fmtTWD(a.passiveTWD)}</td>
+                  <td class="py-2.5 px-2 text-right font-medium text-rose-700">${fmtTWD(a.incomeTWD)}</td>
+                  <td class="py-2.5 px-2 text-right font-medium text-emerald-700">${fmtTWD(a.expenseTWD)}</td>
+                  <td class="py-2.5 px-2 text-right font-semibold ${netCls}">${a.netTWD >= 0 ? '+' : ''}${fmtTWD(a.netTWD)}</td>
+                  <td class="py-2.5 px-2 text-right text-zinc-700">${a.savingsRate !== null ? `${a.savingsRate.toFixed(1)}%` : '—'}</td>
+                  <td class="py-2.5 px-2 text-right text-zinc-700">${a.fiRatio !== null ? `${a.fiRatio.toFixed(1)}%` : '—'}</td>
+                  <td class="py-2.5 px-2 text-right font-medium text-zinc-900 whitespace-nowrap">${a.endNW !== null ? `${fmtTWD(a.endNW)}${yoyTxt}` : '—'}</td>
+                  <td class="py-2.5 px-2 font-sans">${topCatsHtml}</td>
+                </tr>
+              `;
+            }).join('');
+          }
+        }
+
+        // 6. Cross-Asset Performance Comparison Table
+        const compareTbody = document.getElementById('report-asset-compare-tbody');
+        if (compareTbody) {
+          const nw = totals.netWorthTWD || 1;
+          const stockRetCls = r.stocksTotalReturnTWD >= 0 ? 'text-rose-700' : 'text-emerald-700';
+          const invNetCls = r.recycling.netCashflow >= 0 ? 'text-rose-700' : 'text-emerald-700';
+          compareTbody.innerHTML = `
+            <tr class="hover:bg-[#f7f7f5]">
+              <td class="py-3 px-2 font-sans font-semibold text-zinc-900">股票與 ETF</td>
+              <td class="py-3 px-2 text-right text-zinc-700">${fmtTWD(r.stocksCostTWD)}</td>
+              <td class="py-3 px-2 text-right font-semibold text-zinc-900">${fmtTWD(totals.stocksTWD)}</td>
+              <td class="py-3 px-2 text-right text-zinc-700">${fmtTWD(r.allStockRealizedPnl + r.allStockDividends)}</td>
+              <td class="py-3 px-2 text-right font-semibold ${stockRetCls}">${r.stocksTotalReturnTWD >= 0 ? '+' : ''}${fmtTWD(r.stocksTotalReturnTWD)}${r.stocksTotalReturnPct !== null ? ` (${r.stocksTotalReturnPct >= 0 ? '+' : ''}${r.stocksTotalReturnPct.toFixed(1)}%)` : ''}</td>
+              <td class="py-3 px-2 font-sans text-xs text-zinc-500">含未實現 ${totals.stocksPnlTWD >= 0 ? '+' : ''}${fmtTWD(totals.stocksPnlTWD)} · 佔淨值 ${((totals.stocksTWD / nw) * 100).toFixed(1)}%</td>
+            </tr>
+            <tr class="hover:bg-[#f7f7f5]">
+              <td class="py-3 px-2 font-sans font-semibold text-zinc-900">實體與專案投資</td>
+              <td class="py-3 px-2 text-right text-zinc-700">${fmtTWD(r.recycling.hasLogs ? r.recycling.trueCapitalBase : totals.plannedInvestmentsTWD)}</td>
+              <td class="py-3 px-2 text-right text-zinc-500 font-sans text-xs">保守制不計入淨值</td>
+              <td class="py-3 px-2 text-right font-semibold text-rose-700">${fmtTWD(r.recycling.totalReturned)}</td>
+              <td class="py-3 px-2 text-right font-semibold ${invNetCls}">${r.recycling.moic !== null ? `${r.recycling.moic.toFixed(2)}x MOIC` : '—'}</td>
+              <td class="py-3 px-2 font-sans text-xs text-zinc-500">${r.recycling.hasLogs ? `峰值淨投入 ${fmtTWD(r.recycling.trueCapitalBase)} · 淨現金流 ${r.recycling.netCashflow >= 0 ? '+' : ''}${fmtTWD(r.recycling.netCashflow)}` : `進行中預計投入 ${fmtTWD(totals.plannedInvestmentsTWD)}`}</td>
+            </tr>
+            <tr class="hover:bg-[#f7f7f5]">
+              <td class="py-3 px-2 font-sans font-semibold text-zinc-900">銀行與券商現金</td>
+              <td class="py-3 px-2 text-right text-zinc-500">—</td>
+              <td class="py-3 px-2 text-right font-semibold text-zinc-900">${fmtTWD(totals.cashTWD)}</td>
+              <td class="py-3 px-2 text-right text-zinc-500">—</td>
+              <td class="py-3 px-2 text-right font-semibold text-zinc-800">${r.runwayTotalMonths !== null ? `可撐 ${r.runwayTotalMonths.toFixed(1)} 個月` : '—'}</td>
+              <td class="py-3 px-2 font-sans text-xs text-zinc-500">佔淨值 ${((totals.cashTWD / nw) * 100).toFixed(1)}% · 台幣現金 ${fmtTWD(r.twdCash)}</td>
+            </tr>
+          `;
+        }
+      }
+
       function renderAll() {
         const totals = computeTotals(state);
         renderWelcomeHub(totals);
@@ -3778,6 +4519,7 @@
         renderExpenses(totals);
         renderFxTab();
         renderHistory();
+        renderReports(totals);
         renderSettings();
       }
 
@@ -3785,6 +4527,8 @@
       function openFormModal(title, fieldsHtml, onSubmit) {
         document.getElementById('modal-title').textContent = title;
         document.getElementById('modal-fields').innerHTML = fieldsHtml;
+        const submitBtn = document.querySelector('#modal-form button[type="submit"]');
+        if (submitBtn) submitBtn.textContent = '儲存';
         currentModalSubmit = onSubmit;
         const modal = document.getElementById('form-modal');
         modal.classList.remove('hidden');
@@ -6710,6 +7454,59 @@
         if (currentConfirmAction) currentConfirmAction();
         closeConfirmModal();
       });
+
+      const reportPeriodEl = document.getElementById('report-period-select');
+      if (reportPeriodEl) {
+        reportPeriodEl.addEventListener('change', (e) => {
+          reportPeriod = e.target.value || 'all';
+          renderReports(computeTotals(state));
+        });
+      }
+      const reportCatSelEl = document.getElementById('report-cat-trend-select');
+      if (reportCatSelEl) {
+        reportCatSelEl.addEventListener('change', (e) => {
+          reportSelectedCat = e.target.value || '';
+          renderReports(computeTotals(state));
+        });
+      }
+      const reportCatListEl = document.getElementById('report-exp-cat-list');
+      if (reportCatListEl) {
+        reportCatListEl.addEventListener('click', (e) => {
+          const btn = e.target.closest('[data-report-cat]');
+          if (!btn) return;
+          reportSelectedCat = btn.dataset.reportCat || '';
+          renderReports(computeTotals(state));
+        });
+      }
+      const copyAiPromptBtn = document.getElementById('btn-copy-ai-prompt');
+      if (copyAiPromptBtn) {
+        copyAiPromptBtn.addEventListener('click', () => {
+          const promptText = buildAIPromptText(state, reportPeriod, computeTotals(state));
+          const doCopy = () => {
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+              navigator.clipboard.writeText(promptText).then(() => {
+                showToast('已複製去識別化 AI 財務健檢 Prompt，可直接貼給 Gemini / ChatGPT / Claude！');
+              }).catch(() => {
+                showToast('請從下方文字框全選複製 Prompt');
+              });
+            }
+          };
+          doCopy();
+          const modalHtml = `
+            <div class="space-y-3">
+              <div class="rounded-lg bg-[#f7f7f5] hairline px-3 py-2 text-xs text-zinc-600 leading-relaxed">
+                已自動整理並嘗試複製以下<strong>去識別化</strong>財務健檢提示詞（僅含彙總數字與比例，不含銀行帳號或姓名），可直接貼到 Gemini、ChatGPT 或 Claude 進行分析：
+              </div>
+              <textarea id="ai-prompt-preview" rows="12" readonly class="w-full p-3 rounded-lg hairline bg-white text-xs font-mono-num text-zinc-800 leading-relaxed">${escapeHtml(promptText)}</textarea>
+            </div>
+          `;
+          openFormModal('AI 財務健檢 Prompt（去識別化）', modalHtml, () => {
+            doCopy();
+          });
+          const submitBtn = document.querySelector('#modal-form button[type="submit"]');
+          if (submitBtn) submitBtn.textContent = '再次複製全文';
+        });
+      }
 
       initFirebaseFromConfig(true);
       if ('serviceWorker' in navigator) {
