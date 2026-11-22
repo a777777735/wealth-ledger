@@ -662,6 +662,12 @@
                 <input id="filter-exp-month" type="month" class="h-8 px-2.5 rounded-lg hairline text-xs bg-white text-zinc-700" />
                 <select id="filter-exp-cat" class="h-8 px-2.5 rounded-lg hairline text-xs bg-white text-zinc-700">
                   <option value="ALL">全部類別</option>
+                  <option value="居住與房貸">居住與房貸</option>
+                  <option value="保險與醫療">保險與醫療</option>
+                  <option value="水電與通訊">水電與通訊</option>
+                  <option value="訂閱與會員">訂閱與會員</option>
+                  <option value="家庭與孝親">家庭與孝親</option>
+                  <option value="交通與車貸">交通與車貸</option>
                   <option value="餐飲美食">餐飲美食</option>
                   <option value="交通旅遊">交通旅遊</option>
                   <option value="購物消費">購物消費</option>
@@ -669,9 +675,11 @@
                   <option value="休閒娛樂">休閒娛樂</option>
                   <option value="居家修繕">居家修繕</option>
                   <option value="社交禮金">社交禮金</option>
+                  <option value="其他固定支出">其他固定支出</option>
                   <option value="其他隨機支出">其他隨機支出</option>
                 </select>
                 <button id="btn-clear-exp-filter" type="button" class="btn-focus h-8 px-2.5 rounded-lg bg-[#f7f7f5] hover:bg-zinc-200/70 text-zinc-600 text-xs font-medium transition-colors duration-150">全部期間</button>
+                <button id="btn-batch-edit-exp-cat" type="button" class="btn-focus h-8 px-3 rounded-lg bg-white hover:bg-zinc-50 text-zinc-800 hairline text-xs font-medium transition-colors duration-150">批次修改類別</button>
                 <button id="btn-add-random-exp" type="button" class="btn-focus h-8 px-3.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-medium transition-colors duration-150">新增隨機支出</button>
               </div>
             </div>
@@ -5843,6 +5851,93 @@
       document.getElementById('btn-batch-income-history').addEventListener('click', () => openBatchHistoryModal('income'));
       document.getElementById('btn-batch-expense-history').addEventListener('click', () => openBatchHistoryModal('expense'));
       document.getElementById('btn-add-fixed-exp').addEventListener('click', () => openFixedExpenseModal(null));
+      function openBatchEditExpCategoryModal() {
+        const list = state.randomExpenses || [];
+        if (list.length === 0) {
+          showToast('目前尚無支出明細可修改');
+          return;
+        }
+        const titles = [...new Set(list.map((r) => String(r.title || '').trim()).filter(Boolean))];
+        const curCats = [...new Set(list.map((r) => String(r.category || '').trim()).filter(Boolean))];
+        const allTargetCats = [...new Set([
+          '居住與房貸', '保險與醫療', '水電與通訊', '訂閱與會員', '家庭與孝親', '交通與車貸',
+          '餐飲美食', '交通旅遊', '購物消費', '醫療保健', '休閒娛樂', '居家修繕', '社交禮金',
+          '其他固定支出', '其他隨機支出', ...curCats
+        ])];
+        const titleOpts = '<option value="ALL">全部項目名稱</option>' +
+          titles.map((t) => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join('');
+        const curCatOpts = '<option value="ALL">全部原類別</option>' +
+          curCats.map((c) => `<option value="${escapeHtml(c)}" ${c === '其他固定支出' ? 'selected' : ''}>${escapeHtml(c)}</option>`).join('');
+        const targetCatOpts = allTargetCats.map((c) => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
+
+        const html = `
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-medium text-zinc-600 mb-1">篩選：支出項目名稱</label>
+              <select id="be-filter-title" name="filterTitle" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white">${titleOpts}</select>
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-zinc-600 mb-1">篩選：原本的類別</label>
+              <select id="be-filter-cat" name="filterCat" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white">${curCatOpts}</select>
+            </div>
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-zinc-600 mb-1">統一改為新類別</label>
+            <select id="be-target-cat" name="targetCat" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white">${targetCatOpts}</select>
+          </div>
+          <div id="be-preview-box" class="rounded-lg bg-[#f7f7f5] hairline px-3 py-2.5 text-xs text-zinc-600 space-y-1"></div>
+        `;
+
+        openFormModal('批次修改支出類別', html, (fd) => {
+          const fTitle = String(fd.get('filterTitle') || 'ALL');
+          const fCat = String(fd.get('filterCat') || 'ALL');
+          const targetCat = String(fd.get('targetCat') || '').trim();
+          if (!targetCat) return;
+          let changed = 0;
+          state.randomExpenses = (state.randomExpenses || []).map((r) => {
+            const matchTitle = fTitle === 'ALL' || String(r.title || '').trim() === fTitle;
+            const matchCat = fCat === 'ALL' || String(r.category || '').trim() === fCat;
+            if (matchTitle && matchCat) {
+              changed += 1;
+              return { ...r, category: targetCat };
+            }
+            return r;
+          });
+          if (changed === 0) {
+            showToast('沒有符合條件的支出紀錄');
+            return;
+          }
+          saveState();
+          renderAll();
+          showToast(`已批次將 ${changed} 筆支出的類別改為「${targetCat}」`);
+        });
+
+        const fTitleEl = document.getElementById('be-filter-title');
+        const fCatEl = document.getElementById('be-filter-cat');
+        const previewEl = document.getElementById('be-preview-box');
+        const updatePreview = () => {
+          if (!previewEl || !fTitleEl || !fCatEl) return;
+          const ft = fTitleEl.value;
+          const fc = fCatEl.value;
+          const matched = (state.randomExpenses || []).filter((r) =>
+            (ft === 'ALL' || String(r.title || '').trim() === ft) &&
+            (fc === 'ALL' || String(r.category || '').trim() === fc)
+          );
+          if (matched.length === 0) {
+            previewEl.innerHTML = '<div class="text-zinc-400">目前條件下無符合的紀錄</div>';
+            return;
+          }
+          const sample = matched.slice(0, 4).map((r) => `${r.date} · ${r.title} (${r.category})`).join('、');
+          previewEl.innerHTML = `
+            <div>符合條件：將一次更新 <strong class="text-zinc-900 font-mono-num">${matched.length}</strong> 筆支出紀錄</div>
+            <div class="text-[11px] text-zinc-500 truncate">範例：${escapeHtml(sample)}${matched.length > 4 ? ' …' : ''}</div>
+          `;
+        };
+        if (fTitleEl) fTitleEl.addEventListener('change', updatePreview);
+        if (fCatEl) fCatEl.addEventListener('change', updatePreview);
+        updatePreview();
+      }
+      document.getElementById('btn-batch-edit-exp-cat').addEventListener('click', openBatchEditExpCategoryModal);
       document.getElementById('btn-add-random-exp').addEventListener('click', () => openRandomExpenseModal(null));
       document.getElementById('btn-add-fx-trade').addEventListener('click', () => openFxTradeModal(null));
       document.getElementById('filter-fx-cur').addEventListener('change', (e) => { fxFilterCur = e.target.value; renderFxTab(); });
