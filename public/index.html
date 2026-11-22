@@ -167,6 +167,10 @@
             <svg class="w-4 h-4 shrink-0 text-zinc-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.8L20 11l-6.1 2.2L12 19l-1.9-5.8L4 11l6.1-2.2L12 3z"/></svg>
             <span>AI 智慧搬家</span>
           </button>
+          <button type="button" data-tab="trips" class="tab-btn btn-focus flex items-center gap-2.5 h-9 px-2.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors duration-150">
+            <svg class="w-4 h-4 shrink-0 text-zinc-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            <span>揪團分帳</span>
+          </button>
 
           <div class="hidden lg:block px-2.5 pt-4 pb-1.5 text-[11px] font-medium text-zinc-400">系統設定</div>
           <button type="button" data-tab="settings" class="tab-btn btn-focus flex items-center gap-2.5 h-9 px-2.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors duration-150">
@@ -1329,6 +1333,139 @@
           </div>
         </section>
 
+        <!-- TAB 7.9: GROUP TRIP SPLITTER (揪團出遊公費與分帳) -->
+        <section id="tab-trips" class="tab-panel hidden space-y-6">
+          <!-- Guest Shared-Link Banner (shown only when opened via ?trip=CODE) -->
+          <div id="trip-guest-banner" class="hidden rounded-xl bg-zinc-900 text-white p-4 flex flex-wrap items-center justify-between gap-3">
+            <div class="space-y-0.5">
+              <div class="text-sm font-semibold">揪團分帳共享檢視模式（與個人帳本完全隔離）</div>
+              <div id="trip-guest-sub" class="text-xs text-zinc-300">可即時查看每日花費與各家庭結算，或直接申報自己替團隊代墊的款項</div>
+            </div>
+            <div class="flex flex-wrap items-center gap-2">
+              <button id="btn-trip-unlock-admin" type="button" class="h-8 px-3 rounded-lg bg-white/15 hover:bg-white/25 text-white text-xs font-medium">總務密碼解鎖</button>
+              <button id="btn-trip-exit-guest" type="button" class="h-8 px-3 rounded-lg bg-white text-zinc-900 text-xs font-medium">切換回我的個人帳本</button>
+            </div>
+          </div>
+
+          <!-- Top Selector & Actions -->
+          <div class="bg-white rounded-xl p-6 hairline space-y-4">
+            <div class="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h2 class="text-base font-semibold text-zinc-900">揪團出遊公費與多家庭分帳</h2>
+                <p class="text-xs text-zinc-500 mt-0.5">支援預收公費、大人／小孩權重、家庭帳號合併結算、團員申報代墊＋總務核准、公費現場還款與多幣別公定匯率</p>
+              </div>
+              <div class="flex flex-wrap items-center gap-2">
+                <select id="trip-select" class="h-8 px-2.5 rounded-lg hairline bg-white text-xs font-medium text-zinc-800 max-w-[220px]"></select>
+                <button id="btn-trip-join-code" type="button" class="btn-focus h-8 px-3 rounded-lg bg-white hover:bg-zinc-50 hairline text-xs font-medium text-zinc-700">輸入代碼加入</button>
+                <button id="btn-trip-new" type="button" class="btn-focus h-8 px-3.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-medium">＋ 新增旅程</button>
+              </div>
+            </div>
+
+            <div id="trip-empty-state" class="hidden rounded-xl bg-[#f7f7f5] hairline p-8 text-center space-y-3">
+              <div class="text-sm font-semibold text-zinc-900">尚未建立任何揪團旅程</div>
+              <p class="text-xs text-zinc-500 max-w-md mx-auto">建立旅程後可加入各家庭／好友（設定大人與小孩人數、預繳公費），每天記錄公費支出或成員代墊，並產生專屬連結丟到 LINE 群組即時互通！</p>
+              <button type="button" onclick="document.getElementById('btn-trip-new').click()" class="btn-focus h-8 px-4 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-medium">立即建立第一趟旅程</button>
+            </div>
+
+            <!-- Active Trip Toolbar & KPIs -->
+            <div id="trip-active-wrap" class="hidden space-y-4">
+              <div class="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-zinc-900/[0.06]">
+                <div class="flex flex-wrap items-center gap-2 text-xs">
+                  <span id="trip-meta-badge" class="font-mono-num text-zinc-600"></span>
+                  <span id="trip-cloud-badge" class="px-2 py-0.5 rounded bg-zinc-100 text-zinc-600 text-[11px]">本機模式</span>
+                </div>
+                <div class="flex flex-wrap items-center gap-1.5">
+                  <button id="btn-trip-edit" type="button" class="trip-admin-only btn-focus h-7 px-2.5 rounded-lg bg-white hover:bg-zinc-50 hairline text-xs text-zinc-700">旅程設定／匯率</button>
+                  <button id="btn-trip-share" type="button" class="btn-focus h-7 px-2.5 rounded-lg bg-white hover:bg-zinc-50 hairline text-xs text-zinc-700">雲端同步與 LINE 分享</button>
+                  <button id="btn-trip-copy-line" type="button" class="btn-focus h-7 px-2.5 rounded-lg bg-white hover:bg-zinc-50 hairline text-xs text-zinc-700">複製 LINE 結算單</button>
+                  <button id="btn-trip-import-personal" type="button" class="btn-focus h-7 px-2.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-medium">匯入我家花費至個人帳本</button>
+                  <button id="btn-trip-del" type="button" class="trip-admin-only btn-focus h-7 px-2.5 rounded-lg bg-white hover:bg-rose-50 hairline text-xs text-rose-700">刪除旅程</button>
+                </div>
+              </div>
+
+              <!-- 4 Pool & Settlement KPI Cards -->
+              <div id="trip-kpi-cards" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3"></div>
+
+              <!-- "I am which family?" Quick Highlighter -->
+              <div class="flex flex-wrap items-center justify-between gap-2 p-3 rounded-lg bg-[#f7f7f5] hairline text-xs">
+                <div class="flex flex-wrap items-center gap-2">
+                  <span class="font-medium text-zinc-700">我是哪一家／成員：</span>
+                  <select id="trip-my-group-select" class="h-7 px-2 rounded-md hairline bg-white text-xs text-zinc-800"></select>
+                  <span id="trip-my-group-status" class="font-mono-num text-zinc-700"></span>
+                </div>
+                <div class="flex flex-wrap items-center gap-2">
+                  <button id="btn-trip-submit-advance" type="button" class="btn-focus h-8 px-3 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-xs font-medium">＋ 申報我替團隊代墊</button>
+                  <button id="btn-trip-add-expense" type="button" class="trip-admin-only btn-focus h-8 px-3.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-medium">＋ 總務記一筆開銷</button>
+                </div>
+              </div>
+
+              <!-- Pending Member Advances Approval Alert -->
+              <div id="trip-pending-box" class="hidden rounded-xl bg-amber-50 border border-amber-200 p-4 space-y-2.5"></div>
+            </div>
+          </div>
+
+          <!-- Family / Group Settlement Table -->
+          <div id="trip-groups-card" class="hidden bg-white rounded-xl p-6 hairline space-y-4">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h3 class="text-sm font-semibold text-zinc-900">參與家庭／組別與最終結算表（多退少補）</h3>
+                <p id="trip-reconcile-bar" class="text-xs text-zinc-500 mt-0.5 font-mono-num">淨結算 = (已繳公費 ＋ 未清償代墊) − 實際應分攤總花費</p>
+              </div>
+              <button id="btn-trip-add-group" type="button" class="trip-admin-only btn-focus h-8 px-3.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-medium">＋ 新增家庭／成員</button>
+            </div>
+            <div class="overflow-x-auto">
+              <table class="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr class="hairline-b text-zinc-500">
+                    <th class="py-2.5 px-2 font-medium">家庭／組別（成員）</th>
+                    <th class="py-2.5 px-2 font-medium text-center">人數 (大/小)</th>
+                    <th class="py-2.5 px-2 font-medium text-right">已繳公費</th>
+                    <th class="py-2.5 px-2 font-medium text-right">替團隊代墊 (未還)</th>
+                    <th class="py-2.5 px-2 font-medium text-right">實際應分攤</th>
+                    <th class="py-2.5 px-2 font-medium text-right">最終多退少補</th>
+                    <th class="py-2.5 px-2 font-medium text-right trip-admin-only">操作</th>
+                  </tr>
+                </thead>
+                <tbody id="trip-groups-tbody" class="divide-y divide-zinc-900/[0.06] font-mono-num"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Daily Trip Expense Ledger -->
+          <div id="trip-expenses-card" class="hidden bg-white rounded-xl p-6 hairline space-y-4">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h3 class="text-sm font-semibold text-zinc-900">每日開銷與代墊明細</h3>
+                <p class="text-xs text-zinc-500 mt-0.5">每筆皆標示「公費支付」或「成員代墊」，支援一鍵標記「公費現場還款」即時沖銷</p>
+              </div>
+              <div class="flex flex-wrap items-center gap-2">
+                <select id="trip-exp-filter-payer" class="h-8 px-2.5 rounded-lg hairline bg-white text-xs text-zinc-700">
+                  <option value="ALL">全部付款方式</option>
+                  <option value="pool">僅公費支付</option>
+                  <option value="member">僅成員代墊</option>
+                  <option value="unreimbursed">未清償代墊</option>
+                </select>
+              </div>
+            </div>
+            <div class="overflow-x-auto">
+              <table class="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr class="hairline-b text-zinc-500">
+                    <th class="py-2.5 px-2 font-medium">日期</th>
+                    <th class="py-2.5 px-2 font-medium">項目／分類</th>
+                    <th class="py-2.5 px-2 font-medium">付款來源</th>
+                    <th class="py-2.5 px-2 font-medium">分攤方式</th>
+                    <th class="py-2.5 px-2 font-medium text-right">原幣金額</th>
+                    <th class="py-2.5 px-2 font-medium text-right">折合結算幣</th>
+                    <th class="py-2.5 px-2 font-medium text-right">狀態／操作</th>
+                  </tr>
+                </thead>
+                <tbody id="trip-expenses-tbody" class="divide-y divide-zinc-900/[0.06] font-mono-num"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
         <!-- TAB 8: SETTINGS, CLOUD SYNC & BACKUP -->
         <section id="tab-settings" class="tab-panel hidden space-y-6">
           <!-- AI Provider Settings -->
@@ -1626,7 +1763,8 @@
           stockTrades: [],
           snapshots: [],
           ledger: [],
-          budgets: { monthlyTotal: 0, byCategory: {} }
+          budgets: { monthlyTotal: 0, byCategory: {} },
+          groupTrips: []
         };
       }
 
@@ -4910,6 +5048,7 @@
         renderFxTab();
         renderHistory();
         renderReports(totals);
+        if (typeof renderTrips === 'function') renderTrips();
         renderSettings();
       }
 
@@ -7252,7 +7391,8 @@
               stockTrades: Array.isArray(parsed.stockTrades) ? parsed.stockTrades : [],
               snapshots: Array.isArray(parsed.snapshots) ? parsed.snapshots : [],
               ledger: Array.isArray(parsed.ledger) ? parsed.ledger : [],
-              budgets: (parsed.budgets && typeof parsed.budgets === 'object') ? parsed.budgets : { monthlyTotal: 0, byCategory: {} }
+              budgets: (parsed.budgets && typeof parsed.budgets === 'object') ? parsed.budgets : { monthlyTotal: 0, byCategory: {} },
+              groupTrips: Array.isArray(parsed.groupTrips) ? parsed.groupTrips : []
             };
             saveState();
             renderAll();
@@ -9572,6 +9712,962 @@
         });
       });
 
+      // ============================================================
+      // GROUP TRIP SPLITTER ENGINE (揪團出遊公費與多家庭分帳)
+      // ============================================================
+      let activeTripId = '';
+      let tripGuestMode = false;
+      let tripGuestAdminUnlocked = false;
+      let tripGuestObj = null;
+      let tripUnsubscribe = null;
+      let tripMyGroupId = localStorage.getItem('wealth_trip_my_group') || '';
+      let tripExpPayerFilter = 'ALL';
+
+      function genTripShareCode() {
+        const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+        let out = '';
+        for (let i = 0; i < 6; i++) out += chars[Math.floor(Math.random() * chars.length)];
+        return out;
+      }
+
+      function getCurrentTrip() {
+        if (tripGuestMode && tripGuestObj) return tripGuestObj;
+        const list = Array.isArray(state.groupTrips) ? state.groupTrips : [];
+        if (list.length === 0) return null;
+        let found = list.find((t) => t.id === activeTripId);
+        if (!found) {
+          found = list[0];
+          activeTripId = found.id;
+        }
+        return found;
+      }
+
+      function isTripAdmin() {
+        if (!tripGuestMode) return true;
+        return tripGuestAdminUnlocked;
+      }
+
+      function getTripRate(trip, currency) {
+        const cur = String(currency || 'TWD').toUpperCase();
+        const base = String((trip && trip.baseCurrency) || 'TWD').toUpperCase();
+        if (cur === base) return 1;
+        const tripRates = (trip && trip.fxRates) || {};
+        if (safeNum(tripRates[cur]) > 0) return safeNum(tripRates[cur]);
+        return safeNum((state.fx && state.fx[cur]), 1);
+      }
+
+      function computeTripSettlement(trip) {
+        const groups = Array.isArray(trip && trip.groups) ? trip.groups : [];
+        const expenses = Array.isArray(trip && trip.expenses) ? trip.expenses : [];
+        const adultW = Math.max(0, safeNum(trip && trip.adultWeight, 1));
+        const childW = Math.max(0, safeNum(trip && trip.childWeight, 0.5));
+
+        const gMap = new Map();
+        groups.forEach((g) => {
+          gMap.set(g.id, {
+            group: g,
+            prepaid: safeNum(g.prepaidTWD),
+            unreimbursedAdvance: 0,
+            reimbursedAdvance: 0,
+            totalAdvance: 0,
+            shareTotal: 0,
+            netBalance: 0
+          });
+        });
+
+        let totalPrepaid = 0;
+        groups.forEach((g) => { totalPrepaid += safeNum(g.prepaidTWD); });
+
+        let totalApprovedSpend = 0;
+        let poolDirectSpent = 0;
+        let poolReimbursed = 0;
+        let pendingCount = 0;
+        let pendingTotal = 0;
+
+        expenses.forEach((e) => {
+          const amt = safeNum(e.amountBase) > 0 ? safeNum(e.amountBase) : safeNum(e.amount) * getTripRate(trip, e.currency);
+          if (e.status === 'pending') {
+            pendingCount += 1;
+            pendingTotal += amt;
+            return;
+          }
+          totalApprovedSpend += amt;
+
+          if (e.payerType === 'pool') {
+            poolDirectSpent += amt;
+          } else {
+            const payerStat = gMap.get(e.payerGroupId);
+            if (e.reimbursedFromPool) {
+              poolReimbursed += amt;
+              if (payerStat) {
+                payerStat.reimbursedAdvance += amt;
+                payerStat.totalAdvance += amt;
+              }
+            } else if (payerStat) {
+              payerStat.unreimbursedAdvance += amt;
+              payerStat.totalAdvance += amt;
+            }
+          }
+
+          // Split across participants
+          const pIds = Array.isArray(e.participantGroupIds) && e.participantGroupIds.length > 0
+            ? e.participantGroupIds.filter((id) => gMap.has(id))
+            : groups.map((g) => g.id);
+          if (pIds.length === 0) return;
+
+          if (e.splitMode === 'custom' && e.customShares && typeof e.customShares === 'object') {
+            pIds.forEach((id) => {
+              const st = gMap.get(id);
+              if (st) st.shareTotal += safeNum(e.customShares[id]);
+            });
+          } else {
+            let totalW = 0;
+            const weights = pIds.map((id) => {
+              const g = gMap.get(id).group;
+              let w = 0;
+              if (e.splitMode === 'adults_only') w = Math.max(0, safeNum(g.adults));
+              else if (e.splitMode === 'children_only') w = Math.max(0, safeNum(g.children));
+              else if (e.splitMode === 'equal_groups') w = 1;
+              else w = Math.max(0, safeNum(g.adults)) * adultW + Math.max(0, safeNum(g.children)) * childW;
+              totalW += w;
+              return { id, w };
+            });
+            if (totalW > 0) {
+              weights.forEach(({ id, w }) => {
+                if (w > 0) gMap.get(id).shareTotal += amt * (w / totalW);
+              });
+            }
+          }
+        });
+
+        let totalToCollect = 0;
+        let totalToRefund = 0;
+        let totalUnreimbursedAdvance = 0;
+        const rows = groups.map((g) => {
+          const st = gMap.get(g.id);
+          st.netBalance = (st.prepaid + st.unreimbursedAdvance) - st.shareTotal;
+          totalUnreimbursedAdvance += st.unreimbursedAdvance;
+          if (st.netBalance < -0.5) totalToCollect += Math.abs(st.netBalance);
+          else if (st.netBalance > 0.5) totalToRefund += st.netBalance;
+          return st;
+        });
+
+        const poolRemainingCash = totalPrepaid - poolDirectSpent - poolReimbursed;
+        return {
+          totalPrepaid,
+          totalApprovedSpend,
+          poolDirectSpent,
+          poolReimbursed,
+          poolRemainingCash,
+          totalUnreimbursedAdvance,
+          totalToCollect,
+          totalToRefund,
+          pendingCount,
+          pendingTotal,
+          rows
+        };
+      }
+
+      async function persistTrip(trip, pushCloud = true) {
+        if (!trip) return;
+        trip.updatedAt = new Date().toISOString();
+        if (!tripGuestMode) {
+          if (!Array.isArray(state.groupTrips)) state.groupTrips = [];
+          const idx = state.groupTrips.findIndex((t) => t.id === trip.id);
+          if (idx >= 0) state.groupTrips[idx] = trip;
+          else state.groupTrips.unshift(trip);
+          saveState();
+        } else {
+          tripGuestObj = trip;
+        }
+        if (pushCloud && fbDb && trip.shareCode) {
+          try {
+            await fbDb.collection('shared_trips').doc(trip.shareCode).set(trip, { merge: true });
+            trip._cloudSynced = true;
+          } catch (err) {
+            // Silently keep local if Firestore rules don't allow shared_trips yet
+            trip._cloudError = err && err.message ? err.message : '雲端權限未開啟';
+          }
+        }
+        renderTrips();
+      }
+
+      function subscribeSharedTrip(code, isGuestLink = false) {
+        if (!fbDb || !code) return;
+        if (tripUnsubscribe) { try { tripUnsubscribe(); } catch (e) {} tripUnsubscribe = null; }
+        const cleanCode = String(code).trim().toUpperCase();
+        tripUnsubscribe = fbDb.collection('shared_trips').doc(cleanCode).onSnapshot((doc) => {
+          if (!doc.exists) {
+            if (isGuestLink) showToast(`找不到代碼為 ${cleanCode} 的雲端旅程`);
+            return;
+          }
+          const remote = doc.data();
+          if (!remote) return;
+          remote._cloudSynced = true;
+          if (tripGuestMode) {
+            tripGuestObj = remote;
+          } else {
+            if (!Array.isArray(state.groupTrips)) state.groupTrips = [];
+            const idx = state.groupTrips.findIndex((t) => t.shareCode === cleanCode || t.id === remote.id);
+            if (idx >= 0) state.groupTrips[idx] = remote;
+            else state.groupTrips.unshift(remote);
+            activeTripId = remote.id;
+            saveState();
+          }
+          renderTrips();
+        }, (err) => {
+          if (isGuestLink) showToast(`無法讀取雲端旅程：${err.message || '請確認 Firestore 共享規則'}`);
+        });
+      }
+
+      function buildTripLineReport(trip) {
+        const st = computeTripSettlement(trip);
+        const lines = [
+          `📋 【${trip.name}】揪團公費結算單`,
+          `📅 期間：${trip.startDate || '-'} ～ ${trip.endDate || '-'}（大人 ${trip.adultWeight} 份／小孩 ${trip.childWeight} 份）`,
+          `💰 總預收公費：${fmtTWD(st.totalPrepaid)}｜全團總花費：${fmtTWD(st.totalApprovedSpend)}`,
+          `🏦 公費池剩餘現金：${fmtTWD(st.poolRemainingCash)}（直付 ${fmtTWD(st.poolDirectSpent)}＋現場還代墊 ${fmtTWD(st.poolReimbursed)}）`,
+          ``
+        ];
+        lines.push(`【各家庭／組別結算（多退少補）】`);
+        st.rows.forEach((r) => {
+          const g = r.group;
+          const act = r.netBalance > 0.5
+            ? `➡️ 總務退還 ${fmtTWD(r.netBalance)}`
+            : r.netBalance < -0.5
+              ? `⬅️ 需補繳 ${fmtTWD(Math.abs(r.netBalance))}`
+              : `✅ 已結清`;
+          lines.push(`• ${g.name}（${g.adults}大${g.children}小）：預繳 ${fmtTWD(r.prepaid)}｜未還代墊 ${fmtTWD(r.unreimbursedAdvance)}｜應攤 ${fmtTWD(r.shareTotal)}｜${act}`);
+        });
+        lines.push(``);
+        lines.push(`【每日開銷摘要（已核准 ${(trip.expenses || []).filter((e) => e.status !== 'pending').length} 筆）】`);
+        const sortedExp = [...(trip.expenses || [])].filter((e) => e.status !== 'pending').sort((a, b) => String(a.date).localeCompare(String(b.date)));
+        sortedExp.forEach((e) => {
+          const amt = safeNum(e.amountBase) > 0 ? safeNum(e.amountBase) : safeNum(e.amount) * getTripRate(trip, e.currency);
+          const payerG = (trip.groups || []).find((g) => g.id === e.payerGroupId);
+          const payerTxt = e.payerType === 'pool'
+            ? '公費'
+            : `${payerG ? payerG.name : '成員'}代墊${e.reimbursedFromPool ? '(已公費還)' : ''}`;
+          const origTxt = e.currency && e.currency !== 'TWD' ? ` (${e.currency} ${fmtNum(e.amount, 0)})` : '';
+          lines.push(`- ${e.date} ${e.title}：${fmtTWD(amt)}${origTxt} [${payerTxt}]`);
+        });
+        return lines.join('\n');
+      }
+
+      function renderTrips() {
+        const panel = document.getElementById('tab-trips');
+        if (!panel) return;
+        const guestBanner = document.getElementById('trip-guest-banner');
+        const asideEl = document.querySelector('aside');
+        const mobileNav = document.getElementById('mobile-bottom-nav');
+        if (guestBanner) guestBanner.classList.toggle('hidden', !tripGuestMode);
+        if (tripGuestMode) {
+          if (asideEl) asideEl.classList.add('hidden');
+          if (mobileNav) mobileNav.classList.add('hidden');
+        } else {
+          if (asideEl) asideEl.classList.remove('hidden');
+          if (mobileNav) mobileNav.classList.remove('hidden');
+        }
+
+        const admin = isTripAdmin();
+        panel.querySelectorAll('.trip-admin-only').forEach((el) => el.classList.toggle('hidden', !admin));
+        const unlockBtn = document.getElementById('btn-trip-unlock-admin');
+        if (unlockBtn) unlockBtn.textContent = tripGuestAdminUnlocked ? '✓ 已解鎖總務權限' : '總務密碼解鎖';
+
+        const list = tripGuestMode ? (tripGuestObj ? [tripGuestObj] : []) : (Array.isArray(state.groupTrips) ? state.groupTrips : []);
+        const tripSel = document.getElementById('trip-select');
+        const emptyEl = document.getElementById('trip-empty-state');
+        const activeWrap = document.getElementById('trip-active-wrap');
+        const groupsCard = document.getElementById('trip-groups-card');
+        const expCard = document.getElementById('trip-expenses-card');
+
+        const trip = getCurrentTrip();
+        if (tripSel) {
+          tripSel.innerHTML = list.length === 0
+            ? '<option value="">尚無旅程</option>'
+            : list.map((t) => `<option value="${escapeHtml(t.id)}" ${trip && t.id === trip.id ? 'selected' : ''}>${escapeHtml(t.name)} (${escapeHtml(t.shareCode || '')})</option>`).join('');
+        }
+
+        if (!trip) {
+          if (emptyEl) emptyEl.classList.remove('hidden');
+          if (activeWrap) activeWrap.classList.add('hidden');
+          if (groupsCard) groupsCard.classList.add('hidden');
+          if (expCard) expCard.classList.add('hidden');
+          return;
+        }
+
+        if (emptyEl) emptyEl.classList.add('hidden');
+        if (activeWrap) activeWrap.classList.remove('hidden');
+        if (groupsCard) groupsCard.classList.remove('hidden');
+        if (expCard) expCard.classList.remove('hidden');
+
+        const st = computeTripSettlement(trip);
+        const totalAdults = (trip.groups || []).reduce((s, g) => s + safeNum(g.adults), 0);
+        const totalChildren = (trip.groups || []).reduce((s, g) => s + safeNum(g.children), 0);
+
+        const metaBadge = document.getElementById('trip-meta-badge');
+        if (metaBadge) {
+          metaBadge.textContent = `${trip.startDate || ''} ～ ${trip.endDate || ''} · ${(trip.groups || []).length} 組（${totalAdults} 大 ${totalChildren} 小）· 權重 大 ${trip.adultWeight} / 小 ${trip.childWeight} · 代碼 ${trip.shareCode || ''}`;
+        }
+        const cloudBadge = document.getElementById('trip-cloud-badge');
+        if (cloudBadge) {
+          if (trip._cloudSynced) {
+            cloudBadge.textContent = '✓ 雲端即時互通中';
+            cloudBadge.className = 'px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 text-[11px] font-medium';
+          } else {
+            cloudBadge.textContent = '本機暫存（點「雲端同步與 LINE 分享」啟用互通）';
+            cloudBadge.className = 'px-2 py-0.5 rounded bg-zinc-100 text-zinc-600 text-[11px]';
+          }
+        }
+
+        // 4 KPI Cards
+        const kpiEl = document.getElementById('trip-kpi-cards');
+        if (kpiEl) {
+          kpiEl.innerHTML = `
+            <div class="p-4 rounded-lg bg-[#f7f7f5] hairline">
+              <div class="text-xs text-zinc-500">總預收公費池</div>
+              <div class="mt-1 text-base font-semibold font-mono-num text-zinc-900">${fmtTWD(st.totalPrepaid)}</div>
+              <div class="mt-0.5 text-[11px] text-zinc-500 font-mono-num">建議 大 ${fmtTWD(trip.prepayPerAdult || 0)} / 小 ${fmtTWD(trip.prepayPerChild || 0)}</div>
+            </div>
+            <div class="p-4 rounded-lg bg-[#f7f7f5] hairline">
+              <div class="text-xs text-zinc-500">全團已核准總花費</div>
+              <div class="mt-1 text-base font-semibold font-mono-num text-rose-700">${fmtTWD(st.totalApprovedSpend)}</div>
+              <div class="mt-0.5 text-[11px] text-zinc-500 font-mono-num">公費直付 ${fmtTWD(st.poolDirectSpent)} · 代墊 ${fmtTWD(st.totalUnreimbursedAdvance + st.poolReimbursed)}</div>
+            </div>
+            <div class="p-4 rounded-lg bg-[#f7f7f5] hairline">
+              <div class="text-xs text-zinc-500">總務公費池剩餘現金</div>
+              <div class="mt-1 text-base font-semibold font-mono-num ${st.poolRemainingCash >= 0 ? 'text-emerald-700' : 'text-rose-700'}">${fmtTWD(st.poolRemainingCash)}</div>
+              <div class="mt-0.5 text-[11px] text-zinc-500 font-mono-num">已用公費現場還代墊 ${fmtTWD(st.poolReimbursed)}</div>
+            </div>
+            <div class="p-4 rounded-lg bg-[#f7f7f5] hairline">
+              <div class="text-xs text-zinc-500">最終結算對帳</div>
+              <div class="mt-1 text-base font-semibold font-mono-num text-zinc-900">收 ${fmtTWD(st.totalToCollect)} / 退 ${fmtTWD(st.totalToRefund)}</div>
+              <div class="mt-0.5 text-[11px] text-zinc-500 font-mono-num">池餘＋應收 = ${fmtTWD(st.poolRemainingCash + st.totalToCollect)} ✓</div>
+            </div>
+          `;
+        }
+
+        // "I am which family" selector
+        const mySel = document.getElementById('trip-my-group-select');
+        const myStatus = document.getElementById('trip-my-group-status');
+        if (mySel) {
+          const validMy = (trip.groups || []).some((g) => g.id === tripMyGroupId);
+          if (!validMy) tripMyGroupId = (trip.groups && trip.groups[0]) ? trip.groups[0].id : '';
+          mySel.innerHTML = (trip.groups || []).length === 0
+            ? '<option value="">尚未新增家庭</option>'
+            : (trip.groups || []).map((g) => `<option value="${escapeHtml(g.id)}" ${g.id === tripMyGroupId ? 'selected' : ''}>${escapeHtml(g.name)} (${g.adults}大${g.children}小)</option>`).join('');
+        }
+        if (myStatus) {
+          const myRow = st.rows.find((r) => r.group.id === tripMyGroupId);
+          if (!myRow) {
+            myStatus.textContent = '';
+          } else if (myRow.netBalance > 0.5) {
+            myStatus.innerHTML = `→ 總務需退還 <span class="text-rose-700 font-semibold">${fmtTWD(myRow.netBalance)}</span>（已繳 ${fmtTWD(myRow.prepaid)}＋未還代墊 ${fmtTWD(myRow.unreimbursedAdvance)} − 應攤 ${fmtTWD(myRow.shareTotal)}）`;
+          } else if (myRow.netBalance < -0.5) {
+            myStatus.innerHTML = `→ 需補繳給總務 <span class="text-emerald-700 font-semibold">${fmtTWD(Math.abs(myRow.netBalance))}</span>（已自動扣除未還代墊 ${fmtTWD(myRow.unreimbursedAdvance)}）`;
+          } else {
+            myStatus.innerHTML = `→ <span class="text-zinc-600 font-medium">目前已結清</span>`;
+          }
+        }
+
+        // Pending Advances Approval Box
+        const pendingBox = document.getElementById('trip-pending-box');
+        const pendingExps = (trip.expenses || []).filter((e) => e.status === 'pending');
+        if (pendingBox) {
+          if (pendingExps.length === 0) {
+            pendingBox.classList.add('hidden');
+            pendingBox.innerHTML = '';
+          } else {
+            pendingBox.classList.remove('hidden');
+            pendingBox.innerHTML = `
+              <div class="flex items-center justify-between text-xs font-semibold text-amber-900">
+                <span>⏳ 有 ${pendingExps.length} 筆團員申報的代墊款項待總務核准（合計 ${fmtTWD(st.pendingTotal)}）</span>
+              </div>
+              <div class="space-y-1.5">
+                ${pendingExps.map((e) => {
+                  const pg = (trip.groups || []).find((g) => g.id === e.payerGroupId);
+                  const amt = safeNum(e.amountBase) > 0 ? safeNum(e.amountBase) : safeNum(e.amount) * getTripRate(trip, e.currency);
+                  return `
+                    <div class="flex flex-wrap items-center justify-between gap-2 bg-white rounded-lg p-2.5 hairline text-xs">
+                      <div class="min-w-0">
+                        <span class="font-mono-num text-zinc-500 mr-1.5">${escapeHtml(e.date)}</span>
+                        <span class="font-medium text-zinc-900">${escapeHtml(e.title)}</span>
+                        <span class="text-zinc-500 ml-1">（${escapeHtml(pg ? pg.name : '團員')}${e.payerMemberName ? ` · ${escapeHtml(e.payerMemberName)}` : ''} 代墊）</span>
+                      </div>
+                      <div class="flex items-center gap-2 shrink-0">
+                        <span class="font-mono-num font-semibold text-amber-800">${fmtTWD(amt)}</span>
+                        ${admin ? `
+                          <button type="button" data-trip-act="approve-exp" data-id="${escapeHtml(e.id)}" class="px-2 py-1 rounded bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-medium">✓ 核准入帳</button>
+                          <button type="button" data-trip-act="del-exp" data-id="${escapeHtml(e.id)}" class="px-2 py-1 rounded bg-white hover:bg-rose-50 hairline text-rose-700 text-[11px]">退回刪除</button>
+                        ` : '<span class="text-[11px] text-amber-700">等待總務確認</span>'}
+                      </div>
+                    </div>
+                  `;
+                }).join('')}
+              </div>
+            `;
+          }
+        }
+
+        // Family / Group Settlement Table
+        const groupsTbody = document.getElementById('trip-groups-tbody');
+        if (groupsTbody) {
+          if (st.rows.length === 0) {
+            groupsTbody.innerHTML = '<tr><td colspan="7" class="py-6 text-center text-zinc-400 font-sans">請點右上角「＋ 新增家庭／成員」加入這趟旅程的參與者</td></tr>';
+          } else {
+            groupsTbody.innerHTML = st.rows.map((r) => {
+              const g = r.group;
+              const isMe = g.id === tripMyGroupId;
+              const netHtml = r.netBalance > 0.5
+                ? `<span class="px-2 py-0.5 rounded bg-rose-50 text-rose-700 font-semibold">總務退還 ${fmtTWD(r.netBalance)}</span>`
+                : r.netBalance < -0.5
+                  ? `<span class="px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 font-semibold">需補繳 ${fmtTWD(Math.abs(r.netBalance))}</span>`
+                  : `<span class="text-zinc-400">已結清</span>`;
+              return `
+                <tr class="${isMe ? 'bg-amber-50/50' : 'hover:bg-[#f7f7f5]'} transition-colors">
+                  <td class="py-2.5 px-2 font-sans">
+                    <div class="font-medium text-zinc-900">${escapeHtml(g.name)}${isMe ? ' <span class="text-[10px] px-1.5 py-0.5 rounded bg-zinc-900 text-white ml-1">我家</span>' : ''}</div>
+                    ${g.members ? `<div class="text-[11px] text-zinc-500">${escapeHtml(g.members)}</div>` : ''}
+                  </td>
+                  <td class="py-2.5 px-2 text-center text-zinc-700">${g.adults} 大 ${g.children} 小</td>
+                  <td class="py-2.5 px-2 text-right text-zinc-800">${fmtTWD(r.prepaid)}</td>
+                  <td class="py-2.5 px-2 text-right text-amber-800">${fmtTWD(r.unreimbursedAdvance)}${r.reimbursedAdvance > 0 ? `<div class="text-[10px] text-zinc-400">已還 ${fmtTWD(r.reimbursedAdvance)}</div>` : ''}</td>
+                  <td class="py-2.5 px-2 text-right font-medium text-zinc-900">${fmtTWD(r.shareTotal)}</td>
+                  <td class="py-2.5 px-2 text-right font-sans whitespace-nowrap">${netHtml}</td>
+                  <td class="py-2.5 px-2 text-right whitespace-nowrap font-sans trip-admin-only ${admin ? '' : 'hidden'}">
+                    <button type="button" data-trip-act="edit-group" data-id="${escapeHtml(g.id)}" class="text-zinc-600 hover:text-zinc-900 text-xs font-medium mr-2">編輯</button>
+                    <button type="button" data-trip-act="del-group" data-id="${escapeHtml(g.id)}" class="text-zinc-400 hover:text-rose-700 text-xs font-medium">刪除</button>
+                  </td>
+                </tr>
+              `;
+            }).join('');
+          }
+        }
+
+        // Daily Expense Ledger Table
+        const expTbody = document.getElementById('trip-expenses-tbody');
+        if (expTbody) {
+          const splitLabelMap = {
+            weighted: '依大小權重',
+            adults_only: '僅大人均分',
+            children_only: '僅小孩均分',
+            equal_groups: '按組均分',
+            custom: '自訂金額'
+          };
+          const filteredExps = [...(trip.expenses || [])]
+            .filter((e) => {
+              if (tripExpPayerFilter === 'pool') return e.payerType === 'pool';
+              if (tripExpPayerFilter === 'member') return e.payerType === 'member';
+              if (tripExpPayerFilter === 'unreimbursed') return e.payerType === 'member' && !e.reimbursedFromPool;
+              return true;
+            })
+            .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
+
+          if (filteredExps.length === 0) {
+            expTbody.innerHTML = '<tr><td colspan="7" class="py-6 text-center text-zinc-400 font-sans">尚無開銷紀錄，點上方「＋ 總務記一筆開銷」或「＋ 申報我替團隊代墊」</td></tr>';
+          } else {
+            expTbody.innerHTML = filteredExps.map((e) => {
+              const pg = (trip.groups || []).find((g) => g.id === e.payerGroupId);
+              const amtBase = safeNum(e.amountBase) > 0 ? safeNum(e.amountBase) : safeNum(e.amount) * getTripRate(trip, e.currency);
+              const isPending = e.status === 'pending';
+              const payerBadge = e.payerType === 'pool'
+                ? '<span class="px-1.5 py-0.5 rounded bg-zinc-900 text-white text-[10px]">公費支付</span>'
+                : `<span class="px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 text-[10px]">${escapeHtml(pg ? pg.name : '成員')}代墊${e.payerMemberName ? `·${escapeHtml(e.payerMemberName)}` : ''}</span>` +
+                  (e.reimbursedFromPool ? ' <span class="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 text-[10px]">已公費還款</span>' : '');
+              const partCount = Array.isArray(e.participantGroupIds) && e.participantGroupIds.length > 0 && e.participantGroupIds.length < (trip.groups || []).length
+                ? ` (${e.participantGroupIds.length}組)` : ' (全體)';
+
+              return `
+                <tr class="${isPending ? 'bg-amber-50/40' : 'hover:bg-[#f7f7f5]'}">
+                  <td class="py-2.5 px-2 text-zinc-700 whitespace-nowrap">${escapeHtml(e.date)}</td>
+                  <td class="py-2.5 px-2 font-sans">
+                    <div class="font-medium text-zinc-900">${escapeHtml(e.title)}${isPending ? ' <span class="text-[10px] px-1.5 py-0.5 rounded bg-amber-200 text-amber-900">待核准</span>' : ''}</div>
+                    <div class="text-[11px] text-zinc-400">${escapeHtml(e.category || '旅遊')}${e.note ? ` · ${escapeHtml(e.note)}` : ''}</div>
+                  </td>
+                  <td class="py-2.5 px-2 font-sans">${payerBadge}</td>
+                  <td class="py-2.5 px-2 font-sans text-zinc-600">${splitLabelMap[e.splitMode] || '依權重'}${partCount}</td>
+                  <td class="py-2.5 px-2 text-right text-zinc-600 whitespace-nowrap">${escapeHtml(e.currency || 'TWD')} ${fmtNum(e.amount, (e.currency || 'TWD') === 'TWD' ? 0 : 2)}</td>
+                  <td class="py-2.5 px-2 text-right font-semibold text-zinc-900 whitespace-nowrap">${fmtTWD(amtBase)}</td>
+                  <td class="py-2.5 px-2 text-right whitespace-nowrap font-sans">
+                    ${admin && e.payerType === 'member' && !isPending ? `<button type="button" data-trip-act="toggle-reimburse" data-id="${escapeHtml(e.id)}" class="text-emerald-700 hover:text-emerald-900 text-xs font-medium mr-2">${e.reimbursedFromPool ? '撤銷還款' : '公費現場還款'}</button>` : ''}
+                    ${admin ? `
+                      <button type="button" data-trip-act="edit-exp" data-id="${escapeHtml(e.id)}" class="text-zinc-600 hover:text-zinc-900 text-xs font-medium mr-2">編輯</button>
+                      <button type="button" data-trip-act="del-exp" data-id="${escapeHtml(e.id)}" class="text-zinc-400 hover:text-rose-700 text-xs font-medium">刪除</button>
+                    ` : '<span class="text-[11px] text-zinc-400">—</span>'}
+                  </td>
+                </tr>
+              `;
+            }).join('');
+          }
+        }
+      }
+
+      function openTripMetaModal(editTrip = null) {
+        const isEdit = Boolean(editTrip);
+        const t = editTrip || {
+          name: '',
+          startDate: todayISO(),
+          endDate: todayISO(),
+          adultWeight: 1,
+          childWeight: 0.5,
+          prepayPerAdult: 5000,
+          prepayPerChild: 2500,
+          adminPin: '',
+          requireApproval: true,
+          fxRates: {
+            TWD: 1,
+            JPY: safeNum(state.fx && state.fx.JPY, 0.21),
+            USD: safeNum(state.fx && state.fx.USD, 32.5),
+            HKD: safeNum(state.fx && state.fx.HKD, 4.2),
+            KRW: safeNum(state.fx && state.fx.KRW, 0.024)
+          }
+        };
+        const fx = t.fxRates || {};
+        const html = `
+          <div><label class="block text-xs font-medium text-zinc-600 mb-1">旅程名稱 *</label><input name="name" required value="${escapeHtml(t.name)}" placeholder="例如：2026 宜蘭 15 人家族旅遊" class="w-full h-9 px-3 rounded-lg hairline text-sm" /></div>
+          <div class="grid grid-cols-2 gap-3">
+            <div><label class="block text-xs font-medium text-zinc-600 mb-1">出發日期</label><input name="startDate" type="date" value="${escapeHtml(t.startDate || todayISO())}" class="w-full h-9 px-2.5 rounded-lg hairline text-xs font-mono-num" /></div>
+            <div><label class="block text-xs font-medium text-zinc-600 mb-1">結束日期</label><input name="endDate" type="date" value="${escapeHtml(t.endDate || todayISO())}" class="w-full h-9 px-2.5 rounded-lg hairline text-xs font-mono-num" /></div>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div><label class="block text-xs font-medium text-zinc-600 mb-1">大人預設分攤權重</label><input name="adultWeight" type="number" step="0.1" min="0" value="${safeNum(t.adultWeight, 1)}" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" /></div>
+            <div><label class="block text-xs font-medium text-zinc-600 mb-1">小孩預設權重（0=免費 / 0.5=半價）</label><input name="childWeight" type="number" step="0.1" min="0" value="${safeNum(t.childWeight, 0.5)}" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" /></div>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div><label class="block text-xs font-medium text-zinc-600 mb-1">建議預收公費／每位大人 (TWD)</label><input name="prepayPerAdult" type="number" step="100" min="0" value="${safeNum(t.prepayPerAdult, 5000)}" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" /></div>
+            <div><label class="block text-xs font-medium text-zinc-600 mb-1">建議預收公費／每位小孩 (TWD)</label><input name="prepayPerChild" type="number" step="100" min="0" value="${safeNum(t.prepayPerChild, 2500)}" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" /></div>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div><label class="block text-xs font-medium text-zinc-600 mb-1">總務管理密碼（選填，分享連結解鎖用）</label><input name="adminPin" value="${escapeHtml(t.adminPin || '')}" placeholder="例如 1234" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" /></div>
+            <div class="flex items-end pb-1.5">
+              <label class="inline-flex items-center gap-2 text-xs text-zinc-700 cursor-pointer">
+                <input name="requireApproval" type="checkbox" ${t.requireApproval !== false ? 'checked' : ''} class="rounded border-zinc-300 text-zinc-900" />
+                <span>團員申報代墊需總務核准</span>
+              </label>
+            </div>
+          </div>
+          <div class="pt-2 border-t border-zinc-900/[0.06] space-y-2">
+            <div class="text-xs font-medium text-zinc-700">本趟旅程公定結算匯率（外幣 → 台幣 TWD，出國團可填換匯均價）</div>
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+              <div><label class="text-[11px] text-zinc-500">日幣 JPY</label><input name="fx_JPY" type="number" step="0.0001" value="${safeNum(fx.JPY, 0.21)}" class="w-full h-8 px-2 rounded-lg hairline font-mono-num" /></div>
+              <div><label class="text-[11px] text-zinc-500">韓元 KRW</label><input name="fx_KRW" type="number" step="0.0001" value="${safeNum(fx.KRW, 0.024)}" class="w-full h-8 px-2 rounded-lg hairline font-mono-num" /></div>
+              <div><label class="text-[11px] text-zinc-500">美金 USD</label><input name="fx_USD" type="number" step="0.01" value="${safeNum(fx.USD, 32.5)}" class="w-full h-8 px-2 rounded-lg hairline font-mono-num" /></div>
+              <div><label class="text-[11px] text-zinc-500">港幣 HKD</label><input name="fx_HKD" type="number" step="0.01" value="${safeNum(fx.HKD, 4.2)}" class="w-full h-8 px-2 rounded-lg hairline font-mono-num" /></div>
+            </div>
+          </div>
+        `;
+        openFormModal(isEdit ? '編輯旅程設定與公定匯率' : '建立新揪團旅程', html, (fd) => {
+          const tripObj = isEdit ? editTrip : {
+            id: uid('trip'),
+            shareCode: genTripShareCode(),
+            baseCurrency: 'TWD',
+            groups: [],
+            expenses: []
+          };
+          tripObj.name = String(fd.get('name') || '').trim();
+          tripObj.startDate = String(fd.get('startDate') || todayISO());
+          tripObj.endDate = String(fd.get('endDate') || tripObj.startDate);
+          tripObj.adultWeight = Math.max(0, safeNum(fd.get('adultWeight'), 1));
+          tripObj.childWeight = Math.max(0, safeNum(fd.get('childWeight'), 0.5));
+          tripObj.prepayPerAdult = Math.max(0, safeNum(fd.get('prepayPerAdult')));
+          tripObj.prepayPerChild = Math.max(0, safeNum(fd.get('prepayPerChild')));
+          tripObj.adminPin = String(fd.get('adminPin') || '').trim();
+          tripObj.requireApproval = fd.get('requireApproval') === 'on';
+          tripObj.fxRates = {
+            TWD: 1,
+            JPY: safeNum(fd.get('fx_JPY'), 0.21),
+            KRW: safeNum(fd.get('fx_KRW'), 0.024),
+            USD: safeNum(fd.get('fx_USD'), 32.5),
+            HKD: safeNum(fd.get('fx_HKD'), 4.2)
+          };
+          activeTripId = tripObj.id;
+          persistTrip(tripObj, true);
+          showToast(isEdit ? '已更新旅程設定' : `已建立旅程「${tripObj.name}」，快去新增參與家庭與成員吧！`);
+        });
+      }
+
+      function openTripGroupModal(trip, editGroup = null) {
+        const isEdit = Boolean(editGroup);
+        const g = editGroup || { name: '', adults: 2, children: 0, members: '', prepaidTWD: safeNum(trip.prepayPerAdult) * 2, note: '' };
+        const html = `
+          <div><label class="block text-xs font-medium text-zinc-600 mb-1">家庭／組別名稱 *</label><input name="name" required value="${escapeHtml(g.name)}" placeholder="例如：小明家、阿華、小美情侶" class="w-full h-9 px-3 rounded-lg hairline text-sm" /></div>
+          <div class="grid grid-cols-2 gap-3">
+            <div><label class="block text-xs font-medium text-zinc-600 mb-1">大人人數</label><input id="tg-adults" name="adults" type="number" min="0" step="1" value="${safeNum(g.adults, 1)}" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" /></div>
+            <div><label class="block text-xs font-medium text-zinc-600 mb-1">小孩人數</label><input id="tg-children" name="children" type="number" min="0" step="1" value="${safeNum(g.children, 0)}" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" /></div>
+          </div>
+          <div><label class="block text-xs font-medium text-zinc-600 mb-1">組內成員暱稱（可填多位大人，方便標記誰代墊）</label><input name="members" value="${escapeHtml(g.members || '')}" placeholder="例如：小明、小美（爸媽共用此家庭帳）" class="w-full h-9 px-3 rounded-lg hairline text-sm" /></div>
+          <div>
+            <div class="flex items-center justify-between mb-1">
+              <label class="text-xs font-medium text-zinc-600">實際已繳公費金額 (TWD)</label>
+              <button type="button" id="btn-tg-calc-prepay" class="text-[11px] text-zinc-600 hover:text-zinc-900 underline">依人數試算建議公費</button>
+            </div>
+            <input id="tg-prepaid" name="prepaidTWD" type="number" min="0" step="1" value="${safeNum(g.prepaidTWD)}" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" />
+          </div>
+        `;
+        openFormModal(isEdit ? '編輯家庭／組別' : '新增參與家庭／成員', html, (fd) => {
+          const rec = {
+            id: isEdit ? editGroup.id : uid('grp'),
+            name: String(fd.get('name') || '').trim(),
+            adults: Math.max(0, safeNum(fd.get('adults'), 1)),
+            children: Math.max(0, safeNum(fd.get('children'), 0)),
+            members: String(fd.get('members') || '').trim(),
+            prepaidTWD: Math.max(0, safeNum(fd.get('prepaidTWD')))
+          };
+          if (!Array.isArray(trip.groups)) trip.groups = [];
+          if (isEdit) trip.groups = trip.groups.map((x) => (x.id === rec.id ? rec : x));
+          else trip.groups.push(rec);
+          persistTrip(trip, true);
+          showToast(isEdit ? `已更新「${rec.name}」` : `已加入「${rec.name}」`);
+        });
+        const calcBtn = document.getElementById('btn-tg-calc-prepay');
+        if (calcBtn) {
+          calcBtn.addEventListener('click', () => {
+            const a = Math.max(0, safeNum(document.getElementById('tg-adults').value));
+            const c = Math.max(0, safeNum(document.getElementById('tg-children').value));
+            document.getElementById('tg-prepaid').value = Math.round(a * safeNum(trip.prepayPerAdult) + c * safeNum(trip.prepayPerChild));
+          });
+        }
+      }
+
+      function openTripExpenseModal(trip, editExp = null, memberSubmitMode = false) {
+        const groups = trip.groups || [];
+        if (groups.length === 0) {
+          showToast('請先新增至少 1 個參與家庭／成員');
+          return;
+        }
+        const isEdit = Boolean(editExp);
+        const e = editExp || {
+          date: todayISO(),
+          title: '',
+          category: '餐飲',
+          currency: 'TWD',
+          amount: '',
+          payerType: memberSubmitMode ? 'member' : 'pool',
+          payerGroupId: memberSubmitMode ? (tripMyGroupId || groups[0].id) : groups[0].id,
+          payerMemberName: '',
+          splitMode: 'weighted',
+          participantGroupIds: groups.map((g) => g.id),
+          customShares: {},
+          note: ''
+        };
+        const curList = ['TWD', 'JPY', 'KRW', 'USD', 'HKD'];
+        const pIdsSet = new Set(Array.isArray(e.participantGroupIds) && e.participantGroupIds.length > 0 ? e.participantGroupIds : groups.map((g) => g.id));
+
+        const html = `
+          ${memberSubmitMode ? `<div class="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-[11px] text-amber-900">${trip.requireApproval !== false ? '送出後將標記為「待總務核准」，總務確認後即自動計入最終結算（抵扣補繳或退款）。' : '送出後將直接計入最終結算！'}</div>` : ''}
+          <div class="grid grid-cols-2 gap-3">
+            <div><label class="block text-xs font-medium text-zinc-600 mb-1">日期</label><input name="date" type="date" required value="${escapeHtml(e.date || todayISO())}" class="w-full h-9 px-2.5 rounded-lg hairline text-xs font-mono-num" /></div>
+            <div><label class="block text-xs font-medium text-zinc-600 mb-1">分類</label><select name="category" class="w-full h-9 px-2.5 rounded-lg hairline text-xs bg-white">${['餐飲', '住宿', '交通停車', '門票活動', '飲料零食', '伴手禮', '其他'].map((c) => `<option value="${c}" ${e.category === c ? 'selected' : ''}>${c}</option>`).join('')}</select></div>
+          </div>
+          <div><label class="block text-xs font-medium text-zinc-600 mb-1">項目說明 *</label><input name="title" required value="${escapeHtml(e.title)}" placeholder="例如：海鮮合菜、包車費、全家買飲料" class="w-full h-9 px-3 rounded-lg hairline text-sm" /></div>
+          <div class="grid grid-cols-3 gap-2">
+            <div><label class="block text-xs font-medium text-zinc-600 mb-1">幣別</label><select id="te-cur" name="currency" class="w-full h-9 px-2 rounded-lg hairline text-xs bg-white font-mono-num">${curList.map((c) => `<option value="${c}" ${(e.currency || 'TWD') === c ? 'selected' : ''}>${c}</option>`).join('')}</select></div>
+            <div class="col-span-2"><label class="block text-xs font-medium text-zinc-600 mb-1">金額 *</label><input id="te-amt" name="amount" type="number" step="0.01" min="0.01" required value="${e.amount || ''}" placeholder="1500" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" /></div>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-medium text-zinc-600 mb-1">付款來源</label>
+              <select id="te-payer-type" name="payerType" class="w-full h-9 px-2.5 rounded-lg hairline text-xs bg-white">
+                ${memberSubmitMode ? '' : `<option value="pool" ${e.payerType === 'pool' ? 'selected' : ''}>從「公費池」直接支付</option>`}
+                <option value="member" ${e.payerType === 'member' || memberSubmitMode ? 'selected' : ''}>由「成員／家庭」先代墊</option>
+              </select>
+            </div>
+            <div id="te-payer-group-wrap" class="${e.payerType === 'member' || memberSubmitMode ? '' : 'hidden'}">
+              <label class="block text-xs font-medium text-zinc-600 mb-1">哪一家代墊？</label>
+              <select name="payerGroupId" class="w-full h-9 px-2.5 rounded-lg hairline text-xs bg-white">${groups.map((g) => `<option value="${escapeHtml(g.id)}" ${g.id === e.payerGroupId ? 'selected' : ''}>${escapeHtml(g.name)}</option>`).join('')}</select>
+            </div>
+          </div>
+          <div id="te-payer-member-wrap" class="${e.payerType === 'member' || memberSubmitMode ? '' : 'hidden'}">
+            <label class="block text-xs font-medium text-zinc-600 mb-1">代墊人暱稱（選填，例如爸爸／媽媽）</label>
+            <input name="payerMemberName" value="${escapeHtml(e.payerMemberName || '')}" placeholder="例如：小明" class="w-full h-9 px-3 rounded-lg hairline text-xs" />
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-zinc-600 mb-1">分攤規則</label>
+            <select id="te-split-mode" name="splitMode" class="w-full h-9 px-2.5 rounded-lg hairline text-xs bg-white">
+              <option value="weighted" ${e.splitMode === 'weighted' ? 'selected' : ''}>依大人／小孩權重均分（大 ${trip.adultWeight} / 小 ${trip.childWeight}）</option>
+              <option value="adults_only" ${e.splitMode === 'adults_only' ? 'selected' : ''}>僅大人均分（酒水／宵夜，小孩不計）</option>
+              <option value="children_only" ${e.splitMode === 'children_only' ? 'selected' : ''}>僅小孩均分（兒童門票／玩具）</option>
+              <option value="equal_groups" ${e.splitMode === 'equal_groups' ? 'selected' : ''}>按家庭組數平分（每組 1 份，例如包棟房費）</option>
+              <option value="custom" ${e.splitMode === 'custom' ? 'selected' : ''}>自訂各家庭分攤金額 (TWD)</option>
+            </select>
+          </div>
+          <div class="space-y-1.5">
+            <div class="text-xs font-medium text-zinc-600">參與分攤的家庭（取消勾選即不參與此筆）</div>
+            <div class="grid grid-cols-2 gap-1.5 max-h-36 overflow-y-auto p-2 rounded-lg bg-[#f7f7f5] hairline text-xs">
+              ${groups.map((g) => `
+                <label class="inline-flex items-center gap-1.5 cursor-pointer">
+                  <input type="checkbox" name="part_${escapeHtml(g.id)}" ${pIdsSet.has(g.id) ? 'checked' : ''} class="rounded border-zinc-300 text-zinc-900" />
+                  <span class="truncate">${escapeHtml(g.name)} (${g.adults}大${g.children}小)</span>
+                </label>
+              `).join('')}
+            </div>
+          </div>
+          <div id="te-custom-shares-wrap" class="${e.splitMode === 'custom' ? '' : 'hidden'} space-y-1.5">
+            <div class="text-xs font-medium text-zinc-600">自訂各家庭分攤金額 (TWD)</div>
+            <div class="grid grid-cols-2 gap-2">${groups.map((g) => `<div class="flex items-center justify-between gap-1 text-xs"><span class="truncate">${escapeHtml(g.name)}</span><input name="custom_${escapeHtml(g.id)}" type="number" step="1" min="0" value="${safeNum(e.customShares && e.customShares[g.id]) || ''}" class="w-24 h-8 px-2 rounded-lg hairline font-mono-num text-right" /></div>`).join('')}</div>
+          </div>
+          <div><label class="block text-xs font-medium text-zinc-600 mb-1">備註</label><input name="note" value="${escapeHtml(e.note || '')}" class="w-full h-9 px-3 rounded-lg hairline text-xs" /></div>
+        `;
+        openFormModal(memberSubmitMode ? '申報我替團隊代墊的款項' : (isEdit ? '編輯旅程開銷' : '總務記一筆開銷'), html, (fd) => {
+          const cur = String(fd.get('currency') || 'TWD').toUpperCase();
+          const amt = Math.abs(safeNum(fd.get('amount')));
+          if (amt <= 0) return;
+          const amountBase = Math.round(amt * getTripRate(trip, cur));
+          const payerType = memberSubmitMode ? 'member' : String(fd.get('payerType') || 'pool');
+          const splitMode = String(fd.get('splitMode') || 'weighted');
+          const participantGroupIds = groups.filter((g) => fd.get('part_' + g.id) === 'on').map((g) => g.id);
+          const customShares = {};
+          if (splitMode === 'custom') {
+            groups.forEach((g) => { customShares[g.id] = Math.max(0, safeNum(fd.get('custom_' + g.id))); });
+          }
+          const status = memberSubmitMode && trip.requireApproval !== false ? 'pending' : (isEdit ? (editExp.status || 'approved') : 'approved');
+          const rec = {
+            id: isEdit ? editExp.id : uid('texp'),
+            date: String(fd.get('date') || todayISO()),
+            title: String(fd.get('title') || '').trim(),
+            category: String(fd.get('category') || '餐飲'),
+            currency: cur,
+            amount: amt,
+            amountBase,
+            payerType,
+            payerGroupId: payerType === 'member' ? String(fd.get('payerGroupId') || groups[0].id) : '',
+            payerMemberName: payerType === 'member' ? String(fd.get('payerMemberName') || '').trim() : '',
+            splitMode,
+            participantGroupIds: participantGroupIds.length > 0 ? participantGroupIds : groups.map((g) => g.id),
+            customShares,
+            status,
+            reimbursedFromPool: isEdit ? Boolean(editExp.reimbursedFromPool) : false,
+            note: String(fd.get('note') || '').trim()
+          };
+          if (!Array.isArray(trip.expenses)) trip.expenses = [];
+          if (isEdit) trip.expenses = trip.expenses.map((x) => (x.id === rec.id ? rec : x));
+          else trip.expenses.push(rec);
+          persistTrip(trip, true);
+          showToast(status === 'pending' ? '已送出代墊申報，等待總務確認！' : (isEdit ? '已更新開銷紀錄' : '已記錄旅程開銷'));
+        });
+
+        const ptSel = document.getElementById('te-payer-type');
+        if (ptSel) {
+          ptSel.addEventListener('change', (ev) => {
+            const isMem = ev.target.value === 'member';
+            document.getElementById('te-payer-group-wrap').classList.toggle('hidden', !isMem);
+            document.getElementById('te-payer-member-wrap').classList.toggle('hidden', !isMem);
+          });
+        }
+        const smSel = document.getElementById('te-split-mode');
+        if (smSel) {
+          smSel.addEventListener('change', (ev) => {
+            document.getElementById('te-custom-shares-wrap').classList.toggle('hidden', ev.target.value !== 'custom');
+          });
+        }
+      }
+
+      async function openTripShareModal(trip) {
+        await persistTrip(trip, true);
+        const baseOrigin = (window.location.protocol === 'http:' || window.location.protocol === 'https:')
+          ? `${window.location.origin}${window.location.pathname}`
+          : `${DEFAULT_API_ORIGIN}/`;
+        const shareUrl = `${baseOrigin}?trip=${encodeURIComponent(trip.shareCode)}`;
+        const rulesSnippet = `match /shared_trips/{tripCode} {\n  allow read, write: if true;\n}`;
+        const html = `
+          <div class="space-y-3 text-xs text-zinc-700">
+            <div class="p-3 rounded-lg ${trip._cloudSynced ? 'bg-emerald-50 text-emerald-800' : 'bg-amber-50 text-amber-900'} hairline">
+              ${trip._cloudSynced
+                ? `✓ 已同步至雲端！把下方連結貼到 LINE 群組，朋友點開即可即時看帳與申報代墊（完全不會看到你的個人資產）。`
+                : `⚠️ 雲端同步尚未成功（${escapeHtml(trip._cloudError || '請先確認已設定 Firebase 並在 Firestore 規則開放 shared_trips')}）。你仍可先使用「複製 LINE 結算單」分享純文字報表。`}
+            </div>
+            <div>
+              <label class="block font-medium text-zinc-600 mb-1">旅程專屬分享連結（含 6 碼房間代碼：${escapeHtml(trip.shareCode)}）</label>
+              <input id="trip-share-url-input" readonly value="${escapeHtml(shareUrl)}" class="w-full h-9 px-3 rounded-lg hairline bg-[#f7f7f5] font-mono-num text-xs" />
+            </div>
+            <details class="rounded-lg bg-[#f7f7f5] hairline p-3">
+              <summary class="cursor-pointer font-medium text-zinc-700">若多人無法讀取雲端：Firebase Firestore 規則設定（5 行）</summary>
+              <p class="mt-2 text-[11px] text-zinc-500">到 Firebase Console → Firestore Database → 規則，加入以下區塊並發佈，即可開放親友免登入透過房間代碼即時互通：</p>
+              <pre class="mt-1.5 p-2 rounded bg-zinc-900 text-emerald-300 text-[11px] overflow-x-auto font-mono-num">${escapeHtml(rulesSnippet)}</pre>
+            </details>
+          </div>
+        `;
+        openFormModal('雲端同步與 LINE 分享連結', html, () => {
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(shareUrl).then(() => showToast('已複製旅程分享連結！可直接貼到 LINE 群組')).catch(() => {});
+          }
+        });
+        const submitBtn = document.querySelector('#modal-form button[type="submit"]');
+        if (submitBtn) submitBtn.textContent = '複製分享連結';
+      }
+
+      function openTripImportPersonalModal(trip) {
+        const st = computeTripSettlement(trip);
+        if (st.rows.length === 0) { showToast('尚無家庭結算資料'); return; }
+        const opts = st.rows.map((r) => `<option value="${escapeHtml(r.group.id)}" ${r.group.id === tripMyGroupId ? 'selected' : ''}>${escapeHtml(r.group.name)} — 實際應分攤 ${fmtTWD(r.shareTotal)}</option>`).join('');
+        const html = `
+          <div class="rounded-lg bg-[#f7f7f5] hairline px-3 py-2 text-xs text-zinc-600">
+            只會將「你這一家實際應分攤的花費」記成 1 筆「交通旅遊」支出寫入你的個人帳本，不會把全團其他人的花費混進去。
+          </div>
+          <div><label class="block text-xs font-medium text-zinc-600 mb-1">選擇哪一家是「我家」</label><select name="groupId" class="w-full h-9 px-2.5 rounded-lg hairline text-xs bg-white">${opts}</select></div>
+          <div><label class="block text-xs font-medium text-zinc-600 mb-1">入帳日期</label><input name="date" type="date" value="${escapeHtml(trip.endDate || todayISO())}" class="w-full h-9 px-2.5 rounded-lg hairline text-xs font-mono-num" /></div>
+        `;
+        openFormModal('匯入我家旅程花費至個人帳本', html, (fd) => {
+          const gid = String(fd.get('groupId'));
+          const row = st.rows.find((r) => r.group.id === gid);
+          if (!row || row.shareTotal <= 0) { showToast('該家庭目前應分攤金額為 0'); return; }
+          if (!Array.isArray(state.randomExpenses)) state.randomExpenses = [];
+          state.randomExpenses.push({
+            id: uid('rexp'),
+            date: String(fd.get('date') || todayISO()),
+            category: '交通旅遊',
+            title: `${trip.name}（${row.group.name}分攤）`,
+            currency: 'TWD',
+            amount: Math.round(row.shareTotal),
+            account: '',
+            deductStatus: 'paid',
+            note: `揪團結算匯入：已繳 ${fmtTWD(row.prepaid)} / 代墊 ${fmtTWD(row.totalAdvance)}`
+          });
+          saveState();
+          renderAll();
+          showToast(`已將「${row.group.name}」分攤金額 ${fmtTWD(row.shareTotal)} 匯入個人支出紀錄！`);
+        });
+      }
+
+      // Bind Group Trip listeners
+      const tripSelEl = document.getElementById('trip-select');
+      if (tripSelEl) tripSelEl.addEventListener('change', (e) => { activeTripId = e.target.value; renderTrips(); });
+      const tripMySelEl = document.getElementById('trip-my-group-select');
+      if (tripMySelEl) tripMySelEl.addEventListener('change', (e) => { tripMyGroupId = e.target.value; localStorage.setItem('wealth_trip_my_group', tripMyGroupId); renderTrips(); });
+      const tripPayerFilterEl = document.getElementById('trip-exp-filter-payer');
+      if (tripPayerFilterEl) tripPayerFilterEl.addEventListener('change', (e) => { tripExpPayerFilter = e.target.value; renderTrips(); });
+
+      const btnTripNew = document.getElementById('btn-trip-new');
+      if (btnTripNew) btnTripNew.addEventListener('click', () => openTripMetaModal(null));
+      const btnTripEdit = document.getElementById('btn-trip-edit');
+      if (btnTripEdit) btnTripEdit.addEventListener('click', () => { const t = getCurrentTrip(); if (t) openTripMetaModal(t); });
+      const btnTripAddGroup = document.getElementById('btn-trip-add-group');
+      if (btnTripAddGroup) btnTripAddGroup.addEventListener('click', () => { const t = getCurrentTrip(); if (t) openTripGroupModal(t, null); });
+      const btnTripAddExp = document.getElementById('btn-trip-add-expense');
+      if (btnTripAddExp) btnTripAddExp.addEventListener('click', () => { const t = getCurrentTrip(); if (t) openTripExpenseModal(t, null, false); });
+      const btnTripSubmitAdv = document.getElementById('btn-trip-submit-advance');
+      if (btnTripSubmitAdv) btnTripSubmitAdv.addEventListener('click', () => { const t = getCurrentTrip(); if (t) openTripExpenseModal(t, null, true); });
+      const btnTripShare = document.getElementById('btn-trip-share');
+      if (btnTripShare) btnTripShare.addEventListener('click', () => { const t = getCurrentTrip(); if (t) openTripShareModal(t); });
+      const btnTripCopyLine = document.getElementById('btn-trip-copy-line');
+      if (btnTripCopyLine) {
+        btnTripCopyLine.addEventListener('click', () => {
+          const t = getCurrentTrip();
+          if (!t) return;
+          const txt = buildTripLineReport(t);
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(txt).then(() => showToast('已複製 LINE 結算文字單！可直接貼到群組')).catch(() => {});
+          }
+          openFormModal('LINE 群組結算文字單', `<textarea rows="12" readonly class="w-full p-3 rounded-lg hairline text-xs font-mono-num">${escapeHtml(txt)}</textarea>`, () => {
+            if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).catch(() => {});
+          });
+          const sb = document.querySelector('#modal-form button[type="submit"]');
+          if (sb) sb.textContent = '再次複製全文';
+        });
+      }
+      const btnTripImportP = document.getElementById('btn-trip-import-personal');
+      if (btnTripImportP) btnTripImportP.addEventListener('click', () => { const t = getCurrentTrip(); if (t) openTripImportPersonalModal(t); });
+      const btnTripDel = document.getElementById('btn-trip-del');
+      if (btnTripDel) {
+        btnTripDel.addEventListener('click', () => {
+          const t = getCurrentTrip();
+          if (!t) return;
+          openConfirmModal('刪除旅程', `確定要刪除「${t.name}」及全部開銷紀錄嗎？`, () => {
+            state.groupTrips = (state.groupTrips || []).filter((x) => x.id !== t.id);
+            activeTripId = '';
+            saveState();
+            renderTrips();
+            showToast('已刪除旅程');
+          });
+        });
+      }
+      const btnTripJoinCode = document.getElementById('btn-trip-join-code');
+      if (btnTripJoinCode) {
+        btnTripJoinCode.addEventListener('click', () => {
+          openFormModal('輸入 6 碼代碼加入雲端旅程', `<div><label class="block text-xs font-medium text-zinc-600 mb-1">旅程代碼（例如 AB12CD）</label><input name="code" required placeholder="輸入 6 碼代碼" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num uppercase" /></div>`, (fd) => {
+            const code = String(fd.get('code') || '').trim().toUpperCase();
+            if (!code) return;
+            if (!fbDb) { showToast('請先確認 Firebase 雲端同步已啟用'); return; }
+            subscribeSharedTrip(code, true);
+            showToast(`正在連線旅程 ${code}...`);
+          });
+        });
+      }
+      const btnTripUnlock = document.getElementById('btn-trip-unlock-admin');
+      if (btnTripUnlock) {
+        btnTripUnlock.addEventListener('click', () => {
+          const t = getCurrentTrip();
+          if (!t) return;
+          if (!t.adminPin) { tripGuestAdminUnlocked = true; renderTrips(); showToast('此旅程未設密碼，已解鎖總務權限'); return; }
+          openFormModal('輸入總務管理密碼', `<div><label class="block text-xs font-medium text-zinc-600 mb-1">管理密碼</label><input name="pin" type="password" required class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" /></div>`, (fd) => {
+            if (String(fd.get('pin') || '').trim() === String(t.adminPin)) {
+              tripGuestAdminUnlocked = true;
+              renderTrips();
+              showToast('密碼正確！已解鎖總務管理權限');
+            } else {
+              showToast('總務密碼錯誤');
+            }
+          });
+        });
+      }
+      const btnTripExitGuest = document.getElementById('btn-trip-exit-guest');
+      if (btnTripExitGuest) {
+        btnTripExitGuest.addEventListener('click', () => {
+          tripGuestMode = false;
+          tripGuestAdminUnlocked = false;
+          if (tripUnsubscribe) { try { tripUnsubscribe(); } catch (e) {} tripUnsubscribe = null; }
+          try { window.history.replaceState({}, '', window.location.pathname); } catch (e) {}
+          switchTab('overview');
+        });
+      }
+
+      // Delegated clicks inside #tab-trips
+      const tabTripsEl = document.getElementById('tab-trips');
+      if (tabTripsEl) {
+        tabTripsEl.addEventListener('click', (e) => {
+          const btn = e.target.closest('[data-trip-act]');
+          if (!btn) return;
+          const act = btn.dataset.tripAct;
+          const id = btn.dataset.id;
+          const t = getCurrentTrip();
+          if (!t) return;
+          if (act === 'edit-group') {
+            const g = (t.groups || []).find((x) => x.id === id);
+            if (g) openTripGroupModal(t, g);
+          } else if (act === 'del-group') {
+            openConfirmModal('刪除家庭／成員', '確定要移除此參與組別嗎？', () => {
+              t.groups = (t.groups || []).filter((x) => x.id !== id);
+              persistTrip(t, true);
+              showToast('已移除組別');
+            });
+          } else if (act === 'edit-exp') {
+            const exp = (t.expenses || []).find((x) => x.id === id);
+            if (exp) openTripExpenseModal(t, exp, false);
+          } else if (act === 'del-exp') {
+            openConfirmModal('刪除開銷紀錄', '確定要刪除此筆旅程開銷嗎？', () => {
+              t.expenses = (t.expenses || []).filter((x) => x.id !== id);
+              persistTrip(t, true);
+              showToast('已刪除開銷');
+            });
+          } else if (act === 'approve-exp') {
+            const exp = (t.expenses || []).find((x) => x.id === id);
+            if (exp) {
+              exp.status = 'approved';
+              persistTrip(t, true);
+              showToast(`已核准「${exp.title}」並計入最終結算`);
+            }
+          } else if (act === 'toggle-reimburse') {
+            const exp = (t.expenses || []).find((x) => x.id === id);
+            if (exp) {
+              exp.reimbursedFromPool = !exp.reimbursedFromPool;
+              exp.reimbursedDate = exp.reimbursedFromPool ? todayISO() : '';
+              persistTrip(t, true);
+              showToast(exp.reimbursedFromPool ? `已標記用公費現場還款給代墊人` : `已撤銷公費現場還款標記`);
+            }
+          }
+        });
+      }
+
       initFirebaseFromConfig(true);
       if ('serviceWorker' in navigator && (window.location.protocol === 'https:' || window.location.protocol === 'http:')) {
         window.addEventListener('load', () => {
@@ -9580,10 +10676,17 @@
       }
 
       renderAll();
-      // Handle PWA App Shortcuts (/?shortcut=expense|reports|migrate)
+      // Handle Shared Trip Link (?trip=CODE) & PWA App Shortcuts (/?shortcut=expense|reports|migrate)
       try {
-        const sc = new URLSearchParams(window.location.search).get('shortcut');
-        if (sc === 'expense') { switchTab('expenses'); setTimeout(() => openRandomExpenseModal(null), 150); }
+        const params = new URLSearchParams(window.location.search);
+        const tripCode = (params.get('trip') || '').trim().toUpperCase();
+        const sc = params.get('shortcut');
+        if (tripCode) {
+          tripGuestMode = true;
+          tripGuestAdminUnlocked = false;
+          switchTab('trips');
+          setTimeout(() => subscribeSharedTrip(tripCode, true), 300);
+        } else if (sc === 'expense') { switchTab('expenses'); setTimeout(() => openRandomExpenseModal(null), 150); }
         else if (sc === 'reports') { switchTab('reports'); }
         else if (sc === 'migrate') { switchTab('migrate'); }
       } catch (e) {}
