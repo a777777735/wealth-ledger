@@ -339,7 +339,8 @@ async function callGemini({ apiKey, model, systemPrompt, prompt, attachments, ex
     payload.generationConfig.responseMimeType = 'application/json';
   }
 
-  const candidates = [...new Set([model, 'gemini-3.8-flash-lite', 'gemini-2.5-flash-lite', 'gemini-2.0-flash'])];
+  const candidates = [...new Set([model, 'gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-flash-latest'])];
+  let primaryErr = '';
   let lastErr = 'Gemini API 暫時繁忙，請稍後再試';
 
   for (let i = 0; i < candidates.length; i++) {
@@ -347,7 +348,7 @@ async function callGemini({ apiKey, model, systemPrompt, prompt, attachments, ex
     const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(m)}:generateContent?key=${encodeURIComponent(apiKey)}`;
     const maxAttempts = i === 0 ? 2 : 1;
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
-      if (attempt > 0) await new Promise((r) => setTimeout(r, 700));
+      if (attempt > 0) await new Promise((r) => setTimeout(r, 900));
       const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -362,17 +363,19 @@ async function callGemini({ apiKey, model, systemPrompt, prompt, attachments, ex
         lastErr = 'Gemini 未回傳任何文字內容';
         continue;
       }
-      lastErr = (data && data.error && data.error.message) || `Gemini API 錯誤 (${res.status})`;
-      // Do not retry/fallback on auth errors (400 invalid key, 401, 403)
+      const errMsg = (data && data.error && data.error.message) || `Gemini API 錯誤 (${res.status})`;
+      if (i === 0 && !primaryErr) primaryErr = errMsg;
+      lastErr = errMsg;
+      // Do not retry/fallback on auth errors (401, 403)
       if (res.status === 401 || res.status === 403) {
-        throw new Error(lastErr);
+        throw new Error(errMsg);
       }
       if (res.status !== 503 && res.status !== 429 && res.status !== 404) {
-        throw new Error(lastErr);
+        throw new Error(errMsg);
       }
     }
   }
-  throw new Error(lastErr);
+  throw new Error(primaryErr || lastErr);
 }
 
 async function callOpenAICompat({ apiKey, baseUrl, model, systemPrompt, prompt, attachments, expectJson, provider }) {
