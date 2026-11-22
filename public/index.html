@@ -1151,18 +1151,48 @@
         let plannedInvestmentsTWD = 0;
         let annualIncomeMin = 0;
         let annualIncomeMax = 0;
+        let oneTimeExpectedMin = 0;
+        let oneTimeExpectedMax = 0;
+        let closedInvCount = 0;
+        let pausedInvCount = 0;
+        const activeInvIds = new Set();
+        const activeInvNames = new Set();
         (data.investments || []).forEach((inv) => {
           const p = safeNum(inv.principal);
           const cyc = Math.max(1, safeNum(inv.cycleMonths, 12));
           const minR = safeNum(inv.minRate);
           const maxR = safeNum(inv.maxRate);
+          const status = getInvestmentStatus(inv);
+          const kind = getInvestmentKind(inv);
+          if (status === 'closed') {
+            closedInvCount += 1;
+            return;
+          }
+          if (status === 'paused') pausedInvCount += 1;
+          activeInvIds.add(inv.id);
+          if (inv.name) activeInvNames.add(inv.name);
           plannedInvestmentsTWD += p;
-          annualIncomeMin += p * (minR / 100) * (12 / cyc);
-          annualIncomeMax += p * (maxR / 100) * (12 / cyc);
+          if (status === 'active') {
+            if (kind === 'one_time') {
+              oneTimeExpectedMin += p * (minR / 100);
+              oneTimeExpectedMax += p * (maxR / 100);
+            } else {
+              annualIncomeMin += p * (minR / 100) * (12 / cyc);
+              annualIncomeMax += p * (maxR / 100) * (12 / cyc);
+            }
+          }
         });
-        const invReturnedTotalTWD = (data.investmentLogs || [])
-          .filter((l) => l.eventType === 'payout' || l.eventType === 'withdraw' || l.eventType === 'settle')
-          .reduce((s, l) => s + safeNum(l.amountTWD), 0);
+        let invReturnedAllTWD = 0;
+        let invReturnedActiveTWD = 0;
+        (data.investmentLogs || []).forEach((l) => {
+          if (l.eventType === 'payout' || l.eventType === 'withdraw' || l.eventType === 'settle') {
+            const amt = safeNum(l.amountTWD);
+            invReturnedAllTWD += amt;
+            if (activeInvIds.has(l.investmentId) || (!l.investmentId && activeInvNames.has(l.investmentName))) {
+              invReturnedActiveTWD += amt;
+            }
+          }
+        });
 
         let fixedIncomeAnnualTWD = 0;
         (data.fixedIncomes || []).forEach((inc) => {
@@ -1199,9 +1229,15 @@
           investmentsTWD,
           plannedInvestmentsTWD,
           nonRecoverableInvTWD: plannedInvestmentsTWD,
-          invReturnedTotalTWD,
+          invReturnedTotalTWD: invReturnedAllTWD,
+          invReturnedAllTWD,
+          invReturnedActiveTWD,
+          closedInvCount,
+          pausedInvCount,
           annualIncomeMin,
           annualIncomeMax,
+          oneTimeExpectedMin,
+          oneTimeExpectedMax,
           fixedIncomeMonthlyTWD,
           fixedIncomeAnnualTWD,
           fixedExpenseMonthlyTWD,
@@ -1266,23 +1302,46 @@
       let fxFilterCur = 'ALL';
       let invLogFilter = 'ALL';
       let invTagFilter = 'ALL';
-      const DEFAULT_INV_TAGS = ['進行中', '已結算', '暫停分紅', '實體店面', '合夥股權', '房地產', '借貸債權', '設備租賃', '貴金屬', '其他'];
+      const DEFAULT_INV_TAGS = ['實體店面', '合夥股權', '房地產', '借貸債權', '設備租賃', '貴金屬', '其他'];
+      const INV_STATUS_META = {
+        active: { label: '進行中', cls: 'bg-emerald-50 text-emerald-700' },
+        paused: { label: '暫停分紅', cls: 'bg-amber-50 text-amber-800' },
+        closed: { label: '已結案', cls: 'bg-zinc-200/80 text-zinc-700' }
+      };
+      const INV_KIND_META = {
+        recurring: { label: '持續性', cls: 'bg-zinc-100 text-zinc-700' },
+        one_time: { label: '一次性', cls: 'bg-violet-50 text-violet-700' }
+      };
       function normalizeInvTags(raw) {
         const arr = Array.isArray(raw)
           ? raw
           : String(raw || '').split(/[,，、\n]/);
         return [...new Set(arr.map((t) => String(t || '').trim()).filter(Boolean))];
       }
+      function getInvestmentStatus(inv) {
+        if (inv && (inv.status === 'active' || inv.status === 'paused' || inv.status === 'closed')) {
+          return inv.status;
+        }
+        const tags = normalizeInvTags(inv && inv.tags);
+        if (tags.includes('已結算') || tags.includes('已結案')) return 'closed';
+        if (tags.includes('暫停分紅')) return 'paused';
+        return 'active';
+      }
+      function getInvestmentKind(inv) {
+        return inv && inv.investKind === 'one_time' ? 'one_time' : 'recurring';
+      }
       function getAllInvTagOptions() {
         const extra = [];
         (state.investments || []).forEach((i) => {
-          normalizeInvTags(i.tags).forEach((t) => extra.push(t));
+          normalizeInvTags(i.tags).forEach((t) => {
+            if (!['進行中', '已結算', '已結案', '暫停分紅'].includes(t)) extra.push(t);
+          });
         });
         return [...new Set([...DEFAULT_INV_TAGS, ...extra])];
       }
       function invTagBadgeClass(tag) {
         if (tag === '進行中') return 'bg-emerald-50 text-emerald-700';
-        if (tag === '已結算') return 'bg-zinc-200/80 text-zinc-700';
+        if (tag === '已結算' || tag === '已結案') return 'bg-zinc-200/80 text-zinc-700';
         if (tag === '暫停分紅') return 'bg-amber-50 text-amber-800';
         return 'bg-sky-50 text-sky-700';
       }
@@ -1870,8 +1929,11 @@
         pnlEl.className = 'mt-2 text-xs font-mono-num ' + (pnl >= 0 ? 'text-rose-700' : 'text-emerald-700');
 
         document.getElementById('kpi-total-inv').textContent = fmtTWD(totals.plannedInvestmentsTWD);
-        document.getElementById('kpi-inv-pct').textContent = '不計淨值';
-        document.getElementById('kpi-inv-annual').textContent = `預估年收益 ${fmtCompactWan(totals.annualIncomeMin)} ～ ${fmtCompactWan(totals.annualIncomeMax)} · 已領回報 ${fmtCompactWan(totals.invReturnedTotalTWD)}`;
+        document.getElementById('kpi-inv-pct').textContent = '進行中 · 不計淨值';
+        const oneTimeNote = totals.oneTimeExpectedMax > 0
+          ? ` · 一次性預估獲利 ${fmtCompactWan(totals.oneTimeExpectedMin)} ～ ${fmtCompactWan(totals.oneTimeExpectedMax)}`
+          : '';
+        document.getElementById('kpi-inv-annual').textContent = `持續年收益 ${fmtCompactWan(totals.annualIncomeMin)} ～ ${fmtCompactWan(totals.annualIncomeMax)}${oneTimeNote}`;
 
         document.getElementById('kpi-fixed-income').textContent = `每月 ${fmtTWD(totals.fixedIncomeMonthlyTWD)} ｜ 每年 ${fmtCompactWan(totals.fixedIncomeAnnualTWD)}`;
         const combMin = totals.fixedIncomeMonthlyTWD + totals.annualIncomeMin / 12;
@@ -2178,26 +2240,34 @@
       function renderInvestments(totals) {
         const monthlyMin = totals.annualIncomeMin / 12;
         const monthlyMax = totals.annualIncomeMax / 12;
+        const closedSub = totals.closedInvCount > 0 ? `已排除 ${totals.closedInvCount} 筆已結案專案` : '目前進行中與暫停專案合計';
+        const oneTimeSub = totals.oneTimeExpectedMax > 0
+          ? `另含一次性預估獲利 ${fmtCompactWan(totals.oneTimeExpectedMin)} ～ ${fmtCompactWan(totals.oneTimeExpectedMax)}`
+          : '僅計「進行中＋持續性」專案';
         document.getElementById('inv-summary-cards').innerHTML = `
           <div class="p-4 rounded-lg bg-[#f7f7f5] hairline">
-            <div class="text-xs text-zinc-500">預計投入總額（不計淨值）</div>
+            <div class="text-xs text-zinc-500">進行中預計投入（不計淨值）</div>
             <div class="mt-1 text-lg font-semibold text-zinc-900 font-mono-num">${fmtTWD(totals.plannedInvestmentsTWD)}</div>
+            <div class="mt-1 text-[11px] text-zinc-400">${closedSub}</div>
           </div>
           <div class="p-4 rounded-lg bg-[#f7f7f5] hairline">
-            <div class="text-xs text-zinc-500">累計已領回報（分紅／收回）</div>
-            <div class="mt-1 text-lg font-semibold text-emerald-700 font-mono-num">${fmtTWD(totals.invReturnedTotalTWD)}</div>
+            <div class="text-xs text-zinc-500">進行中已領回報</div>
+            <div class="mt-1 text-lg font-semibold text-emerald-700 font-mono-num">${fmtTWD(totals.invReturnedActiveTWD)}</div>
+            <div class="mt-1 text-[11px] text-zinc-400 font-mono-num">含已結案總累計 ${fmtTWD(totals.invReturnedAllTWD)}</div>
           </div>
           <div class="p-4 rounded-lg bg-[#f7f7f5] hairline">
-            <div class="text-xs text-zinc-500">預估平均月現金流</div>
+            <div class="text-xs text-zinc-500">預估平均月現金流（持續性）</div>
             <div class="mt-1 text-lg font-semibold text-zinc-900 font-mono-num">${fmtTWD(monthlyMin)} ～ ${fmtTWD(monthlyMax)}</div>
+            <div class="mt-1 text-[11px] text-zinc-400">不含已結案、暫停分紅與一次性</div>
           </div>
           <div class="p-4 rounded-lg bg-[#f7f7f5] hairline">
-            <div class="text-xs text-zinc-500">預估年化總收益</div>
+            <div class="text-xs text-zinc-500">預估年化總收益（持續性）</div>
             <div class="mt-1 text-lg font-semibold text-emerald-700 font-mono-num">${fmtCompactWan(totals.annualIncomeMin)} ～ ${fmtCompactWan(totals.annualIncomeMax)}</div>
+            <div class="mt-1 text-[11px] text-zinc-400">${oneTimeSub}</div>
           </div>
         `;
 
-        // Render Capital Recycling & Peak Capital Panel
+        // Render Capital Recycling & Peak Capital Panel (all-time history including closed projects)
         const recPanel = document.getElementById('inv-recycling-panel');
         const rStats = computeInvestmentRecyclingStats(state);
         if (recPanel) {
@@ -2236,14 +2306,14 @@
               <div class="rounded-xl bg-[#f7f7f5] hairline p-4 space-y-3">
                 <div class="flex flex-wrap items-center justify-between gap-2">
                   <div>
-                    <div class="text-xs font-semibold text-zinc-900">資金滾動複投分析（自備本金 vs 二次／三次轉投）</div>
+                    <div class="text-xs font-semibold text-zinc-900">全歷史資金滾動複投分析（含已結案專案）</div>
                     <div class="text-[11px] text-zinc-500 mt-0.5">依歷史時間軸自動計算口袋實際最高墊款，搭配資金來源標記還原真實資本效率</div>
                   </div>
                   ${rStats.moic !== null ? `<span class="text-xs font-mono-num font-semibold px-2.5 py-1 rounded-lg bg-white hairline text-emerald-700">實質本金回收倍數 ${rStats.moic.toFixed(2)}x</span>` : ''}
                 </div>
                 <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs font-mono-num">
                   <div class="bg-white rounded-lg hairline px-3 py-2">
-                    <div class="font-sans text-[11px] text-zinc-500">紀錄累計總投入</div>
+                    <div class="font-sans text-[11px] text-zinc-500">全歷史累計總投入</div>
                     <div class="mt-0.5 font-semibold text-zinc-900">${fmtTWD(rStats.totalInvested)}</div>
                   </div>
                   <div class="bg-white rounded-lg hairline px-3 py-2">
@@ -2255,7 +2325,7 @@
                     <div class="mt-0.5 font-semibold text-sky-700">${fmtTWD(rStats.recycledTotal)} (${rStats.recycledPct.toFixed(1)}%)</div>
                   </div>
                   <div class="bg-white rounded-lg hairline px-3 py-2">
-                    <div class="font-sans text-[11px] text-zinc-500">累計總回收（分紅＋收回）</div>
+                    <div class="font-sans text-[11px] text-zinc-500">全歷史累計總回收</div>
                     <div class="mt-0.5 font-semibold text-emerald-700">${fmtTWD(rStats.totalReturned)}</div>
                   </div>
                 </div>
@@ -2265,19 +2335,24 @@
           }
         }
 
+        // Status / Kind / Custom Tag Filter Bar
         const tagFilterBar = document.getElementById('inv-tag-filter-bar');
-        const tagCounts = {};
+        const filterCounts = {};
+        const addCount = (key) => { filterCounts[key] = (filterCounts[key] || 0) + 1; };
         (state.investments || []).forEach((i) => {
+          addCount(`status:${getInvestmentStatus(i)}`);
+          addCount(`kind:${getInvestmentKind(i)}`);
           normalizeInvTags(i.tags).forEach((t) => {
-            tagCounts[t] = (tagCounts[t] || 0) + 1;
+            if (!['進行中', '已結算', '已結案', '暫停分紅'].includes(t)) {
+              addCount(`tag:${t}`);
+            }
           });
         });
-        const activeTags = Object.keys(tagCounts);
-        if (invTagFilter !== 'ALL' && !tagCounts[invTagFilter]) {
+        if (invTagFilter !== 'ALL' && !filterCounts[invTagFilter]) {
           invTagFilter = 'ALL';
         }
         if (tagFilterBar) {
-          if (activeTags.length === 0) {
+          if ((state.investments || []).length === 0) {
             tagFilterBar.classList.add('hidden');
             tagFilterBar.innerHTML = '';
           } else {
@@ -2289,9 +2364,19 @@
                 : 'bg-[#f7f7f5] hover:bg-zinc-200/70 text-zinc-700 hairline';
               return `<button type="button" data-inv-tag-filter="${escapeHtml(val)}" class="h-7 px-2.5 rounded-lg text-xs font-medium transition-colors duration-150 ${cls}">${escapeHtml(label)}</button>`;
             };
+            const orderedKeys = [
+              ...['active', 'paused', 'closed'].map((s) => `status:${s}`).filter((k) => filterCounts[k]),
+              ...['recurring', 'one_time'].map((kd) => `kind:${kd}`).filter((k) => filterCounts[k]),
+              ...Object.keys(filterCounts).filter((k) => k.startsWith('tag:'))
+            ];
+            const labelOfKey = (k) => {
+              if (k.startsWith('status:')) return INV_STATUS_META[k.slice(7)].label;
+              if (k.startsWith('kind:')) return INV_KIND_META[k.slice(5)].label;
+              return k.slice(4);
+            };
             tagFilterBar.innerHTML =
               makeBtn('ALL', `全部 (${state.investments.length})`) +
-              activeTags.map((t) => makeBtn(t, `${t} (${tagCounts[t]})`)).join('');
+              orderedKeys.map((k) => makeBtn(k, `${labelOfKey(k)} (${filterCounts[k]})`)).join('');
             tagFilterBar.querySelectorAll('[data-inv-tag-filter]').forEach((btn) => {
               btn.addEventListener('click', () => {
                 invTagFilter = btn.getAttribute('data-inv-tag-filter') || 'ALL';
@@ -2308,40 +2393,113 @@
         }
         const visibleInvestments = invTagFilter === 'ALL'
           ? state.investments
-          : state.investments.filter((i) => normalizeInvTags(i.tags).includes(invTagFilter));
+          : state.investments.filter((i) => {
+              if (invTagFilter.startsWith('status:')) return getInvestmentStatus(i) === invTagFilter.slice(7);
+              if (invTagFilter.startsWith('kind:')) return getInvestmentKind(i) === invTagFilter.slice(5);
+              if (invTagFilter.startsWith('tag:')) return normalizeInvTags(i.tags).includes(invTagFilter.slice(4));
+              return true;
+            });
         if (visibleInvestments.length === 0) {
-          grid.innerHTML = '<div class="col-span-full py-8 text-center text-zinc-400 text-sm">此標籤下尚無實體投資項目</div>';
+          grid.innerHTML = '<div class="col-span-full py-8 text-center text-zinc-400 text-sm">此篩選條件下尚無實體投資項目</div>';
         } else {
         grid.innerHTML = visibleInvestments.map((inv) => {
           const p = safeNum(inv.principal);
           const cyc = Math.max(1, safeNum(inv.cycleMonths, 12));
           const minR = safeNum(inv.minRate);
           const maxR = safeNum(inv.maxRate);
+          const status = getInvestmentStatus(inv);
+          const kind = getInvestmentKind(inv);
+          const stMeta = INV_STATUS_META[status];
+          const kdMeta = INV_KIND_META[kind];
           const perMin = p * (minR / 100);
           const perMax = p * (maxR / 100);
           const annMin = perMin * (12 / cyc);
           const annMax = perMax * (12 / cyc);
           const avgPer = Math.round((perMin + perMax) / 2);
           const avgMonthly = (annMin + annMax) / 24;
-          const paybackMonths = (p > 0 && avgMonthly > 0) ? (p / avgMonthly) : null;
-          const tags = normalizeInvTags(inv.tags);
+          const paybackMonths = (kind === 'recurring' && status === 'active' && p > 0 && avgMonthly > 0) ? (p / avgMonthly) : null;
+          const customTags = normalizeInvTags(inv.tags).filter((t) => !['進行中', '已結算', '已結案', '暫停分紅'].includes(t));
           const roundInfo = getInvestmentRound(inv.id);
           const roundBadge = roundInfo.round > 1
             ? `<span class="text-[11px] px-1.5 py-0.5 rounded font-medium bg-indigo-50 text-indigo-700">第 ${roundInfo.round} 輪轉投${roundInfo.parentName ? ' · 承接 ' + escapeHtml(roundInfo.parentName) : ''}</span>`
             : '';
-          const tagsHtml = (tags.length || roundBadge)
-            ? `<div class="mt-1.5 flex flex-wrap items-center gap-1">${roundBadge}${tags.map((t) => `<span class="text-[11px] px-1.5 py-0.5 rounded font-medium ${invTagBadgeClass(t)}">${escapeHtml(t)}</span>`).join('')}</div>`
+          const tagsHtml = `<div class="mt-1.5 flex flex-wrap items-center gap-1">` +
+            `<span class="text-[11px] px-1.5 py-0.5 rounded font-medium ${stMeta.cls}">${stMeta.label}</span>` +
+            `<span class="text-[11px] px-1.5 py-0.5 rounded font-medium ${kdMeta.cls}">${kdMeta.label}</span>` +
+            roundBadge +
+            customTags.map((t) => `<span class="text-[11px] px-1.5 py-0.5 rounded font-medium ${invTagBadgeClass(t)}">${escapeHtml(t)}</span>`).join('') +
+            `</div>`;
+
+          const logs = (state.investmentLogs || []).filter((l) => l.investmentId === inv.id || l.investmentName === inv.name);
+          const invLogs = logs.filter((l) => l.eventType === 'invest');
+          const sumInv = invLogs.reduce((s, l) => s + safeNum(l.amountTWD), 0);
+          const sumWd = logs.filter((l) => l.eventType === 'withdraw' || l.eventType === 'settle').reduce((s, l) => s + safeNum(l.amountTWD), 0);
+          const sumPay = logs.filter((l) => l.eventType === 'payout').reduce((s, l) => s + safeNum(l.amountTWD), 0);
+          const totalRec = sumPay + sumWd;
+          const baseAmt = sumInv > 0 ? sumInv : p;
+          const pctBack = baseAmt > 0 ? Math.min(999, (totalRec / baseAmt) * 100) : null;
+          const fFresh = invLogs.filter((l) => !l.fundingSource || l.fundingSource === 'fresh').reduce((s, l) => s + safeNum(l.amountTWD), 0);
+          const fRec = invLogs.filter((l) => l.fundingSource === 'recycled_principal').reduce((s, l) => s + safeNum(l.amountTWD), 0);
+          const fProf = invLogs.filter((l) => l.fundingSource === 'reinvested_profit').reduce((s, l) => s + safeNum(l.amountTWD), 0);
+          const splitLine = (sumInv > 0 && (fRec > 0 || fProf > 0))
+            ? `<div class="text-[10px] text-zinc-500 font-sans pt-0.5">資金構成：新自備 ${Math.round((fFresh / sumInv) * 100)}% · 舊本金轉投 ${Math.round((fRec / sumInv) * 100)}% · 分潤複投 ${Math.round((fProf / sumInv) * 100)}%</div>`
             : '';
 
+          let metricsHtml = '';
+          if (status === 'closed') {
+            const netPnl = totalRec - baseAmt;
+            const roiPct = baseAmt > 0 ? (netPnl / baseAmt) * 100 : null;
+            const pnlCls = netPnl >= 0 ? 'text-emerald-700' : 'text-rose-700';
+            metricsHtml = `
+              <div class="flex justify-between"><span class="font-sans text-zinc-500">原預計投入</span><span class="text-zinc-600">${fmtTWD(p)}</span></div>
+              <div class="flex justify-between"><span class="font-sans text-zinc-500">實際累計投入</span><span class="font-medium text-zinc-900">${fmtTWD(sumInv)}</span></div>
+              ${splitLine}
+              <div class="flex justify-between"><span class="font-sans text-zinc-500">實際總回收（分紅＋收回）</span><span class="font-medium text-emerald-700">${fmtTWD(totalRec)}</span></div>
+              <div class="flex justify-between pt-1.5 hairline-t"><span class="font-sans text-zinc-500">結案淨損益</span><span class="font-semibold ${pnlCls}">${netPnl >= 0 ? '+' : ''}${fmtTWD(netPnl)}${roiPct !== null ? ` (${roiPct >= 0 ? '+' : ''}${roiPct.toFixed(1)}%)` : ''}</span></div>
+            `;
+          } else if (kind === 'one_time') {
+            const refAnnMin = (minR * 12) / cyc;
+            const refAnnMax = (maxR * 12) / cyc;
+            metricsHtml = `
+              <div class="flex justify-between"><span class="font-sans text-zinc-500">預計投入</span><span class="font-medium text-zinc-900">${fmtTWD(p)}</span></div>
+              <div class="flex justify-between"><span class="font-sans text-zinc-500">預計總報酬率</span><span class="font-medium text-rose-700">${minR}% ～ ${maxR}%</span></div>
+              <div class="flex justify-between"><span class="font-sans text-zinc-500">預估到期獲利</span><span class="font-medium text-emerald-700">${fmtTWD(perMin)} ～ ${fmtTWD(perMax)}</span></div>
+              <div class="flex justify-between"><span class="font-sans text-zinc-500">參考換算年化（${cyc} 個月）</span><span class="text-zinc-600">${refAnnMin.toFixed(1)}% ～ ${refAnnMax.toFixed(1)}%</span></div>
+            `;
+          } else {
+            metricsHtml = `
+              <div class="flex justify-between"><span class="font-sans text-zinc-500">預計投入</span><span class="font-medium text-zinc-900">${fmtTWD(p)}</span></div>
+              <div class="flex justify-between"><span class="font-sans text-zinc-500">單期報酬率</span><span class="font-medium text-rose-700">${minR}% ～ ${maxR}%</span></div>
+              <div class="flex justify-between"><span class="font-sans text-zinc-500">單期預估收益</span><span class="text-zinc-700">${fmtTWD(perMin)} ～ ${fmtTWD(perMax)}</span></div>
+              <div class="flex justify-between"><span class="font-sans text-zinc-500">年化預估收益</span><span class="font-medium text-emerald-700">${fmtCompactWan(annMin)} ～ ${fmtCompactWan(annMax)}</span></div>
+              ${paybackMonths ? `<div class="flex justify-between"><span class="font-sans text-zinc-500">預估回本期間</span><span class="font-medium text-amber-700">約 ${paybackMonths.toFixed(1)} 個月</span></div>` : ''}
+            `;
+          }
+
+          const logSummaryHtml = (status !== 'closed' && logs.length)
+            ? `<div class="pt-2 mt-2 hairline-t space-y-1 text-[11px]">` +
+              (sumInv > 0 ? `<div class="flex justify-between"><span class="font-sans text-zinc-400">紀錄累計投入</span><span class="text-zinc-700">${fmtTWD(sumInv)}</span></div>` : '') +
+              splitLine +
+              (sumWd > 0 ? `<div class="flex justify-between"><span class="font-sans text-zinc-400">紀錄累計撤資／結算</span><span class="text-amber-700">${fmtTWD(sumWd)}</span></div>` : '') +
+              (sumPay > 0 ? `<div class="flex justify-between"><span class="font-sans text-zinc-400">累計已領分紅</span><span class="text-emerald-700 font-medium">${fmtTWD(sumPay)}${pctBack !== null ? `（總回收 ${pctBack.toFixed(1)}%）` : ''}</span></div>` : '') +
+              `</div>`
+            : '';
+
+          const subtitle = status === 'closed'
+            ? '已結案 · 不計入預計投入與現金流預估'
+            : (kind === 'one_time'
+                ? `預計期長 ${cyc} 個月 · 到期結算（不計月現金流）`
+                : `${cycleLabel(cyc)}${status === 'paused' ? ' · 暫停分紅（暫不計現金流）' : ' · 不計入總資產淨值'}`);
+
           return `
-            <div class="rounded-xl hairline p-5 bg-white flex flex-col justify-between gap-4">
+            <div class="rounded-xl hairline p-5 ${status === 'closed' ? 'bg-[#fafaf8] opacity-90' : 'bg-white'} flex flex-col justify-between gap-4">
               <div>
                 <div class="flex items-start justify-between gap-2">
                   <div>
                     <div class="flex items-center gap-1.5 flex-wrap">
                       <h3 class="font-semibold text-zinc-900 text-sm">${escapeHtml(inv.name)}</h3>
                     </div>
-                    <div class="mt-0.5 text-xs text-zinc-500">${cycleLabel(cyc)} · 不計入總資產淨值</div>
+                    <div class="mt-0.5 text-xs text-zinc-500">${subtitle}</div>
                     ${tagsHtml}
                   </div>
                   <div class="text-right shrink-0">
@@ -2350,33 +2508,8 @@
                   </div>
                 </div>
                 <div class="mt-4 space-y-2 text-xs font-mono-num">
-                  <div class="flex justify-between"><span class="font-sans text-zinc-500">預計投入</span><span class="font-medium text-zinc-900">${fmtTWD(p)}</span></div>
-                  <div class="flex justify-between"><span class="font-sans text-zinc-500">單期報酬率</span><span class="font-medium text-rose-700">${minR}% ～ ${maxR}%</span></div>
-                  <div class="flex justify-between"><span class="font-sans text-zinc-500">單期預估收益</span><span class="text-zinc-700">${fmtTWD(perMin)} ～ ${fmtTWD(perMax)}</span></div>
-                  <div class="flex justify-between"><span class="font-sans text-zinc-500">年化預估收益</span><span class="font-medium text-emerald-700">${fmtCompactWan(annMin)} ～ ${fmtCompactWan(annMax)}</span></div>
-                  ${paybackMonths ? `<div class="flex justify-between"><span class="font-sans text-zinc-500">預估回本期間</span><span class="font-medium text-amber-700">約 ${paybackMonths.toFixed(1)} 個月</span></div>` : ''}
-                  ${(() => {
-                    const logs = (state.investmentLogs || []).filter((l) => l.investmentId === inv.id || l.investmentName === inv.name);
-                    if (!logs.length) return '';
-                    const invLogs = logs.filter((l) => l.eventType === 'invest');
-                    const sumInv = invLogs.reduce((s, l) => s + safeNum(l.amountTWD), 0);
-                    const sumWd = logs.filter((l) => l.eventType === 'withdraw' || l.eventType === 'settle').reduce((s, l) => s + safeNum(l.amountTWD), 0);
-                    const sumPay = logs.filter((l) => l.eventType === 'payout').reduce((s, l) => s + safeNum(l.amountTWD), 0);
-                    const baseAmt = sumInv > 0 ? sumInv : p;
-                    const pctBack = baseAmt > 0 ? Math.min(999, ((sumPay + sumWd) / baseAmt) * 100) : null;
-                    const fFresh = invLogs.filter((l) => !l.fundingSource || l.fundingSource === 'fresh').reduce((s, l) => s + safeNum(l.amountTWD), 0);
-                    const fRec = invLogs.filter((l) => l.fundingSource === 'recycled_principal').reduce((s, l) => s + safeNum(l.amountTWD), 0);
-                    const fProf = invLogs.filter((l) => l.fundingSource === 'reinvested_profit').reduce((s, l) => s + safeNum(l.amountTWD), 0);
-                    const splitLine = (sumInv > 0 && (fRec > 0 || fProf > 0))
-                      ? `<div class="text-[10px] text-zinc-500 font-sans pt-0.5">資金構成：新自備 ${Math.round((fFresh / sumInv) * 100)}% · 舊本金轉投 ${Math.round((fRec / sumInv) * 100)}% · 分潤複投 ${Math.round((fProf / sumInv) * 100)}%</div>`
-                      : '';
-                    return `<div class="pt-2 mt-2 hairline-t space-y-1 text-[11px]">` +
-                      (sumInv > 0 ? `<div class="flex justify-between"><span class="font-sans text-zinc-400">紀錄累計投入</span><span class="text-zinc-700">${fmtTWD(sumInv)}</span></div>` : '') +
-                      splitLine +
-                      (sumWd > 0 ? `<div class="flex justify-between"><span class="font-sans text-zinc-400">紀錄累計撤資／結算</span><span class="text-amber-700">${fmtTWD(sumWd)}</span></div>` : '') +
-                      (sumPay > 0 ? `<div class="flex justify-between"><span class="font-sans text-zinc-400">累計已領分紅</span><span class="text-emerald-700 font-medium">${fmtTWD(sumPay)}${pctBack !== null ? `（總回收 ${pctBack.toFixed(1)}%）` : ''}</span></div>` : '') +
-                      `</div>`;
-                  })()}
+                  ${metricsHtml}
+                  ${logSummaryHtml}
                 </div>
                 ${inv.note ? `<p class="mt-3 text-xs text-zinc-500 hairline-t pt-2.5">${escapeHtml(inv.note)}</p>` : ''}
               </div>
@@ -3755,8 +3888,10 @@
 
       function openInvModal(item = null) {
         const isEdit = Boolean(item);
-        const inv = item || { name: '', principal: 0, cycleMonths: 1, minRate: 3, maxRate: 5, principalRecoverable: false, sourceInvestmentId: '', tags: ['進行中'], note: '' };
-        const selectedTags = new Set(normalizeInvTags(inv.tags));
+        const inv = item || { name: '', principal: 0, cycleMonths: 1, minRate: 3, maxRate: 5, status: 'active', investKind: 'recurring', principalRecoverable: false, sourceInvestmentId: '', tags: [], note: '' };
+        const initStatus = isEdit ? getInvestmentStatus(inv) : 'active';
+        const initKind = isEdit ? getInvestmentKind(inv) : 'recurring';
+        const selectedTags = new Set(normalizeInvTags(inv.tags).filter((t) => !['進行中', '已結算', '已結案', '暫停分紅'].includes(t)));
         const allTagOptions = [...new Set([...getAllInvTagOptions(), ...selectedTags])];
         const parentOptions = `<option value="">無（第 1 輪原始投資）</option>` +
           (state.investments || [])
@@ -3767,20 +3902,37 @@
         const html = `
           <div><label class="block text-xs font-medium text-zinc-600 mb-1">投資項目名稱</label><input name="name" required value="${escapeHtml(inv.name)}" class="w-full h-9 px-3 rounded-lg hairline text-sm" /></div>
           <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-medium text-zinc-600 mb-1">專案狀態</label>
+              <select id="inv-status-sel" name="status" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white">
+                <option value="active" ${initStatus === 'active' ? 'selected' : ''}>進行中（計入預計投入與現金流預估）</option>
+                <option value="paused" ${initStatus === 'paused' ? 'selected' : ''}>暫停分紅（不計入現金流預估）</option>
+                <option value="closed" ${initStatus === 'closed' ? 'selected' : ''}>已結案（從進行中統計剔除，保留歷史戰績）</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-zinc-600 mb-1">投資性質</label>
+              <select id="inv-kind-sel" name="investKind" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white">
+                <option value="recurring" ${initKind === 'recurring' ? 'selected' : ''}>持續性（週期分紅，計入月現金流）</option>
+                <option value="one_time" ${initKind === 'one_time' ? 'selected' : ''}>一次性（到期結算，不計月現金流）</option>
+              </select>
+            </div>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
             <div><label class="block text-xs font-medium text-zinc-600 mb-1">預計投入 (台幣)</label><input name="principal" type="number" step="1" min="0" required value="${safeNum(inv.principal)}" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" /></div>
-            <div><label class="block text-xs font-medium text-zinc-600 mb-1">結算週期 (月)</label><input name="cycleMonths" type="number" step="1" min="1" max="60" required value="${safeNum(inv.cycleMonths, 1)}" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" /></div>
+            <div><label id="inv-cycle-label" class="block text-xs font-medium text-zinc-600 mb-1">${initKind === 'one_time' ? '預計期長 (月)' : '結算週期 (月)'}</label><input name="cycleMonths" type="number" step="1" min="1" max="60" required value="${safeNum(inv.cycleMonths, 1)}" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" /></div>
           </div>
           <p class="text-[11px] text-zinc-500 -mt-1">預計投入僅作為分紅試算與回本進度基準，不計入總資產淨值；待實際收到分紅或收回款項入帳銀行時才計入資產。</p>
           <div class="grid grid-cols-2 gap-3">
-            <div><label class="block text-xs font-medium text-zinc-600 mb-1">單期低標報酬 (%)</label><input name="minRate" type="number" step="0.1" required value="${safeNum(inv.minRate)}" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" /></div>
-            <div><label class="block text-xs font-medium text-zinc-600 mb-1">單期高標報酬 (%)</label><input name="maxRate" type="number" step="0.1" required value="${safeNum(inv.maxRate)}" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" /></div>
+            <div><label id="inv-minrate-label" class="block text-xs font-medium text-zinc-600 mb-1">${initKind === 'one_time' ? '預計低標總報酬 (%)' : '單期低標報酬 (%)'}</label><input name="minRate" type="number" step="0.1" required value="${safeNum(inv.minRate)}" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" /></div>
+            <div><label id="inv-maxrate-label" class="block text-xs font-medium text-zinc-600 mb-1">${initKind === 'one_time' ? '預計高標總報酬 (%)' : '單期高標報酬 (%)'}</label><input name="maxRate" type="number" step="0.1" required value="${safeNum(inv.maxRate)}" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" /></div>
           </div>
           <div>
             <label class="block text-xs font-medium text-zinc-600 mb-1">承接／轉投來源專案（選填，用於追蹤第 2 輪／第 3 輪滾動複投）</label>
             <select name="sourceInvestmentId" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white">${parentOptions}</select>
           </div>
           <div class="space-y-2">
-            <label class="block text-xs font-medium text-zinc-600">標籤（可多選或自行新增）</label>
+            <label class="block text-xs font-medium text-zinc-600">分類標籤（可多選或自行新增）</label>
             <input id="inv-tags-hidden" type="hidden" name="tags" value="${escapeHtml([...selectedTags].join(','))}" />
             <div id="inv-tag-chips" class="flex flex-wrap gap-1.5"></div>
             <div class="flex items-center gap-1.5">
@@ -3792,6 +3944,8 @@
         `;
         openFormModal(isEdit ? '編輯實體投資' : '新增實體投資', html, (fd) => {
           const sourceInvestmentId = String(fd.get('sourceInvestmentId') || '').trim();
+          const status = String(fd.get('status') || 'active');
+          const investKind = String(fd.get('investKind') || 'recurring');
           const record = {
             id: isEdit ? inv.id : uid('i'),
             name: String(fd.get('name')).trim(),
@@ -3799,6 +3953,8 @@
             cycleMonths: Math.max(1, safeNum(fd.get('cycleMonths'), 1)),
             minRate: safeNum(fd.get('minRate')),
             maxRate: safeNum(fd.get('maxRate')),
+            status,
+            investKind,
             principalRecoverable: false,
             ...(sourceInvestmentId ? { sourceInvestmentId } : {}),
             tags: normalizeInvTags(fd.get('tags')),
@@ -3809,6 +3965,19 @@
           renderAll();
           showToast(isEdit ? '已更新投資項目' : '已新增投資項目');
         });
+
+        const kindSel = document.getElementById('inv-kind-sel');
+        const cycleLbl = document.getElementById('inv-cycle-label');
+        const minLbl = document.getElementById('inv-minrate-label');
+        const maxLbl = document.getElementById('inv-maxrate-label');
+        if (kindSel) {
+          kindSel.addEventListener('change', () => {
+            const isOneTime = kindSel.value === 'one_time';
+            if (cycleLbl) cycleLbl.textContent = isOneTime ? '預計期長 (月)' : '結算週期 (月)';
+            if (minLbl) minLbl.textContent = isOneTime ? '預計低標總報酬 (%)' : '單期低標報酬 (%)';
+            if (maxLbl) maxLbl.textContent = isOneTime ? '預計高標總報酬 (%)' : '單期高標報酬 (%)';
+          });
+        }
 
         const chipsWrap = document.getElementById('inv-tag-chips');
         const hiddenTagsInput = document.getElementById('inv-tags-hidden');
@@ -5409,8 +5578,8 @@
         const cRows = state.cash.map((c) => ({ id: c.id, bank: c.bank, currency: c.currency, amount: c.amount, note: c.note || '' }));
         XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(cRows.length ? cRows : [{ id: '', bank: '', currency: 'TWD', amount: 0, note: '' }]), '銀行現金');
 
-        const iRows = state.investments.map((i) => ({ id: i.id, name: i.name, principal: i.principal, cycleMonths: i.cycleMonths, minRate: i.minRate, maxRate: i.maxRate, sourceInvestmentId: i.sourceInvestmentId || '', tags: normalizeInvTags(i.tags).join(', '), note: i.note || '' }));
-        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(iRows.length ? iRows : [{ id: '', name: '', principal: 0, cycleMonths: 12, minRate: 0, maxRate: 0, sourceInvestmentId: '', tags: '', note: '' }]), '實體投資');
+        const iRows = state.investments.map((i) => ({ id: i.id, name: i.name, status: getInvestmentStatus(i), investKind: getInvestmentKind(i), principal: i.principal, cycleMonths: i.cycleMonths, minRate: i.minRate, maxRate: i.maxRate, sourceInvestmentId: i.sourceInvestmentId || '', tags: normalizeInvTags(i.tags).join(', '), note: i.note || '' }));
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(iRows.length ? iRows : [{ id: '', name: '', status: 'active', investKind: 'recurring', principal: 0, cycleMonths: 12, minRate: 0, maxRate: 0, sourceInvestmentId: '', tags: '', note: '' }]), '實體投資');
 
         const incRows = (state.fixedIncomes || []).map((f) => ({ id: f.id, name: f.name, category: f.category, currency: f.currency, amount: f.amount, cycleMonths: f.cycleMonths, payday: f.payday || '', account: f.account || '', note: f.note || '' }));
         XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(incRows.length ? incRows : [{ id: '', name: '', category: '薪資收入', currency: 'TWD', amount: 0, cycleMonths: 1, payday: '', account: '', note: '' }]), '固定收入');
@@ -5479,7 +5648,7 @@
             if (stockSheet) state.stocks = stockSheet.filter((r) => r.symbol).map((r) => ({ id: r.id || uid('s'), symbol: String(r.symbol), name: String(r.name || r.symbol), market: String(r.market || 'US'), account: String(r.account || ''), currency: String(r.currency || 'USD'), shares: safeNum(r.shares), avgCost: safeNum(r.avgCost), currentPrice: safeNum(r.currentPrice) }));
             if (stTradeSheet) state.stockTrades = stTradeSheet.filter((r) => r.symbol).map((r) => ({ id: r.id || uid('strd'), date: String(r.date || todayISO()), tradeType: String(r.tradeType || 'BUY'), market: String(r.market || 'TW'), symbol: String(r.symbol).toUpperCase(), name: String(r.name || ''), currency: String(r.currency || 'TWD'), shares: safeNum(r.shares), price: safeNum(r.price), fee: safeNum(r.fee), tax: safeNum(r.tax), netAmount: safeNum(r.netAmount), realizedPnlTWD: safeNum(r.realizedPnlTWD), account: String(r.account || ''), applyMode: String(r.applyMode || 'history_only'), note: String(r.note || '') }));
             if (cashSheet) state.cash = cashSheet.filter((r) => r.bank).map((r) => ({ id: r.id || uid('c'), bank: String(r.bank), currency: String(r.currency || 'TWD'), amount: safeNum(r.amount), note: String(r.note || '') }));
-            if (invSheet) state.investments = invSheet.filter((r) => r.name).map((r) => ({ id: r.id || uid('i'), name: String(r.name), principal: safeNum(r.principal), cycleMonths: Math.max(1, safeNum(r.cycleMonths, 12)), minRate: safeNum(r.minRate), maxRate: safeNum(r.maxRate), principalRecoverable: false, ...(r.sourceInvestmentId ? { sourceInvestmentId: String(r.sourceInvestmentId) } : {}), tags: normalizeInvTags(r.tags ?? r['標籤']), note: String(r.note || '') }));
+            if (invSheet) state.investments = invSheet.filter((r) => r.name).map((r) => ({ id: r.id || uid('i'), name: String(r.name), status: ['active', 'paused', 'closed'].includes(String(r.status)) ? String(r.status) : getInvestmentStatus({ tags: normalizeInvTags(r.tags ?? r['標籤']) }), investKind: String(r.investKind) === 'one_time' ? 'one_time' : 'recurring', principal: safeNum(r.principal), cycleMonths: Math.max(1, safeNum(r.cycleMonths, 12)), minRate: safeNum(r.minRate), maxRate: safeNum(r.maxRate), principalRecoverable: false, ...(r.sourceInvestmentId ? { sourceInvestmentId: String(r.sourceInvestmentId) } : {}), tags: normalizeInvTags(r.tags ?? r['標籤']), note: String(r.note || '') }));
             if (incSheet) state.fixedIncomes = incSheet.filter((r) => r.name || r['收入名稱']).map((r) => ({ id: r.id || uid('inc'), name: String(r.name || r['收入名稱']), category: String(r.category || r['類別'] || '固定收入'), currency: String(r.currency || r['幣別'] || 'TWD'), amount: safeNum(r.amount ?? r['單期金額']), cycleMonths: Math.max(1, safeNum(r.cycleMonths ?? r['發放週期(月)'], 1)), payday: String(r.payday || r['每月發放日'] || ''), account: String(r.account || r['入帳帳戶'] || ''), note: String(r.note || r['備註'] || '') }));
             if (irecSheet) state.incomeReceipts = irecSheet.filter((r) => r.name && safeNum(r.actualAmount) > 0).map((r) => ({ id: r.id || uid('irec'), date: String(r.date || todayISO()), name: String(r.name), category: String(r.category || '固定收入'), currency: String(r.currency || 'TWD'), expectedAmount: safeNum(r.expectedAmount, safeNum(r.actualAmount)), actualAmount: safeNum(r.actualAmount), account: String(r.account || ''), depositMode: String(r.depositMode || 'new_deposit'), note: String(r.note || '') }));
             if (ilogSheet) state.investmentLogs = ilogSheet.filter((r) => r.investmentName && safeNum(r.amountTWD) > 0).map((r) => ({ id: r.id || uid('ilog'), investmentId: String(r.investmentId || ''), investmentName: String(r.investmentName), date: String(r.date || todayISO()), eventType: String(r.eventType || 'payout'), stageLabel: String(r.stageLabel || ''), ...(r.fundingSource ? { fundingSource: String(r.fundingSource) } : {}), ...(r.sourceInvestmentId ? { sourceInvestmentId: String(r.sourceInvestmentId) } : {}), amountTWD: safeNum(r.amountTWD), account: String(r.account || ''), applyMode: String(r.applyMode || 'history_only'), note: String(r.note || '') }));
