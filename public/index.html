@@ -1204,6 +1204,7 @@
 
         let fixedIncomeAnnualTWD = 0;
         (data.fixedIncomes || []).forEach((inc) => {
+          if (inc.status === 'inactive') return;
           const amt = safeNum(inc.amount);
           const cyc = Math.max(1, safeNum(inc.cycleMonths, 1));
           fixedIncomeAnnualTWD += amt * rateOf(inc.currency || 'TWD') * (12 / cyc);
@@ -1212,6 +1213,7 @@
 
         let fixedExpenseAnnualTWD = 0;
         (data.fixedExpenses || []).forEach((exp) => {
+          if (exp.status === 'inactive') return;
           const amt = safeNum(exp.amount);
           const cyc = Math.max(1, safeNum(exp.cycleMonths, 1));
           fixedExpenseAnnualTWD += amt * rateOf(exp.currency || 'TWD') * (12 / cyc);
@@ -2642,10 +2644,14 @@
           const twdPer = amt * rateOf(cur);
           const twdAnnual = twdPer * (12 / cyc);
           const twdMonthly = twdAnnual / 12;
+          const isInactive = inc.status === 'inactive';
           return `
-            <tr class="hover:bg-[#f7f7f5] transition-colors duration-150">
+            <tr class="hover:bg-[#f7f7f5] transition-colors duration-150 ${isInactive ? 'opacity-60' : ''}">
               <td class="py-3 px-2 font-sans">
-                <div class="font-medium text-zinc-900">${escapeHtml(inc.name)}</div>
+                <div class="flex items-center gap-1.5">
+                  <span class="font-medium text-zinc-900">${escapeHtml(inc.name)}</span>
+                  <span class="text-[11px] px-1.5 py-0.5 rounded ${isInactive ? 'bg-zinc-100 text-zinc-500' : 'bg-emerald-50 text-emerald-700'}">${isInactive ? '已停用' : '啟用中'}</span>
+                </div>
                 <div class="text-[11px] text-zinc-500">${escapeHtml(inc.category || '固定收入')}</div>
               </td>
               <td class="py-3 px-2 font-sans">
@@ -2653,8 +2659,8 @@
                 <div class="text-[11px] text-zinc-400">${inc.payday ? '入帳日 ' + escapeHtml(inc.payday) : ''}</div>
               </td>
               <td class="py-3 px-2 text-right text-zinc-700">${cur} ${amt.toLocaleString('zh-TW', { maximumFractionDigits: 2 })}</td>
-              <td class="py-3 px-2 text-right font-medium text-zinc-900">${fmtTWD(twdMonthly)}</td>
-              <td class="py-3 px-2 text-right font-medium text-emerald-700">${fmtTWD(twdAnnual)}</td>
+              <td class="py-3 px-2 text-right font-medium text-zinc-900">${isInactive ? '—' : fmtTWD(twdMonthly)}</td>
+              <td class="py-3 px-2 text-right font-medium text-emerald-700">${isInactive ? '—' : fmtTWD(twdAnnual)}</td>
               <td class="py-3 px-2 font-sans">
                 <div class="text-zinc-700 text-xs">${escapeHtml(inc.account || '')}</div>
                 <div class="text-[11px] text-zinc-400">${escapeHtml(inc.note || '')}</div>
@@ -2773,12 +2779,13 @@
             const twdPer = amt * rateOf(cur);
             const twdAnnual = twdPer * (12 / cyc);
             const twdMonthly = twdAnnual / 12;
+            const isInactive = e.status === 'inactive';
             return `
-              <tr class="hover:bg-[#f7f7f5] transition-colors duration-150">
+              <tr class="hover:bg-[#f7f7f5] transition-colors duration-150 ${isInactive ? 'opacity-60' : ''}">
                 <td class="py-3 px-2 font-sans">
                   <div class="flex items-center gap-1.5">
                     <span class="font-medium text-zinc-900">${escapeHtml(e.name)}</span>
-                    <span class="text-[11px] px-1.5 py-0.5 rounded ${(e.deductStatus === 'paid') ? 'bg-zinc-100 text-zinc-500' : 'bg-amber-50 text-amber-700'}">${(e.deductStatus === 'paid') ? '已扣款' : '未扣款'}</span>
+                    <span class="text-[11px] px-1.5 py-0.5 rounded ${isInactive ? 'bg-zinc-100 text-zinc-500' : 'bg-emerald-50 text-emerald-700'}">${isInactive ? '已停用' : '啟用中'}</span>
                   </div>
                   <div class="text-[11px] text-zinc-500">${escapeHtml(e.category || '固定支出')}</div>
                 </td>
@@ -2787,14 +2794,14 @@
                   <div class="text-[11px] text-zinc-400">${e.payday ? '扣款日 ' + escapeHtml(e.payday) : ''}</div>
                 </td>
                 <td class="py-3 px-2 text-right text-zinc-700">${cur} ${amt.toLocaleString('zh-TW', { maximumFractionDigits: 2 })}</td>
-                <td class="py-3 px-2 text-right font-medium text-rose-700">${fmtTWD(twdMonthly)}</td>
-                <td class="py-3 px-2 text-right text-zinc-600">${fmtTWD(twdAnnual)}</td>
+                <td class="py-3 px-2 text-right font-medium text-rose-700">${isInactive ? '—' : fmtTWD(twdMonthly)}</td>
+                <td class="py-3 px-2 text-right text-zinc-600">${isInactive ? '—' : fmtTWD(twdAnnual)}</td>
                 <td class="py-3 px-2 font-sans">
                   <div class="text-zinc-700 text-xs">${escapeHtml(e.account || '')}</div>
                   <div class="text-[11px] text-zinc-400">${escapeHtml(e.note || '')}</div>
                 </td>
                 <td class="py-3 px-2 text-right whitespace-nowrap font-sans">
-                  <button type="button" data-action="record-fixed-exp" data-id="${escapeHtml(e.id)}" data-default-amt="${Math.round(twdPer)}" class="text-amber-700 hover:text-amber-900 text-xs font-medium mr-2.5">${(e.deductStatus === 'paid') ? '再記一期' : '執行扣款'}</button>
+                  <button type="button" data-action="record-fixed-exp" data-id="${escapeHtml(e.id)}" data-default-amt="${Math.round(twdPer)}" class="text-amber-700 hover:text-amber-900 text-xs font-medium mr-2.5">登記扣款</button>
                   <button type="button" data-action="edit-fixed-exp" data-id="${escapeHtml(e.id)}" class="text-zinc-600 hover:text-zinc-900 text-xs font-medium mr-2.5">編輯</button>
                   <button type="button" data-action="del-fixed-exp" data-id="${escapeHtml(e.id)}" class="text-zinc-400 hover:text-rose-700 text-xs font-medium">刪除</button>
                 </td>
@@ -4788,8 +4795,10 @@
 
       function openFixedIncomeModal(item = null) {
         const isEdit = Boolean(item);
-        const inc = item || { name: '', category: '薪資收入', currency: 'TWD', amount: 0, cycleMonths: 1, payday: '每月 5 號', account: '現金（TWD）', note: '' };
+        const inc = item || { name: '', category: '薪資收入', currency: 'TWD', amount: 0, cycleMonths: 1, payday: '每月 5 號', account: '現金（TWD）', status: 'active', note: '' };
+        const initStatus = inc.status === 'inactive' ? 'inactive' : 'active';
         const html = `
+          <p class="text-[11px] text-zinc-500 bg-[#f7f7f5] hairline rounded-lg px-3 py-2">此處僅建立固定收入名目與月均／年化預估（不會立即入帳）；實際領薪請點「登記入帳」，補登過去月份請點「批次補登多筆歷史」。</p>
           <div class="grid grid-cols-2 gap-3">
             <div><label class="block text-xs font-medium text-zinc-600 mb-1">收入名稱</label><input name="name" required value="${escapeHtml(inc.name)}" class="w-full h-9 px-3 rounded-lg hairline text-sm" /></div>
             <div><label class="block text-xs font-medium text-zinc-600 mb-1">類別</label><select name="category" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white"><option value="薪資收入" ${inc.category === '薪資收入' ? 'selected' : ''}>薪資收入</option><option value="租金收入" ${inc.category === '租金收入' ? 'selected' : ''}>租金收入</option><option value="定存與債息" ${inc.category === '定存與債息' ? 'selected' : ''}>定存與債息</option><option value="副業與顧問" ${inc.category === '副業與顧問' ? 'selected' : ''}>副業與顧問</option><option value="其他固定收入" ${inc.category === '其他固定收入' ? 'selected' : ''}>其他固定收入</option></select></div>
@@ -4807,6 +4816,13 @@
               <input name="accountCustom" placeholder="輸入自訂帳戶名稱" class="hidden mt-2 w-full h-9 px-3 rounded-lg hairline text-sm" />
             </div>
           </div>
+          <div>
+            <label class="block text-xs font-medium text-zinc-600 mb-1">項目狀態</label>
+            <select name="status" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white">
+              <option value="active" ${initStatus === 'active' ? 'selected' : ''}>啟用中（計入月均與年化固定收入預估）</option>
+              <option value="inactive" ${initStatus === 'inactive' ? 'selected' : ''}>已停用／結束（保留名目，不計入未來收入預估）</option>
+            </select>
+          </div>
           <div><label class="block text-xs font-medium text-zinc-600 mb-1">備註</label><input name="note" value="${escapeHtml(inc.note)}" placeholder="每月實際入帳時可調整實領金額" class="w-full h-9 px-3 rounded-lg hairline text-sm" /></div>
         `;
         openFormModal(isEdit ? '編輯固定收入來源' : '新增固定收入來源', html, (fd) => {
@@ -4818,7 +4834,8 @@
             amount: safeNum(fd.get('amount')),
             cycleMonths: Math.max(1, safeNum(fd.get('cycleMonths'), 1)),
             payday: String(fd.get('payday')).trim(),
-            account: String(fd.get('accountSelect') || '').trim(),
+            account: resolveModalAccount(fd),
+            status: String(fd.get('status') || 'active'),
             note: String(fd.get('note')).trim()
           };
           if (!Array.isArray(state.fixedIncomes)) state.fixedIncomes = [];
@@ -4990,30 +5007,32 @@
 
       function openFixedExpenseModal(item = null) {
         const isEdit = Boolean(item);
-        const e = item || { name: '', category: '居住與房貸', currency: 'TWD', amount: 0, cycleMonths: 1, payday: '每月 1 號', account: '', deductStatus: 'unpaid', note: '' };
+        const e = item || { name: '', category: '居住與房貸', currency: 'TWD', amount: 0, cycleMonths: 1, payday: '每月 1 號', account: '', status: 'active', note: '' };
+        const initStatus = e.status === 'inactive' ? 'inactive' : 'active';
         const html = `
+          <p class="text-[11px] text-zinc-500 bg-[#f7f7f5] hairline rounded-lg px-3 py-2">此處僅建立固定支出名目與月均／年化預估（不會立即扣款）；實際扣款請點「登記扣款」，補登過去月份請點「批次補登多筆歷史」。</p>
           <div class="grid grid-cols-2 gap-3">
             <div><label class="block text-xs font-medium text-zinc-600 mb-1">固定支出名稱</label><input name="name" required value="${escapeHtml(e.name)}" class="w-full h-9 px-3 rounded-lg hairline text-sm" /></div>
             <div><label class="block text-xs font-medium text-zinc-600 mb-1">類別</label><select name="category" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white">${buildExpenseCategoryOptionsHtml(e.category)}</select></div>
           </div>
           <div class="grid grid-cols-3 gap-3">
             <div><label class="block text-xs font-medium text-zinc-600 mb-1">幣別（連動帳戶）</label><select name="currency" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white">${buildCurrencyOptionsHtml(e.currency, true)}</select></div>
-            <div><label class="block text-xs font-medium text-zinc-600 mb-1">單期金額</label><input name="amount" type="number" step="0.01" min="0" required value="${safeNum(e.amount)}" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" /></div>
+            <div><label class="block text-xs font-medium text-zinc-600 mb-1">單期預估金額</label><input name="amount" type="number" step="0.01" min="0" required value="${safeNum(e.amount)}" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" /></div>
             <div><label class="block text-xs font-medium text-zinc-600 mb-1">扣款週期</label><select name="cycleMonths" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white"><option value="1" ${safeNum(e.cycleMonths, 1) === 1 ? 'selected' : ''}>每月</option><option value="2" ${safeNum(e.cycleMonths) === 2 ? 'selected' : ''}>每2個月</option><option value="3" ${safeNum(e.cycleMonths) === 3 ? 'selected' : ''}>每季</option><option value="6" ${safeNum(e.cycleMonths) === 6 ? 'selected' : ''}>每半年</option><option value="12" ${safeNum(e.cycleMonths) === 12 ? 'selected' : ''}>每年</option></select></div>
           </div>
           <div class="grid grid-cols-2 gap-3">
             <div><label class="block text-xs font-medium text-zinc-600 mb-1">扣款日</label><input name="payday" value="${escapeHtml(e.payday)}" class="w-full h-9 px-3 rounded-lg hairline text-sm" /></div>
             <div>
-              <label class="block text-xs font-medium text-zinc-600 mb-1">扣款銀行卡／帳戶（依幣別自動篩選）</label>
+              <label class="block text-xs font-medium text-zinc-600 mb-1">預設扣款銀行卡／帳戶</label>
               <select name="accountSelect" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white">${buildAccountOptionsHtml(e.currency, e.account)}</select>
               <input name="accountCustom" placeholder="輸入自訂帳戶名稱" class="hidden mt-2 w-full h-9 px-3 rounded-lg hairline text-sm" />
             </div>
           </div>
           <div>
-            <label class="block text-xs font-medium text-zinc-600 mb-1">扣款狀態（補登歷史支出請選已扣款）</label>
-            <select name="deductStatus" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white">
-              <option value="unpaid" ${(e.deductStatus || 'unpaid') === 'unpaid' ? 'selected' : ''}>未扣款（待扣款，之後可一鍵扣銀行餘額）</option>
-              <option value="paid" ${e.deductStatus === 'paid' ? 'selected' : ''}>已扣款（歷史紀錄，不重複扣除現有餘額）</option>
+            <label class="block text-xs font-medium text-zinc-600 mb-1">項目狀態</label>
+            <select name="status" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white">
+              <option value="active" ${initStatus === 'active' ? 'selected' : ''}>啟用中（計入月均與年化固定支出預估）</option>
+              <option value="inactive" ${initStatus === 'inactive' ? 'selected' : ''}>已停用／結束（保留名目，不計入未來支出預估）</option>
             </select>
           </div>
           <div><label class="block text-xs font-medium text-zinc-600 mb-1">備註</label><input name="note" value="${escapeHtml(e.note)}" class="w-full h-9 px-3 rounded-lg hairline text-sm" /></div>
@@ -5028,7 +5047,7 @@
             cycleMonths: Math.max(1, safeNum(fd.get('cycleMonths'), 1)),
             payday: String(fd.get('payday')).trim(),
             account: resolveModalAccount(fd),
-            deductStatus: String(fd.get('deductStatus') || 'unpaid'),
+            status: String(fd.get('status') || 'active'),
             note: String(fd.get('note')).trim()
           };
           if (!Array.isArray(state.fixedExpenses)) state.fixedExpenses = [];
@@ -5699,8 +5718,8 @@
         const iRows = state.investments.map((i) => ({ id: i.id, name: i.name, status: getInvestmentStatus(i), investKind: getInvestmentKind(i), principal: i.principal, cycleMonths: i.cycleMonths, minRate: i.minRate, maxRate: i.maxRate, sourceInvestmentId: i.sourceInvestmentId || '', tags: normalizeInvTags(i.tags).join(', '), note: i.note || '' }));
         XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(iRows.length ? iRows : [{ id: '', name: '', status: 'active', investKind: 'recurring', principal: 0, cycleMonths: 12, minRate: 0, maxRate: 0, sourceInvestmentId: '', tags: '', note: '' }]), '實體投資');
 
-        const incRows = (state.fixedIncomes || []).map((f) => ({ id: f.id, name: f.name, category: f.category, currency: f.currency, amount: f.amount, cycleMonths: f.cycleMonths, payday: f.payday || '', account: f.account || '', note: f.note || '' }));
-        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(incRows.length ? incRows : [{ id: '', name: '', category: '薪資收入', currency: 'TWD', amount: 0, cycleMonths: 1, payday: '', account: '', note: '' }]), '固定收入');
+        const incRows = (state.fixedIncomes || []).map((f) => ({ id: f.id, name: f.name, category: f.category, currency: f.currency, amount: f.amount, cycleMonths: f.cycleMonths, payday: f.payday || '', account: f.account || '', status: f.status || 'active', note: f.note || '' }));
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(incRows.length ? incRows : [{ id: '', name: '', category: '薪資收入', currency: 'TWD', amount: 0, cycleMonths: 1, payday: '', account: '', status: 'active', note: '' }]), '固定收入');
 
         const irecRows = (state.incomeReceipts || []).map((r) => ({ id: r.id, date: r.date, name: r.name, category: r.category || '', currency: r.currency || 'TWD', expectedAmount: r.expectedAmount, actualAmount: r.actualAmount, account: r.account || '', depositMode: r.depositMode || 'new_deposit', note: r.note || '' }));
         XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(irecRows.length ? irecRows : [{ id: '', date: '', name: '', category: '', currency: 'TWD', expectedAmount: 0, actualAmount: 0, account: '', depositMode: 'new_deposit', note: '' }]), '實際入帳紀錄');
@@ -5708,8 +5727,8 @@
         const ilogRows = (state.investmentLogs || []).map((l) => ({ id: l.id, investmentId: l.investmentId || '', investmentName: l.investmentName || '', date: l.date, eventType: l.eventType || 'payout', stageLabel: l.stageLabel || '', fundingSource: l.fundingSource || '', sourceInvestmentId: l.sourceInvestmentId || '', amountTWD: l.amountTWD, account: l.account || '', applyMode: l.applyMode || 'history_only', note: l.note || '' }));
         XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(ilogRows.length ? ilogRows : [{ id: '', investmentId: '', investmentName: '', date: '', eventType: 'invest', stageLabel: '', fundingSource: '', sourceInvestmentId: '', amountTWD: 0, account: '', applyMode: 'history_only', note: '' }]), '實體投資異動紀錄');
 
-        const fExpRows = (state.fixedExpenses || []).map((f) => ({ id: f.id, name: f.name, category: f.category, currency: f.currency, amount: f.amount, cycleMonths: f.cycleMonths, payday: f.payday || '', account: f.account || '', note: f.note || '' }));
-        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(fExpRows.length ? fExpRows : [{ id: '', name: '', category: '居住與房貸', currency: 'TWD', amount: 0, cycleMonths: 1, payday: '', account: '', note: '' }]), '固定支出');
+        const fExpRows = (state.fixedExpenses || []).map((f) => ({ id: f.id, name: f.name, category: f.category, currency: f.currency, amount: f.amount, cycleMonths: f.cycleMonths, payday: f.payday || '', account: f.account || '', status: f.status || 'active', note: f.note || '' }));
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(fExpRows.length ? fExpRows : [{ id: '', name: '', category: '居住與房貸', currency: 'TWD', amount: 0, cycleMonths: 1, payday: '', account: '', status: 'active', note: '' }]), '固定支出');
 
         const rExpRows = (state.randomExpenses || []).map((r) => ({ id: r.id, date: r.date, category: r.category, title: r.title, currency: r.currency, amount: r.amount, account: r.account || '', deductStatus: r.deductStatus || 'unpaid', note: r.note || '' }));
         XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rExpRows.length ? rExpRows : [{ id: '', date: '', category: '餐飲美食', title: '', currency: 'TWD', amount: 0, account: '', note: '' }]), '隨機支出');
@@ -5767,10 +5786,10 @@
             if (stTradeSheet) state.stockTrades = stTradeSheet.filter((r) => r.symbol).map((r) => ({ id: r.id || uid('strd'), date: String(r.date || todayISO()), tradeType: String(r.tradeType || 'BUY'), market: String(r.market || 'TW'), symbol: String(r.symbol).toUpperCase(), name: String(r.name || ''), currency: String(r.currency || 'TWD'), shares: safeNum(r.shares), price: safeNum(r.price), fee: safeNum(r.fee), tax: safeNum(r.tax), netAmount: safeNum(r.netAmount), realizedPnlTWD: safeNum(r.realizedPnlTWD), account: String(r.account || ''), applyMode: String(r.applyMode || 'history_only'), note: String(r.note || '') }));
             if (cashSheet) state.cash = cashSheet.filter((r) => r.bank).map((r) => ({ id: r.id || uid('c'), bank: String(r.bank), currency: String(r.currency || 'TWD'), amount: safeNum(r.amount), note: String(r.note || '') }));
             if (invSheet) state.investments = invSheet.filter((r) => r.name).map((r) => ({ id: r.id || uid('i'), name: String(r.name), status: ['active', 'paused', 'closed'].includes(String(r.status)) ? String(r.status) : getInvestmentStatus({ tags: normalizeInvTags(r.tags ?? r['標籤']) }), investKind: String(r.investKind) === 'one_time' ? 'one_time' : 'recurring', principal: safeNum(r.principal), cycleMonths: Math.max(1, safeNum(r.cycleMonths, 12)), minRate: safeNum(r.minRate), maxRate: safeNum(r.maxRate), principalRecoverable: false, ...(r.sourceInvestmentId ? { sourceInvestmentId: String(r.sourceInvestmentId) } : {}), tags: normalizeInvTags(r.tags ?? r['標籤']), note: String(r.note || '') }));
-            if (incSheet) state.fixedIncomes = incSheet.filter((r) => r.name || r['收入名稱']).map((r) => ({ id: r.id || uid('inc'), name: String(r.name || r['收入名稱']), category: String(r.category || r['類別'] || '固定收入'), currency: String(r.currency || r['幣別'] || 'TWD'), amount: safeNum(r.amount ?? r['單期金額']), cycleMonths: Math.max(1, safeNum(r.cycleMonths ?? r['發放週期(月)'], 1)), payday: String(r.payday || r['每月發放日'] || ''), account: String(r.account || r['入帳帳戶'] || ''), note: String(r.note || r['備註'] || '') }));
+            if (incSheet) state.fixedIncomes = incSheet.filter((r) => r.name || r['收入名稱']).map((r) => ({ id: r.id || uid('inc'), name: String(r.name || r['收入名稱']), category: String(r.category || r['類別'] || '固定收入'), currency: String(r.currency || r['幣別'] || 'TWD'), amount: safeNum(r.amount ?? r['單期金額']), cycleMonths: Math.max(1, safeNum(r.cycleMonths ?? r['發放週期(月)'], 1)), payday: String(r.payday || r['每月發放日'] || ''), account: String(r.account || r['入帳帳戶'] || ''), status: String(r.status || 'active') === 'inactive' ? 'inactive' : 'active', note: String(r.note || r['備註'] || '') }));
             if (irecSheet) state.incomeReceipts = irecSheet.filter((r) => r.name && safeNum(r.actualAmount) > 0).map((r) => ({ id: r.id || uid('irec'), date: String(r.date || todayISO()), name: String(r.name), category: String(r.category || '固定收入'), currency: String(r.currency || 'TWD'), expectedAmount: safeNum(r.expectedAmount, safeNum(r.actualAmount)), actualAmount: safeNum(r.actualAmount), account: String(r.account || ''), depositMode: String(r.depositMode || 'new_deposit'), note: String(r.note || '') }));
             if (ilogSheet) state.investmentLogs = ilogSheet.filter((r) => r.investmentName && safeNum(r.amountTWD) > 0).map((r) => ({ id: r.id || uid('ilog'), investmentId: String(r.investmentId || ''), investmentName: String(r.investmentName), date: String(r.date || todayISO()), eventType: String(r.eventType || 'payout'), stageLabel: String(r.stageLabel || ''), ...(r.fundingSource ? { fundingSource: String(r.fundingSource) } : {}), ...(r.sourceInvestmentId ? { sourceInvestmentId: String(r.sourceInvestmentId) } : {}), amountTWD: safeNum(r.amountTWD), account: String(r.account || ''), applyMode: String(r.applyMode || 'history_only'), note: String(r.note || '') }));
-            if (fExpSheet) state.fixedExpenses = fExpSheet.filter((r) => r.name || r['項目名稱']).map((r) => ({ id: r.id || uid('fexp'), name: String(r.name || r['項目名稱']), category: String(r.category || r['類別'] || '固定支出'), currency: String(r.currency || r['幣別'] || 'TWD'), amount: safeNum(r.amount ?? r['單期金額']), cycleMonths: Math.max(1, safeNum(r.cycleMonths ?? r['扣款週期(月)'], 1)), payday: String(r.payday || r['扣款日'] || ''), account: String(r.account || r['扣款帳戶'] || ''), deductStatus: String(r.deductStatus || r['扣款狀態'] || 'unpaid'), note: String(r.note || r['備註'] || '') }));
+            if (fExpSheet) state.fixedExpenses = fExpSheet.filter((r) => r.name || r['項目名稱']).map((r) => ({ id: r.id || uid('fexp'), name: String(r.name || r['項目名稱']), category: String(r.category || r['類別'] || '固定支出'), currency: String(r.currency || r['幣別'] || 'TWD'), amount: safeNum(r.amount ?? r['單期金額']), cycleMonths: Math.max(1, safeNum(r.cycleMonths ?? r['扣款週期(月)'], 1)), payday: String(r.payday || r['扣款日'] || ''), account: String(r.account || r['扣款帳戶'] || ''), status: String(r.status || 'active') === 'inactive' ? 'inactive' : 'active', note: String(r.note || r['備註'] || '') }));
             if (rExpSheet) state.randomExpenses = rExpSheet.filter((r) => r.title || r['支出項目']).map((r) => ({ id: r.id || uid('rexp'), date: String(r.date || r['日期'] || todayISO()), category: String(r.category || r['類別'] || '其他隨機支出'), title: String(r.title || r['支出項目']), currency: String(r.currency || r['幣別'] || 'TWD'), amount: safeNum(r.amount ?? r['原幣金額']), account: String(r.account || r['支付帳戶'] || ''), deductStatus: String(r.deductStatus || r['扣款狀態'] || 'unpaid'), note: String(r.note || r['備註'] || '') }));
             if (fxTradeSheet) state.fxTrades = fxTradeSheet.filter((r) => r.date && safeNum(r.amount) > 0).map((r) => ({ id: r.id || uid('fx'), date: String(r.date), side: String(r.side || 'BUY').toUpperCase(), currency: String(r.currency || 'USD'), amount: safeNum(r.amount), rate: safeNum(r.rate), feeTWD: safeNum(r.feeTWD), account: String(r.account || ''), note: String(r.note || '') }));
             if (snapSheet) state.snapshots = snapSheet.filter((r) => r.date).map((r) => { const c = safeNum(r.cashTWD), s = safeNum(r.stocksTWD), i = safeNum(r.investmentsTWD); return { id: r.id || uid('snap'), date: String(r.date), cashTWD: c, stocksTWD: s, investmentsTWD: i, totalTWD: safeNum(r.totalTWD, c + s + i), note: String(r.note || '') }; });
