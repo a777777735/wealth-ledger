@@ -1,0 +1,24 @@
+{
+  "appId": "com.wealthledger.app",
+  "appName": "個人資產總帳",
+  "webDir": "public",
+  "bundledWebRuntime": false,
+  "server": {
+    "androidScheme": "https",
+    "iosScheme": "capacitor",
+    "allowNavigation": [
+      "*.workers.dev",
+      "*.firebaseapp.com",
+      "*.googleapis.com",
+      "accounts.google.com"
+    ]
+  },
+  "ios": {
+    "contentInset": "automatic",
+    "backgroundColor": "#f7f7f5"
+  },
+  "android": {
+    "backgroundColor": "#f7f7f5",
+    "allowMixedContent": false
+  }
+}

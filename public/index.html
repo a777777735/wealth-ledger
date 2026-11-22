@@ -3,11 +3,13 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <meta name="theme-color" content="#f7f7f5" />
+  <meta name="theme-color" content="#18181b" />
   <link rel="manifest" href="/manifest.json" />
+  <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png" />
+  <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-  <meta name="apple-mobile-web-app-title" content="個人資產總帳" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="資產總帳" />
   <title>個人資產總帳</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -73,6 +75,24 @@
     .btn-focus:focus-visible {
       outline: none;
       box-shadow: 0 0 0 2px rgba(24, 24, 27, 0.18);
+    }
+    @media (max-width: 1023px) {
+      main {
+        padding-bottom: calc(5.5rem + env(safe-area-inset-bottom, 0px)) !important;
+      }
+      aside {
+        padding-top: env(safe-area-inset-top, 0px);
+      }
+    }
+    .mobile-nav-bar {
+      padding-bottom: max(0.45rem, env(safe-area-inset-bottom, 0px));
+    }
+    .mobile-tab-btn {
+      color: #71717a;
+    }
+    .mobile-tab-btn.active {
+      color: #18181b;
+      font-weight: 600;
     }
   </style>
 </head>
@@ -1502,6 +1522,50 @@
     </div>
   </div>
 
+  <!-- Mobile App Bottom Tab Bar (lg:hidden) -->
+  <nav id="mobile-bottom-nav" class="lg:hidden fixed bottom-0 inset-x-0 z-40 bg-white/95 backdrop-blur-md hairline-t mobile-nav-bar">
+    <div class="grid grid-cols-5 items-end max-w-lg mx-auto px-1 pt-1.5">
+      <button type="button" data-tab="overview" class="mobile-tab-btn flex flex-col items-center justify-center gap-0.5 py-1 text-[10px]">
+        <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+        <span>總覽</span>
+      </button>
+      <button type="button" data-tab="expenses" class="mobile-tab-btn flex flex-col items-center justify-center gap-0.5 py-1 text-[10px]">
+        <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z"/><path d="M8 7h8"/><path d="M8 11h8"/></svg>
+        <span>支出</span>
+      </button>
+      <div class="flex justify-center -mt-4">
+        <button id="btn-mobile-quick-add" type="button" aria-label="快速記一筆" class="w-12 h-12 rounded-full bg-zinc-900 hover:bg-zinc-800 active:scale-95 text-white shadow-md flex items-center justify-center transition-transform">
+          <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </button>
+      </div>
+      <button type="button" data-tab="reports" class="mobile-tab-btn flex flex-col items-center justify-center gap-0.5 py-1 text-[10px]">
+        <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/></svg>
+        <span>報表</span>
+      </button>
+      <button type="button" data-tab="migrate" class="mobile-tab-btn flex flex-col items-center justify-center gap-0.5 py-1 text-[10px]">
+        <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.8L20 11l-6.1 2.2L12 19l-1.9-5.8L4 11l6.1-2.2L12 3z"/></svg>
+        <span>AI 搬家</span>
+      </button>
+    </div>
+  </nav>
+
+  <!-- Mobile Quick Add Action Sheet -->
+  <div id="mobile-quick-sheet" class="fixed inset-0 z-50 hidden items-end justify-center modal-backdrop">
+    <div class="bg-white w-full max-w-lg rounded-t-2xl p-5 space-y-3 shadow-xl" style="padding-bottom: max(1.25rem, env(safe-area-inset-bottom, 0px));">
+      <div class="flex items-center justify-between">
+        <span class="text-sm font-semibold text-zinc-900">快速記一筆</span>
+        <button id="btn-mobile-sheet-close" type="button" class="text-zinc-400 hover:text-zinc-700 text-lg leading-none">&times;</button>
+      </div>
+      <div class="grid grid-cols-2 gap-2.5 text-xs">
+        <button type="button" data-quick-sheet="expense" class="p-3.5 rounded-xl bg-[#f7f7f5] hover:bg-zinc-200/70 hairline text-left font-medium text-zinc-900">＋ 記一筆隨機支出</button>
+        <button type="button" data-quick-sheet="income" class="p-3.5 rounded-xl bg-[#f7f7f5] hover:bg-zinc-200/70 hairline text-left font-medium text-zinc-900">＋ 登記收入／獎金</button>
+        <button type="button" data-quick-sheet="transfer" class="p-3.5 rounded-xl bg-[#f7f7f5] hover:bg-zinc-200/70 hairline text-left font-medium text-zinc-900">⇄ 銀行帳戶轉帳</button>
+        <button type="button" data-quick-sheet="ai" class="p-3.5 rounded-xl bg-zinc-900 text-white text-left font-medium">✦ AI 截圖／一句話記帳</button>
+        <button type="button" data-quick-sheet="install" class="col-span-2 p-3 rounded-xl bg-white hover:bg-zinc-50 hairline text-center font-medium text-zinc-700">📲 安裝成手機 App（Android / iOS）</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Generic Form Modal -->
   <div id="form-modal" class="fixed inset-0 z-50 hidden items-center justify-center p-4 modal-backdrop">
     <div class="bg-white rounded-xl max-w-lg w-full shadow-lg hairline overflow-hidden max-h-[90vh] flex flex-col">
@@ -1576,6 +1640,16 @@
         const m = String(d.getMonth() + 1).padStart(2, '0');
         const day = String(d.getDate()).padStart(2, '0');
         return `${y}-${m}-${day}`;
+      }
+
+      const DEFAULT_API_ORIGIN = 'https://wealth-ledger.a777777735.workers.dev';
+      function apiUrl(path) {
+        const isNative = Boolean(window.Capacitor && typeof window.Capacitor.isNativePlatform === 'function' && window.Capacitor.isNativePlatform())
+          || window.location.protocol === 'capacitor:'
+          || window.location.protocol === 'file:';
+        if (!isNative) return path;
+        const base = ((typeof appConfig !== 'undefined' && appConfig && appConfig.workerOrigin) || DEFAULT_API_ORIGIN).replace(/\/+$/, '');
+        return `${base}${path}`;
       }
 
       function computeTotals(data) {
@@ -2196,9 +2270,9 @@
 
         const activeForeign = getForeignCurrencies();
         // 1. Prefer built-in Worker /api/fx (real-time Yahoo FX + er-api fallback, supports any ISO currency)
-        if (window.location && (window.location.protocol === 'https:' || window.location.protocol === 'http:')) {
+        if (window.location && (window.location.protocol === 'https:' || window.location.protocol === 'http:' || window.location.protocol === 'capacitor:')) {
           try {
-            const fxApiRes = await fetch(`/api/fx?currencies=${encodeURIComponent(activeForeign.join(','))}`);
+            const fxApiRes = await fetch(apiUrl(`/api/fx?currencies=${encodeURIComponent(activeForeign.join(','))}`));
             if (fxApiRes.ok) {
               const fxJson = await fxApiRes.json();
               if (fxJson && fxJson.rates) {
@@ -2242,10 +2316,10 @@
         }
 
         // Built-in Cloudflare Pages _worker.js backend (/api/quotes) — zero-config for all users
-        if (window.location && (window.location.protocol === 'https:' || window.location.protocol === 'http:') && state.stocks.length > 0) {
+        if (window.location && (window.location.protocol === 'https:' || window.location.protocol === 'http:' || window.location.protocol === 'capacitor:') && state.stocks.length > 0) {
           try {
             const uniqueKeys = [...new Set(state.stocks.map((st) => `${st.market}:${String(st.symbol).trim().toUpperCase()}`))];
-            const apiRes = await fetch(`/api/quotes?items=${encodeURIComponent(uniqueKeys.join(','))}`);
+            const apiRes = await fetch(apiUrl(`/api/quotes?items=${encodeURIComponent(uniqueKeys.join(','))}`));
             if (apiRes.ok) {
               const apiJson = await apiRes.json();
               if (apiJson && apiJson.prices) {
@@ -2375,6 +2449,9 @@
         if (target) target.classList.remove('hidden');
 
         document.querySelectorAll('.tab-btn').forEach((btn) => {
+          btn.classList.toggle('active', btn.dataset.tab === tabName);
+        });
+        document.querySelectorAll('.mobile-tab-btn').forEach((btn) => {
           btn.classList.toggle('active', btn.dataset.tab === tabName);
         });
 
@@ -8173,7 +8250,7 @@
         }
       }
 
-      fetch('/api/ai/status').then((r) => r.json()).then((d) => {
+      fetch(apiUrl('/api/ai/status')).then((r) => r.json()).then((d) => {
         if (d && d.ok && d.hasServerKey) {
           aiServerKeyStatus = d.hasServerKey;
           syncAiConfigUI();
@@ -8487,7 +8564,7 @@
 
       async function callAiEndpoint({ systemPrompt, prompt, attachments = [], expectJson = true }) {
         const provider = appConfig.aiProvider || 'gemini';
-        const res = await fetch('/api/ai', {
+        const res = await fetch(apiUrl('/api/ai'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -9289,14 +9366,95 @@
       const btnMigCommit = document.getElementById('btn-migrate-commit');
       if (btnMigCommit) btnMigCommit.addEventListener('click', commitMigrateImport);
 
+      // --- Mobile Bottom Nav, Quick Add Sheet & PWA Install ---
+      let deferredInstallPrompt = null;
+      window.addEventListener('beforeinstallprompt', (e) => {
+        e.preventDefault();
+        deferredInstallPrompt = e;
+      });
+
+      function openInstallAppGuide() {
+        if (deferredInstallPrompt) {
+          deferredInstallPrompt.prompt();
+          deferredInstallPrompt.userChoice.then((choice) => {
+            if (choice && choice.outcome === 'accepted') showToast('正在安裝「資產總帳」到手機桌面！');
+            deferredInstallPrompt = null;
+          });
+          return;
+        }
+        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+        const html = `
+          <div class="space-y-3 text-xs text-zinc-700 leading-relaxed">
+            <div class="p-3 rounded-lg bg-[#f7f7f5] hairline space-y-1.5">
+              <div class="font-semibold text-zinc-900">iOS (iPhone / iPad · Safari)</div>
+              <ol class="list-decimal list-inside space-y-1">
+                <li>使用 <strong>Safari</strong> 開啟本網站</li>
+                <li>點擊下方工具列中間的「<strong>分享</strong>」圖示（方框向上箭頭）</li>
+                <li>往下滑點選「<strong>加入主畫面</strong>」→ 按「新增」即可成為全螢幕 App</li>
+              </ol>
+            </div>
+            <div class="p-3 rounded-lg bg-[#f7f7f5] hairline space-y-1.5">
+              <div class="font-semibold text-zinc-900">Android (Chrome / Edge 或 APK)</div>
+              <ol class="list-decimal list-inside space-y-1">
+                <li>點擊瀏覽器右上角選單「<strong>⋮</strong>」→「<strong>安裝應用程式</strong>」或「加到主畫面」</li>
+                <li>亦可由 GitHub Actions 下載原生 <strong>Android APK</strong> 安裝檔直接安裝</li>
+              </ol>
+            </div>
+            ${isIOS ? '<p class="text-[11px] text-emerald-700 font-medium">偵測到你目前使用 iOS 裝置，請依上方 Safari 步驟加入主畫面！</p>' : ''}
+          </div>
+        `;
+        openFormModal('安裝成手機 App（Android / iOS）', html, () => {});
+        const submitBtn = document.querySelector('#modal-form button[type="submit"]');
+        if (submitBtn) submitBtn.textContent = '我知道了';
+      }
+
+      document.querySelectorAll('.mobile-tab-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const tab = btn.dataset.tab;
+          if (tab) switchTab(tab);
+        });
+      });
+
+      const quickSheet = document.getElementById('mobile-quick-sheet');
+      const openQuickSheet = () => { if (quickSheet) { quickSheet.classList.remove('hidden'); quickSheet.classList.add('flex'); } };
+      const closeQuickSheet = () => { if (quickSheet) { quickSheet.classList.add('hidden'); quickSheet.classList.remove('flex'); } };
+      const btnQuickAdd = document.getElementById('btn-mobile-quick-add');
+      if (btnQuickAdd) btnQuickAdd.addEventListener('click', openQuickSheet);
+      const btnSheetClose = document.getElementById('btn-mobile-sheet-close');
+      if (btnSheetClose) btnSheetClose.addEventListener('click', closeQuickSheet);
+      if (quickSheet) {
+        quickSheet.addEventListener('click', (e) => {
+          if (e.target === quickSheet) closeQuickSheet();
+        });
+      }
+      document.querySelectorAll('[data-quick-sheet]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const act = btn.dataset.quickSheet;
+          closeQuickSheet();
+          if (act === 'expense') { switchTab('expenses'); openRandomExpenseModal(null); }
+          else if (act === 'income') { switchTab('income'); openIncomeReceiptModal((state.fixedIncomes && state.fixedIncomes[0]) || null); }
+          else if (act === 'transfer') { switchTab('cash'); openCashTransferModal(); }
+          else if (act === 'ai') { switchTab('migrate'); }
+          else if (act === 'install') { openInstallAppGuide(); }
+        });
+      });
+
       initFirebaseFromConfig(true);
-      if ('serviceWorker' in navigator) {
+      if ('serviceWorker' in navigator && (window.location.protocol === 'https:' || window.location.protocol === 'http:')) {
         window.addEventListener('load', () => {
           navigator.serviceWorker.register('/sw.js').catch(() => {});
         });
       }
 
       renderAll();
+      // Handle PWA App Shortcuts (/?shortcut=expense|reports|migrate)
+      try {
+        const sc = new URLSearchParams(window.location.search).get('shortcut');
+        if (sc === 'expense') { switchTab('expenses'); setTimeout(() => openRandomExpenseModal(null), 150); }
+        else if (sc === 'reports') { switchTab('reports'); }
+        else if (sc === 'migrate') { switchTab('migrate'); }
+      } catch (e) {}
+
       scheduleAutoRefresh();
       if (appConfig.autoRefresh !== false) {
         setTimeout(() => refreshLivePricesAndFX(true), 400);

@@ -1,21 +1,37 @@
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization'
+};
+
+function withCors(response) {
+  const headers = new Headers(response.headers);
+  Object.entries(CORS_HEADERS).forEach(([k, v]) => headers.set(k, v));
+  return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
 
+    if (url.pathname.startsWith('/api/') && request.method === 'OPTIONS') {
+      return new Response(null, { status: 204, headers: CORS_HEADERS });
+    }
+
     if (url.pathname === '/api/quotes') {
-      return handleQuotes(url);
+      return withCors(await handleQuotes(url));
     }
 
     if (url.pathname === '/api/fx') {
-      return handleFx(url);
+      return withCors(await handleFx(url));
     }
 
     if (url.pathname === '/api/ai/status') {
-      return handleAiStatus(env);
+      return withCors(handleAiStatus(env));
     }
 
     if (url.pathname === '/api/ai') {
-      return handleAiProxy(request, env);
+      return withCors(await handleAiProxy(request, env));
     }
 
     return env.ASSETS.fetch(request);

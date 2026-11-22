@@ -1,10 +1,46 @@
 {
+  "id": "/",
   "name": "個人資產總帳",
   "short_name": "資產總帳",
-  "description": "整合台美港股、跨幣別銀行現金、實體投資與固定／隨機收支的個人理財總帳",
+  "description": "整合台美港股、跨幣別銀行現金、實體投資、財務報表與 AI 智慧搬家的個人理財總帳",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#f7f7f5",
-  "theme_color": "#f7f7f5",
-  "orientation": "portrait-primary"
+  "theme_color": "#18181b",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "記一筆支出",
+      "short_name": "記支出",
+      "url": "/?shortcut=expense",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "財務報表分析",
+      "short_name": "財務報表",
+      "url": "/?shortcut=reports",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "AI 智慧搬家",
+      "short_name": "AI 搬家",
+      "url": "/?shortcut=migrate",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    }
+  ]
 }
