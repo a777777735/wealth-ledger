@@ -446,6 +446,10 @@
                 <p id="stock-last-updated" class="text-xs text-zinc-500 mt-0.5">台灣慣用色標（紅漲綠跌），可一鍵更新或批次調整現價</p>
               </div>
               <div class="flex flex-wrap items-center gap-2">
+                <button id="btn-copy-stock-ai-prompt" type="button" class="btn-focus h-8 px-3 rounded-lg bg-white hover:bg-zinc-50 text-zinc-800 hairline text-xs font-medium transition-colors duration-150 inline-flex items-center gap-1.5">
+                  <svg class="w-3.5 h-3.5 text-zinc-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.8L20 11l-6.1 2.2L12 19l-1.9-5.8L4 11l6.1-2.2L12 3z"/></svg>
+                  <span>複製 AI 持股複檢 Prompt</span>
+                </button>
                 <button id="btn-batch-price" type="button" class="btn-focus h-8 px-3 rounded-lg bg-white hover:bg-zinc-50 text-zinc-800 hairline text-xs font-medium transition-colors duration-150">批次更新現價</button>
                 <button id="btn-add-stock-trade-top" type="button" class="btn-focus h-8 px-3 rounded-lg bg-[#f7f7f5] hover:bg-zinc-200/70 text-zinc-800 hairline text-xs font-medium transition-colors duration-150">記錄買賣／配息</button>
                 <button id="btn-add-stock" type="button" class="btn-focus h-8 px-3.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-medium transition-colors duration-150">新增持倉</button>
@@ -8470,6 +8474,137 @@
             </div>
           `;
           openFormModal('AI 財務健檢 Prompt（去識別化）', modalHtml, () => {
+            doCopy();
+          });
+          const submitBtn = document.querySelector('#modal-form button[type="submit"]');
+          if (submitBtn) submitBtn.textContent = '再次複製全文';
+        });
+      }
+
+      function buildStockAIPromptText(data, totals) {
+        const fx = (data && data.fx) || { TWD: 1, USD: 33.022, HKD: 4.2097, CNY: 4.9525 };
+        const rateOf = (cur) => (cur === 'TWD' ? 1 : safeNum(fx[cur], 1));
+        const stocks = Array.isArray(data && data.stocks) ? data.stocks : [];
+        const trades = Array.isArray(data && data.stockTrades) ? data.stockTrades : [];
+
+        let totalCostTWD = 0;
+        let totalValTWD = 0;
+        const marketVal = { TW: 0, US: 0, HK: 0, OTHER: 0 };
+        const enriched = stocks.map((s) => {
+          const shares = safeNum(s.shares);
+          const avgCost = safeNum(s.avgCost);
+          const curPrice = safeNum(s.currentPrice);
+          const cur = s.currency || 'TWD';
+          const r = rateOf(cur);
+          const costTWD = shares * avgCost * r;
+          const valTWD = shares * curPrice * r;
+          const pnlTWD = valTWD - costTWD;
+          const roiPct = costTWD > 0 ? (pnlTWD / costTWD) * 100 : 0;
+          totalCostTWD += costTWD;
+          totalValTWD += valTWD;
+          const mkt = ['TW', 'US', 'HK'].includes(String(s.market || '').toUpperCase()) ? String(s.market).toUpperCase() : 'OTHER';
+          marketVal[mkt] += valTWD;
+          return { ...s, market: mkt, currency: cur, shares, avgCost, curPrice, costTWD, valTWD, pnlTWD, roiPct };
+        }).sort((a, b) => b.valTWD - a.valTWD);
+
+        const unrealizedPnlTWD = totalValTWD - totalCostTWD;
+        const unrealizedPct = totalCostTWD > 0 ? (unrealizedPnlTWD / totalCostTWD) * 100 : 0;
+
+        let realizedPnlTWD = 0;
+        let dividendTWD = 0;
+        trades.forEach((t) => {
+          realizedPnlTWD += safeNum(t.realizedPnlTWD);
+          if (t.tradeType === 'DIVIDEND') {
+            dividendTWD += safeNum(t.netAmount) * rateOf(t.currency || 'TWD');
+          }
+        });
+        const totalReturnTWD = unrealizedPnlTWD + realizedPnlTWD + dividendTWD;
+        const totalReturnPct = totalCostTWD > 0 ? (totalReturnTWD / totalCostTWD) * 100 : 0;
+        const nw = safeNum(totals && totals.netWorthTWD, totalValTWD) || 1;
+        const stockShareOfNW = ((totalValTWD / nw) * 100).toFixed(1);
+
+        const top3Share = totalValTWD > 0
+          ? ((enriched.slice(0, 3).reduce((s, x) => s + x.valTWD, 0) / totalValTWD) * 100).toFixed(1)
+          : '0.0';
+
+        const mktSummary = Object.entries(marketVal)
+          .filter(([, v]) => v > 0)
+          .map(([k, v]) => `${k} ${fmtTWD(v)}（${totalValTWD > 0 ? ((v / totalValTWD) * 100).toFixed(1) : '0.0'}%）`)
+          .join('｜') || '尚無持倉';
+
+        const holdingsLines = enriched.length === 0
+          ? '  （目前尚無持股資料）'
+          : enriched.map((s, i) => {
+              const weight = totalValTWD > 0 ? ((s.valTWD / totalValTWD) * 100).toFixed(1) : '0.0';
+              const sign = s.pnlTWD >= 0 ? '+' : '';
+              return `  ${i + 1}. [${s.market}] ${s.symbol} ${s.name || ''}｜${fmtNum(s.shares, 2)} 股｜均價 ${s.currency} ${fmtNum(s.avgCost, 2)} → 現價 ${s.currency} ${fmtNum(s.curPrice, 2)}｜市值 ${fmtTWD(s.valTWD)}（佔比 ${weight}%）｜未實現 ${sign}${fmtTWD(s.pnlTWD)} (${sign}${s.roiPct.toFixed(1)}%)`;
+            }).join('\n');
+
+        const recentTrades = [...trades]
+          .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')))
+          .slice(0, 15);
+        const tradesLines = recentTrades.length === 0
+          ? '  （尚無歷史交易／配息紀錄）'
+          : recentTrades.map((t) => {
+              const typeMap = { BUY: '買進', SELL: '賣出', DIVIDEND: '股利' };
+              const rpnl = safeNum(t.realizedPnlTWD);
+              const rpnlTxt = rpnl !== 0 ? `，已實現 ${rpnl >= 0 ? '+' : ''}${fmtTWD(rpnl)}` : '';
+              return `  - ${t.date || ''} [${typeMap[t.tradeType] || t.tradeType}] ${t.market || ''}:${t.symbol || ''} ${t.name || ''}｜${t.tradeType === 'DIVIDEND' ? `淨領 ${t.currency || 'TWD'} ${fmtNum(t.netAmount, 2)}` : `${fmtNum(t.shares, 2)} 股 @ ${t.currency || 'TWD'} ${fmtNum(t.price, 2)}`}${rpnlTxt}`;
+            }).join('\n');
+
+        return [
+          `你是一位嚴謹、重視風險控制與長期複利的專業股票與 ETF 投資組合顧問。以下是我已「去識別化」的持股組合與近期交易明細（不含券商帳號與個人姓名，市值皆已依當前匯率換算為台幣 TWD），請幫我做深度持股複檢。`,
+          ``,
+          `【報告日期】${todayISO()}`,
+          `【目前參考匯率】USD=${safeNum(fx.USD).toFixed(2)}｜HKD=${safeNum(fx.HKD).toFixed(2)}｜JPY=${safeNum(fx.JPY).toFixed(4)}`,
+          ``,
+          `【一、投資組合總覽】`,
+          `- 股票與 ETF 總市值：${fmtTWD(totalValTWD)}（佔個人總資產淨值 ${stockShareOfNW}%，共 ${enriched.length} 檔標的）`,
+          `- 總投入成本：${fmtTWD(totalCostTWD)}`,
+          `- 未實現損益：${unrealizedPnlTWD >= 0 ? '+' : ''}${fmtTWD(unrealizedPnlTWD)} (${unrealizedPnlTWD >= 0 ? '+' : ''}${unrealizedPct.toFixed(2)}%)`,
+          `- 歷史已實現損益：${realizedPnlTWD >= 0 ? '+' : ''}${fmtTWD(realizedPnlTWD)}｜累計股利收入：${fmtTWD(dividendTWD)}`,
+          `- 含息含已實現綜合報酬：${totalReturnTWD >= 0 ? '+' : ''}${fmtTWD(totalReturnTWD)} (${totalReturnTWD >= 0 ? '+' : ''}${totalReturnPct.toFixed(2)}%)`,
+          `- 市場分佈：${mktSummary}`,
+          `- 集中度檢核：前 3 大持倉合計佔股票部位 ${top3Share}%`,
+          ``,
+          `【二、完整持倉明細（依市值由大到小）】`,
+          holdingsLines,
+          ``,
+          `【三、近期交易與配息紀錄（最新 15 筆）】`,
+          tradesLines,
+          ``,
+          `【請針對以上持股進行 5 面向深度複檢】`,
+          `1. 集中度與重疊風險：單一標的、單一市場或單一產業是否過度集中？持有的 ETF 與個股之間有沒有高度成分重疊？`,
+          `2. 贏家與落後部位檢視：針對獲利最高與虧損較大的標的，分別評估是否需要部分停利再平衡、續抱，或檢討汰弱留強的標準。`,
+          `3. 成長型 vs 高股息與稅務效率：檢視整體配置在資本利得與配息現金流之間的平衡，以及台股股利／美股 30% 股息稅的優化空間。`,
+          `4. 匯率與總淨值曝險：目前股票佔總淨值 ${stockShareOfNW}% 與外幣資產比例是否合宜？面對市場回檔 20% 時的承壓能力評估。`,
+          `5. 未來 1～3 個月具體再平衡與分批加減碼行動清單（請給出明確標的與比例建議）。`
+        ].join('\n');
+      }
+
+      const copyStockAiBtn = document.getElementById('btn-copy-stock-ai-prompt');
+      if (copyStockAiBtn) {
+        copyStockAiBtn.addEventListener('click', () => {
+          const promptText = buildStockAIPromptText(state, computeTotals(state));
+          const doCopy = () => {
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+              navigator.clipboard.writeText(promptText).then(() => {
+                showToast('已複製去識別化 AI 持股複檢 Prompt，可直接貼給 Gemini / ChatGPT / Claude！');
+              }).catch(() => {
+                showToast('請從下方文字框全選複製 Prompt');
+              });
+            }
+          };
+          doCopy();
+          const modalHtml = `
+            <div class="space-y-3">
+              <div class="rounded-lg bg-[#f7f7f5] hairline px-3 py-2 text-xs text-zinc-600 leading-relaxed">
+                已自動整理並嘗試複製以下<strong>去識別化</strong>股票與 ETF 持股複檢提示詞（不含券商帳號與個人姓名），可直接貼到 Gemini、ChatGPT 或 Claude 進行深度健檢：
+              </div>
+              <textarea id="stock-ai-prompt-preview" rows="12" readonly class="w-full p-3 rounded-lg hairline bg-white text-xs font-mono-num text-zinc-800 leading-relaxed">${escapeHtml(promptText)}</textarea>
+            </div>
+          `;
+          openFormModal('AI 股票與 ETF 持股複檢 Prompt（去識別化）', modalHtml, () => {
             doCopy();
           });
           const submitBtn = document.querySelector('#modal-form button[type="submit"]');
