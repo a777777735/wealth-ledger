@@ -731,6 +731,7 @@
               <div>日</div><div>一</div><div>二</div><div>三</div><div>四</div><div>五</div><div>六</div>
             </div>
             <div id="expense-calendar-grid" class="grid grid-cols-7 gap-1"></div>
+            <div id="exp-cal-day-detail" class="hidden rounded-xl bg-[#f7f7f5] hairline p-4 space-y-3"></div>
           </div>
 
           <div class="bg-white rounded-xl p-6 hairline space-y-4">
@@ -7705,6 +7706,7 @@
         const grid = document.getElementById('expense-calendar-grid');
         const titleEl = document.getElementById('exp-cal-title');
         const sumEl = document.getElementById('exp-cal-summary');
+        const detailEl = document.getElementById('exp-cal-day-detail');
         if (!grid || !titleEl) return;
         const ym = /^\d{4}-\d{2}$/.test(expCalMonth) ? expCalMonth : todayISO().slice(0, 7);
         const [y, m] = ym.split('-').map(Number);
@@ -7713,8 +7715,15 @@
         const rateOf = (cur) => (cur === 'TWD' ? 1 : safeNum(state.fx[cur], 1));
         const dayExp = {};
         const dayInc = {};
+        const dayExpItems = {};
+        const dayIncItems = {};
         let monthExp = 0;
         let monthInc = 0;
+
+        const pushItem = (map, d, item) => {
+          if (!map[d]) map[d] = [];
+          map[d].push(item);
+        };
 
         (state.randomExpenses || []).forEach((r) => {
           const d = normalizeDateStr(r.date);
@@ -7722,6 +7731,12 @@
           const twd = safeNum(r.amount) * rateOf(r.currency || 'TWD');
           dayExp[d] = (dayExp[d] || 0) + twd;
           monthExp += twd;
+          pushItem(dayExpItems, d, {
+            category: r.category || '其他隨機支出',
+            title: r.title || '支出',
+            detail: [r.account, r.note].filter(Boolean).join(' · '),
+            amountTWD: twd
+          });
         });
         (state.incomeReceipts || []).forEach((r) => {
           const d = normalizeDateStr(r.date);
@@ -7729,6 +7744,13 @@
           const twd = safeNum(r.actualAmount) * rateOf(r.currency || 'TWD');
           dayInc[d] = (dayInc[d] || 0) + twd;
           monthInc += twd;
+          pushItem(dayIncItems, d, {
+            source: '固定／獎金入帳',
+            tab: 'income',
+            title: r.name || r.category || '收入入帳',
+            detail: [r.category, r.account, r.note].filter(Boolean).join(' · '),
+            amountTWD: twd
+          });
         });
         (state.investmentLogs || []).forEach((l) => {
           if (l.eventType !== 'payout') return;
@@ -7737,11 +7759,33 @@
           const twd = safeNum(l.amountTWD);
           dayInc[d] = (dayInc[d] || 0) + twd;
           monthInc += twd;
+          pushItem(dayIncItems, d, {
+            source: '實體投資分潤',
+            tab: 'investments',
+            title: l.investmentName || '專案分潤',
+            detail: [l.stageLabel, l.account, l.note].filter(Boolean).join(' · '),
+            amountTWD: twd
+          });
+        });
+        (state.stockTrades || []).forEach((t) => {
+          if (t.tradeType !== 'DIVIDEND') return;
+          const d = normalizeDateStr(t.date);
+          if (!d || !d.startsWith(ym)) return;
+          const twd = safeNum(t.netAmount) * rateOf(t.currency || 'TWD');
+          dayInc[d] = (dayInc[d] || 0) + twd;
+          monthInc += twd;
+          pushItem(dayIncItems, d, {
+            source: '股票股利',
+            tab: 'stocks',
+            title: `${t.symbol || ''} ${t.name || '股利'}`.trim(),
+            detail: [t.account, t.note].filter(Boolean).join(' · '),
+            amountTWD: twd
+          });
         });
 
         if (sumEl) {
           const net = monthInc - monthExp;
-          sumEl.innerHTML = `${ym} 收入 <span class="text-rose-700 font-medium">${fmtTWD(monthInc)}</span> · 支出 <span class="text-emerald-700 font-medium">${fmtTWD(monthExp)}</span> · 結餘 <span class="${net >= 0 ? 'text-rose-700' : 'text-emerald-700'} font-semibold">${net >= 0 ? '+' : ''}${fmtTWD(net)}</span>（點日期篩選當日明細）`;
+          sumEl.innerHTML = `${ym} 收入 <span class="text-rose-700 font-medium">${fmtTWD(monthInc)}</span>（薪資＋分潤＋股利）· 支出 <span class="text-emerald-700 font-medium">${fmtTWD(monthExp)}</span> · 結餘 <span class="${net >= 0 ? 'text-rose-700' : 'text-emerald-700'} font-semibold">${net >= 0 ? '+' : ''}${fmtTWD(net)}</span>（點日期查看當日收入與支出明細）`;
         }
 
         const firstWeekday = new Date(y, m - 1, 1).getDay();
@@ -7758,8 +7802,12 @@
           const isToday = iso === today;
           const isSelected = expFromFilter === iso && expToFilter === iso;
           const fmtShort = (v) => v >= 10000 ? `${(v / 10000).toFixed(1)}萬` : Math.round(v).toLocaleString('zh-TW');
+          const tipLines = [];
+          (dayIncItems[iso] || []).forEach((x) => tipLines.push(`+${fmtTWD(x.amountTWD)} [${x.source}] ${x.title}`));
+          (dayExpItems[iso] || []).forEach((x) => tipLines.push(`-${fmtTWD(x.amountTWD)} [${x.category}] ${x.title}`));
+          const tipAttr = tipLines.length ? ` title="${escapeHtml(tipLines.join('\n'))}"` : '';
           cells += `
-            <button type="button" data-cal-day="${iso}" class="min-h-[58px] p-1.5 rounded-lg text-left transition-colors flex flex-col justify-between ${isSelected ? 'bg-zinc-900 text-white' : isToday ? 'bg-[#f7f7f5] ring-1 ring-zinc-900/40' : 'bg-white hover:bg-[#f7f7f5] hairline'}">
+            <button type="button" data-cal-day="${iso}"${tipAttr} class="min-h-[58px] p-1.5 rounded-lg text-left transition-colors flex flex-col justify-between ${isSelected ? 'bg-zinc-900 text-white' : isToday ? 'bg-[#f7f7f5] ring-1 ring-zinc-900/40' : 'bg-white hover:bg-[#f7f7f5] hairline'}">
               <div class="text-[11px] font-mono-num font-medium ${isSelected ? 'text-white' : isToday ? 'text-zinc-900 font-bold' : 'text-zinc-600'}">${d}</div>
               <div class="space-y-0.5 font-mono-num text-[10px] leading-tight">
                 ${iAmt > 0 ? `<div class="truncate ${isSelected ? 'text-rose-300' : 'text-rose-700'}">+${fmtShort(iAmt)}</div>` : ''}
@@ -7769,6 +7817,91 @@
           `;
         }
         grid.innerHTML = cells;
+
+        // Render selected-day income & expense source breakdown panel
+        if (detailEl) {
+          const selDate = (expFromFilter && expFromFilter === expToFilter && expFromFilter.startsWith(ym)) ? expFromFilter : '';
+          if (!selDate) {
+            detailEl.classList.add('hidden');
+            detailEl.innerHTML = '';
+          } else {
+            const incList = dayIncItems[selDate] || [];
+            const expList = dayExpItems[selDate] || [];
+            const dIncSum = dayInc[selDate] || 0;
+            const dExpSum = dayExp[selDate] || 0;
+            const dNet = dIncSum - dExpSum;
+
+            const incHtml = incList.length === 0
+              ? '<div class="text-xs text-zinc-400 py-1">當日無收入紀錄</div>'
+              : incList.map((x) => `
+                  <div class="flex items-center justify-between gap-2 py-1.5 border-b border-zinc-900/[0.05] last:border-b-0 text-xs">
+                    <div class="min-w-0">
+                      <div class="flex items-center gap-1.5 flex-wrap">
+                        <button type="button" data-cal-jump-tab="${escapeHtml(x.tab)}" class="px-1.5 py-0.5 rounded bg-rose-50 hover:bg-rose-100 text-rose-700 text-[10px] font-medium transition-colors" title="點擊前往該分頁查看／編輯">${escapeHtml(x.source)} →</button>
+                        <span class="font-medium text-zinc-900 truncate">${escapeHtml(x.title)}</span>
+                      </div>
+                      ${x.detail ? `<div class="text-[11px] text-zinc-500 mt-0.5 truncate">${escapeHtml(x.detail)}</div>` : ''}
+                    </div>
+                    <span class="font-mono-num font-semibold text-rose-700 shrink-0">+${fmtTWD(x.amountTWD)}</span>
+                  </div>
+                `).join('');
+
+            const expHtml = expList.length === 0
+              ? '<div class="text-xs text-zinc-400 py-1">當日無支出紀錄</div>'
+              : expList.map((x) => `
+                  <div class="flex items-center justify-between gap-2 py-1.5 border-b border-zinc-900/[0.05] last:border-b-0 text-xs">
+                    <div class="min-w-0">
+                      <div class="flex items-center gap-1.5 flex-wrap">
+                        <span class="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 text-[10px] font-medium">${escapeHtml(x.category)}</span>
+                        <span class="font-medium text-zinc-900 truncate">${escapeHtml(x.title)}</span>
+                      </div>
+                      ${x.detail ? `<div class="text-[11px] text-zinc-500 mt-0.5 truncate">${escapeHtml(x.detail)}</div>` : ''}
+                    </div>
+                    <span class="font-mono-num font-semibold text-emerald-700 shrink-0">-${fmtTWD(x.amountTWD)}</span>
+                  </div>
+                `).join('');
+
+            detailEl.classList.remove('hidden');
+            detailEl.innerHTML = `
+              <div class="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-zinc-900/[0.08]">
+                <div class="flex flex-wrap items-center gap-2 text-xs">
+                  <span class="font-semibold font-mono-num text-zinc-900">${escapeHtml(selDate)} 當日收支來源明細</span>
+                  <span class="font-mono-num text-rose-700">收入 +${fmtTWD(dIncSum)}</span>
+                  <span class="font-mono-num text-emerald-700">支出 -${fmtTWD(dExpSum)}</span>
+                  <span class="font-mono-num font-semibold ${dNet >= 0 ? 'text-rose-700' : 'text-emerald-700'}">淨額 ${dNet >= 0 ? '+' : ''}${fmtTWD(dNet)}</span>
+                </div>
+                <button type="button" id="btn-exp-cal-close-detail" class="text-xs text-zinc-500 hover:text-zinc-900 font-medium">關閉當日篩選 ✕</button>
+              </div>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="bg-white rounded-lg p-3 hairline">
+                  <div class="text-[11px] font-semibold text-rose-700 mb-1.5">當日收入來源（${incList.length} 筆）</div>
+                  ${incHtml}
+                </div>
+                <div class="bg-white rounded-lg p-3 hairline">
+                  <div class="text-[11px] font-semibold text-emerald-700 mb-1.5">當日支出明細（${expList.length} 筆）</div>
+                  ${expHtml}
+                </div>
+              </div>
+            `;
+          }
+        }
+      }
+
+      const calDetailEl = document.getElementById('exp-cal-day-detail');
+      if (calDetailEl) {
+        calDetailEl.addEventListener('click', (e) => {
+          const jumpBtn = e.target.closest('[data-cal-jump-tab]');
+          if (jumpBtn) {
+            switchTab(jumpBtn.dataset.calJumpTab);
+            return;
+          }
+          if (e.target.closest('#btn-exp-cal-close-detail')) {
+            expFromFilter = ''; expToFilter = '';
+            if (expFromEl) expFromEl.value = '';
+            if (expToEl) expToEl.value = '';
+            renderExpenses(computeTotals(state));
+          }
+        });
       }
 
       function shiftCalMonth(delta) {
