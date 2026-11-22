@@ -277,8 +277,10 @@ async function handleAiProxy(request, env) {
 
     if (provider === 'gemini') {
       const reqModel = String(body.model || '').trim();
-      usedModel = (!reqModel || reqModel === 'gemini-2.5-flash') ? 'gemini-3.8-flash' : reqModel;
-      text = await callGemini({ apiKey, model: usedModel, systemPrompt, prompt, attachments, expectJson });
+      const primary = (!reqModel || reqModel === 'gemini-2.5-flash') ? 'gemini-3.8-flash' : reqModel;
+      const gRes = await callGemini({ apiKey, model: primary, systemPrompt, prompt, attachments, expectJson });
+      text = gRes.text;
+      usedModel = gRes.model;
     } else if (provider === 'anthropic') {
       usedModel = String(body.model || 'claude-sonnet-4-20250514').trim();
       text = await callAnthropic({ apiKey, model: usedModel, systemPrompt, prompt, attachments });
@@ -337,22 +339,40 @@ async function callGemini({ apiKey, model, systemPrompt, prompt, attachments, ex
     payload.generationConfig.responseMimeType = 'application/json';
   }
 
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
-  const res = await fetch(endpoint, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    const msg = (data && data.error && data.error.message) || `Gemini API 錯誤 (${res.status})`;
-    throw new Error(msg);
+  const candidates = [...new Set([model, 'gemini-3.8-flash-lite', 'gemini-2.5-flash-lite', 'gemini-2.0-flash'])];
+  let lastErr = 'Gemini API 暫時繁忙，請稍後再試';
+
+  for (let i = 0; i < candidates.length; i++) {
+    const m = candidates[i];
+    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(m)}:generateContent?key=${encodeURIComponent(apiKey)}`;
+    const maxAttempts = i === 0 ? 2 : 1;
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      if (attempt > 0) await new Promise((r) => setTimeout(r, 700));
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        const cand = data && data.candidates && data.candidates[0];
+        const outParts = cand && cand.content && cand.content.parts;
+        const text = Array.isArray(outParts) ? outParts.map((p) => p.text || '').join('') : '';
+        if (text) return { text, model: m };
+        lastErr = 'Gemini 未回傳任何文字內容';
+        continue;
+      }
+      lastErr = (data && data.error && data.error.message) || `Gemini API 錯誤 (${res.status})`;
+      // Do not retry/fallback on auth errors (400 invalid key, 401, 403)
+      if (res.status === 401 || res.status === 403) {
+        throw new Error(lastErr);
+      }
+      if (res.status !== 503 && res.status !== 429 && res.status !== 404) {
+        throw new Error(lastErr);
+      }
+    }
   }
-  const cand = data && data.candidates && data.candidates[0];
-  const outParts = cand && cand.content && cand.content.parts;
-  const text = Array.isArray(outParts) ? outParts.map((p) => p.text || '').join('') : '';
-  if (!text) throw new Error('Gemini 未回傳任何文字內容');
-  return text;
+  throw new Error(lastErr);
 }
 
 async function callOpenAICompat({ apiKey, baseUrl, model, systemPrompt, prompt, attachments, expectJson, provider }) {
