@@ -2669,21 +2669,30 @@
             rTbody.innerHTML = receipts.map((r) => {
               const cur = r.currency || 'TWD';
               const actual = safeNum(r.actualAmount);
-              const expected = safeNum(r.expectedAmount, actual);
+              const hasExpected = r.expectedAmount !== undefined && r.expectedAmount !== null && r.expectedAmount !== '' && safeNum(r.expectedAmount) > 0;
+              const expected = hasExpected ? safeNum(r.expectedAmount) : 0;
               const diff = actual - expected;
               const twdVal = actual * rateOf(cur);
               const isNew = r.depositMode !== 'already_in_bank';
-              const diffHtml = Math.abs(diff) < 0.005
-                ? '<span class="text-zinc-400">與預估相符</span>'
-                : `<span class="${diff > 0 ? 'text-emerald-700' : 'text-rose-700'} font-medium">${diff > 0 ? '+' : ''}${cur} ${diff.toLocaleString('zh-TW', { maximumFractionDigits: 2 })}</span>`;
+              const diffHtml = !hasExpected
+                ? '<span class="text-emerald-700 font-medium">額外／一次性</span>'
+                : (Math.abs(diff) < 0.005
+                    ? '<span class="text-zinc-400">與預估相符</span>'
+                    : `<span class="${diff > 0 ? 'text-emerald-700' : 'text-rose-700'} font-medium">${diff > 0 ? '+' : ''}${cur} ${diff.toLocaleString('zh-TW', { maximumFractionDigits: 2 })}</span>`);
               const badgeHtml = isNew
                 ? '<span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-50 text-emerald-700">新匯入 · 已加餘額</span>'
                 : '<span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-zinc-100 text-zinc-600">已存在銀行 · 僅記帳</span>';
+              const catBadge = r.category && r.category !== '薪資收入' && r.category !== '固定收入'
+                ? `<span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-violet-50 text-violet-700">${escapeHtml(r.category)}</span>`
+                : '';
               return `
                 <tr class="hover:bg-[#f7f7f5]/60">
                   <td class="py-3 px-2 text-zinc-600 whitespace-nowrap">${escapeHtml(r.date || '')}</td>
                   <td class="py-3 px-2 font-sans">
-                    <div class="font-medium text-zinc-900">${escapeHtml(r.name || '收入入帳')}</div>
+                    <div class="flex flex-wrap items-center gap-1.5">
+                      <span class="font-medium text-zinc-900">${escapeHtml(r.name || '收入入帳')}</span>
+                      ${catBadge}
+                    </div>
                     <div class="text-[11px] text-zinc-400">${escapeHtml(r.note || '')}</div>
                   </td>
                   <td class="py-3 px-2 text-right font-medium text-zinc-900">${cur} ${actual.toLocaleString('zh-TW', { maximumFractionDigits: 2 })}</td>
@@ -2696,6 +2705,7 @@
                     </div>
                   </td>
                   <td class="py-3 px-2 text-right whitespace-nowrap font-sans">
+                    <button type="button" data-action="edit-income-receipt" data-id="${escapeHtml(r.id)}" class="text-zinc-600 hover:text-zinc-900 text-xs font-medium mr-2.5">編輯</button>
                     <button type="button" data-action="del-income-receipt" data-id="${escapeHtml(r.id)}" class="text-zinc-400 hover:text-rose-700 text-xs font-medium">刪除</button>
                   </td>
                 </tr>
@@ -4812,21 +4822,41 @@
         wireCurrencyAccountSelect(inc.account);
       }
 
-      function openIncomeReceiptModal(template = null) {
-        const curDefault = template ? (template.currency || 'TWD') : 'TWD';
-        const expectedAmt = template ? safeNum(template.amount) : 0;
-        const accDefault = template ? (template.account || `現金（${curDefault}）`) : `現金（${curDefault}）`;
-        const nameDefault = template ? template.name : '';
-        const catDefault = template ? (template.category || '薪資收入') : '薪資收入';
+      function openIncomeReceiptModal(template = null, editRec = null) {
+        const isEdit = Boolean(editRec);
+        const curDefault = isEdit ? (editRec.currency || 'TWD') : (template ? (template.currency || 'TWD') : 'TWD');
+        const expectedAmt = isEdit ? safeNum(editRec.expectedAmount) : (template ? safeNum(template.amount) : 0);
+        const actualDefault = isEdit ? safeNum(editRec.actualAmount) : (expectedAmt > 0 ? expectedAmt : '');
+        const accDefault = isEdit ? (editRec.account || '') : (template ? (template.account || `現金（${curDefault}）`) : `現金（${curDefault}）`);
+        const nameDefault = isEdit ? (editRec.name || '') : (template ? template.name : '');
+        const catDefault = isEdit ? (editRec.category || '薪資收入') : (template ? (template.category || '薪資收入') : '薪資收入');
+        const dateDefault = isEdit ? (editRec.date || todayISO()) : todayISO();
+        const modeDefault = isEdit ? (editRec.depositMode || 'already_in_bank') : 'new_deposit';
+        const noteDefault = isEdit ? (editRec.note || '') : '';
+        const catOptions = ['薪資收入', '三節／年終獎金', '未休假轉薪', '績效／專案獎金', '加班費／津貼', '租金收入', '定存與債息', '副業與顧問', '退稅／其他一次性收入'];
+        const catOptionsHtml = [...new Set([...catOptions, catDefault])].map((c) =>
+          `<option value="${escapeHtml(c)}" ${c === catDefault ? 'selected' : ''}>${escapeHtml(c)}</option>`
+        ).join('');
+        const quickBonusBar = (!isEdit && !template)
+          ? `<div class="flex flex-wrap items-center gap-1.5 text-[11px]">
+              <span class="text-zinc-500">快速套用非固定獎金：</span>
+              <button type="button" data-inc-preset="三節獎金|三節／年終獎金" class="px-2 py-0.5 rounded bg-[#f7f7f5] hover:bg-zinc-200/70 hairline text-zinc-700 font-medium">三節獎金</button>
+              <button type="button" data-inc-preset="年終獎金|三節／年終獎金" class="px-2 py-0.5 rounded bg-[#f7f7f5] hover:bg-zinc-200/70 hairline text-zinc-700 font-medium">年終獎金</button>
+              <button type="button" data-inc-preset="未休假轉薪|未休假轉薪" class="px-2 py-0.5 rounded bg-[#f7f7f5] hover:bg-zinc-200/70 hairline text-zinc-700 font-medium">未休假轉薪</button>
+              <button type="button" data-inc-preset="績效獎金|績效／專案獎金" class="px-2 py-0.5 rounded bg-[#f7f7f5] hover:bg-zinc-200/70 hairline text-zinc-700 font-medium">績效獎金</button>
+            </div>`
+          : '';
         const html = `
-          <div class="grid grid-cols-2 gap-3">
-            <div><label class="block text-xs font-medium text-zinc-600 mb-1">入帳日期</label><input name="date" type="date" required value="${todayISO()}" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" /></div>
-            <div><label class="block text-xs font-medium text-zinc-600 mb-1">收入來源名稱</label><input name="name" required value="${escapeHtml(nameDefault)}" placeholder="例如：本業薪資（11月）" class="w-full h-9 px-3 rounded-lg hairline text-sm" /></div>
+          ${quickBonusBar}
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div><label class="block text-xs font-medium text-zinc-600 mb-1">入帳日期</label><input id="irec-date" name="date" type="date" required value="${escapeHtml(dateDefault)}" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" /></div>
+            <div><label class="block text-xs font-medium text-zinc-600 mb-1">收入類別</label><select id="irec-cat" name="category" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white">${catOptionsHtml}</select></div>
+            <div><label class="block text-xs font-medium text-zinc-600 mb-1">收入名稱</label><input id="irec-name" name="name" required value="${escapeHtml(nameDefault)}" placeholder="例如：中秋獎金、未休假轉薪" class="w-full h-9 px-3 rounded-lg hairline text-sm" /></div>
           </div>
           <div class="grid grid-cols-3 gap-3">
             <div><label class="block text-xs font-medium text-zinc-600 mb-1">幣別（連動帳戶）</label><select name="currency" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white">${buildCurrencyOptionsHtml(curDefault, true)}</select></div>
-            <div><label class="block text-xs font-medium text-zinc-600 mb-1">預估金額（參考）</label><input name="expectedAmount" type="number" step="0.01" min="0" value="${expectedAmt}" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num bg-[#f7f7f5]" /></div>
-            <div><label class="block text-xs font-medium text-zinc-600 mb-1">本次實際入帳金額</label><input name="actualAmount" type="number" step="0.01" min="0.01" required value="${expectedAmt > 0 ? expectedAmt : ''}" placeholder="輸入實領金額" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" /></div>
+            <div><label class="block text-xs font-medium text-zinc-600 mb-1">預估金額（獎金填 0）</label><input id="irec-expected" name="expectedAmount" type="number" step="0.01" min="0" value="${expectedAmt}" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num bg-[#f7f7f5]" /></div>
+            <div><label class="block text-xs font-medium text-zinc-600 mb-1">本次實際入帳金額</label><input name="actualAmount" type="number" step="0.01" min="0.01" required value="${actualDefault}" placeholder="輸入實領金額" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" /></div>
           </div>
           <div class="grid grid-cols-1 gap-3">
             <div>
@@ -4836,32 +4866,34 @@
             </div>
             <div>
               <label class="block text-xs font-medium text-zinc-600 mb-1">銀行餘額處理方式（避免重複計算）</label>
-              <select name="depositMode" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white">
-                <option value="new_deposit" selected>新剛匯入 — 自動累加進上述銀行帳戶餘額</option>
-                <option value="already_in_bank">已存在目前銀行內 — 僅補登紀錄，不重複增加銀行餘額</option>
+              <select id="irec-deposit-mode" name="depositMode" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white">
+                <option value="new_deposit" ${modeDefault === 'new_deposit' ? 'selected' : ''}>新剛匯入 — 自動累加進上述銀行帳戶餘額</option>
+                <option value="already_in_bank" ${modeDefault === 'already_in_bank' ? 'selected' : ''}>已存在目前銀行內 — 僅補登紀錄，不重複增加銀行餘額</option>
               </select>
             </div>
           </div>
-          <div><label class="block text-xs font-medium text-zinc-600 mb-1">備註</label><input name="note" placeholder="例如：含加班費／獎金，或補登歷史入帳" class="w-full h-9 px-3 rounded-lg hairline text-sm" /></div>
+          <div><label class="block text-xs font-medium text-zinc-600 mb-1">備註</label><input name="note" value="${escapeHtml(noteDefault)}" placeholder="例如：端午節獎金、2026 年度特休折現" class="w-full h-9 px-3 rounded-lg hairline text-sm" /></div>
+          ${isEdit ? '<p class="text-[11px] text-zinc-500">提示：修改紀錄僅更新本筆入帳明細，不會重複加減銀行餘額。</p>' : ''}
         `;
-        openFormModal('登記實際收入入帳', html, (fd) => {
+        openFormModal(isEdit ? '編輯實際收入入帳紀錄' : '登記實際收入入帳', html, (fd) => {
           const cur = String(fd.get('currency') || 'TWD');
           const actual = safeNum(fd.get('actualAmount'));
-          const expected = safeNum(fd.get('expectedAmount'), actual);
-          const acc = String(fd.get('accountSelect') || '').trim();
+          const expected = safeNum(fd.get('expectedAmount'), 0);
+          const acc = resolveModalAccount(fd);
           const depositMode = String(fd.get('depositMode') || 'new_deposit');
           const name = String(fd.get('name')).trim();
+          const category = String(fd.get('category') || catDefault).trim();
           const date = String(fd.get('date') || todayISO());
           const note = String(fd.get('note')).trim();
           const rate = cur === 'TWD' ? 1 : safeNum(state.fx[cur], 1);
 
           if (!Array.isArray(state.incomeReceipts)) state.incomeReceipts = [];
           const rec = {
-            id: uid('irec'),
-            incomeId: template ? template.id : '',
+            id: isEdit ? editRec.id : uid('irec'),
+            incomeId: isEdit ? (editRec.incomeId || '') : (template ? template.id : ''),
             date,
             name,
-            category: catDefault,
+            category,
             currency: cur,
             expectedAmount: expected,
             actualAmount: actual,
@@ -4869,6 +4901,14 @@
             depositMode,
             note
           };
+          if (isEdit) {
+            state.incomeReceipts = state.incomeReceipts.map((x) => (x.id === editRec.id ? rec : x));
+            saveState();
+            renderAll();
+            showToast('已更新實際入帳紀錄');
+            return;
+          }
+
           state.incomeReceipts.push(rec);
 
           let bankUpdated = false;
@@ -4883,7 +4923,7 @@
           state.ledger.push({
             id: uid('led'),
             date,
-            type: catDefault === '薪資收入' ? '薪資存入' : '其他收支',
+            type: category === '薪資收入' ? '薪資存入' : '其他收支',
             title: `${name} 實際入帳`,
             amountTWD: Math.round(actual * rate),
             note: `${depositMode === 'new_deposit' ? '新匯入' : '已存在銀行（僅記帳）'}${acc ? ' · ' + acc : ''}${note ? ' · ' + note : ''}`
@@ -4898,6 +4938,36 @@
           }
         });
         wireCurrencyAccountSelect(accDefault);
+
+        // Quick-fill bonus presets
+        document.querySelectorAll('#modal-form [data-inc-preset]').forEach((btn) => {
+          btn.addEventListener('click', () => {
+            const [pName, pCat] = String(btn.getAttribute('data-inc-preset') || '').split('|');
+            const nameEl = document.getElementById('irec-name');
+            const catEl = document.getElementById('irec-cat');
+            const expEl = document.getElementById('irec-expected');
+            if (nameEl && pName) nameEl.value = pName;
+            if (catEl && pCat) catEl.value = pCat;
+            if (expEl) expEl.value = '0';
+          });
+        });
+
+        // Past-date safeguard for new income receipts
+        if (!isEdit) {
+          const dEl = document.getElementById('irec-date');
+          const modeEl = document.getElementById('irec-deposit-mode');
+          let modeManual = false;
+          if (modeEl) modeEl.addEventListener('change', () => { modeManual = true; });
+          if (dEl && modeEl) {
+            const onDateChg = () => {
+              if (!modeManual && /^\d{4}-\d{2}-\d{2}$/.test(dEl.value)) {
+                modeEl.value = dEl.value < todayISO() ? 'already_in_bank' : 'new_deposit';
+              }
+            };
+            dEl.addEventListener('input', onDateChg);
+            dEl.addEventListener('change', onDateChg);
+          }
+        }
       }
 
       function openFixedExpenseModal(item = null) {
@@ -5899,6 +5969,7 @@
         else if (action === 'edit-income') { const item = (state.fixedIncomes || []).find((x) => x.id === id); if (item) openFixedIncomeModal(item); }
         else if (action === 'del-income') { openConfirmModal('刪除固定收入', '確定要刪除此固定收入嗎？', () => { state.fixedIncomes = (state.fixedIncomes || []).filter((x) => x.id !== id); saveState(); renderAll(); showToast('已刪除固定收入'); }); }
         else if (action === 'record-income') { const item = (state.fixedIncomes || []).find((x) => x.id === id); if (item) openIncomeReceiptModal(item); }
+        else if (action === 'edit-income-receipt') { const rec = (state.incomeReceipts || []).find((x) => x.id === id); if (rec) openIncomeReceiptModal(null, rec); }
         else if (action === 'del-income-receipt') {
           const rec = (state.incomeReceipts || []).find((x) => x.id === id);
           if (rec) {
