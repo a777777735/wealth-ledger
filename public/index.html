@@ -648,6 +648,7 @@
               </div>
               <div class="flex flex-wrap items-center gap-2">
                 <button id="btn-batch-income-history" type="button" class="btn-focus h-8 px-3.5 rounded-lg bg-[#f7f7f5] hover:bg-zinc-200/70 text-zinc-800 hairline text-xs font-medium transition-colors duration-150">批次補登多筆歷史</button>
+                <button id="btn-photo-batch-income" type="button" class="btn-focus h-8 px-3 rounded-lg bg-white hover:bg-zinc-50 text-zinc-800 hairline text-xs font-medium transition-colors duration-150">📷 截圖批次辨識</button>
                 <button id="btn-add-income-receipt" type="button" class="btn-focus h-8 px-3.5 rounded-lg bg-white hover:bg-zinc-50 text-zinc-800 hairline text-xs font-medium transition-colors duration-150">＋ 單筆實際入帳</button>
               </div>
             </div>
@@ -746,6 +747,7 @@
               </div>
               <div class="flex flex-wrap items-center gap-2">
                 <button id="btn-batch-edit-exp-cat" type="button" class="btn-focus h-8 px-3 rounded-lg bg-white hover:bg-zinc-50 text-zinc-800 hairline text-xs font-medium transition-colors duration-150">批次修改類別</button>
+                <button id="btn-photo-batch-expense" type="button" class="btn-focus h-8 px-3 rounded-lg bg-white hover:bg-zinc-50 text-zinc-800 hairline text-xs font-medium transition-colors duration-150">📷 拍照批次記帳</button>
                 <button id="btn-add-random-exp" type="button" class="btn-focus h-8 px-3.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-medium transition-colors duration-150">新增隨機支出</button>
               </div>
             </div>
@@ -1394,6 +1396,7 @@
                   <span id="trip-my-group-status" class="font-mono-num text-zinc-700"></span>
                 </div>
                 <div class="flex flex-wrap items-center gap-2">
+                  <button id="btn-photo-batch-trip" type="button" class="btn-focus h-8 px-3 rounded-lg bg-white hover:bg-zinc-50 hairline text-zinc-800 text-xs font-medium">📷 拍收據批次入團帳</button>
                   <button id="btn-trip-submit-advance" type="button" class="btn-focus h-8 px-3 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-xs font-medium">＋ 申報我替團隊代墊</button>
                   <button id="btn-trip-add-expense" type="button" class="trip-admin-only btn-focus h-8 px-3.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-medium">＋ 總務記一筆開銷</button>
                 </div>
@@ -1695,10 +1698,11 @@
         <button id="btn-mobile-sheet-close" type="button" class="text-zinc-400 hover:text-zinc-700 text-lg leading-none">&times;</button>
       </div>
       <div class="grid grid-cols-2 gap-2.5 text-xs">
+        <button type="button" data-quick-sheet="photo" class="col-span-2 p-3.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-white text-center font-medium">📷 拍照／選圖 AI 記帳（單筆或多筆收支）</button>
         <button type="button" data-quick-sheet="expense" class="p-3.5 rounded-xl bg-[#f7f7f5] hover:bg-zinc-200/70 hairline text-left font-medium text-zinc-900">＋ 記一筆隨機支出</button>
         <button type="button" data-quick-sheet="income" class="p-3.5 rounded-xl bg-[#f7f7f5] hover:bg-zinc-200/70 hairline text-left font-medium text-zinc-900">＋ 登記收入／獎金</button>
         <button type="button" data-quick-sheet="transfer" class="p-3.5 rounded-xl bg-[#f7f7f5] hover:bg-zinc-200/70 hairline text-left font-medium text-zinc-900">⇄ 銀行帳戶轉帳</button>
-        <button type="button" data-quick-sheet="ai" class="p-3.5 rounded-xl bg-zinc-900 text-white text-left font-medium">✦ AI 截圖／一句話記帳</button>
+        <button type="button" data-quick-sheet="trips" class="p-3.5 rounded-xl bg-[#f7f7f5] hover:bg-zinc-200/70 hairline text-left font-medium text-zinc-900">👥 揪團出遊分帳</button>
         <button type="button" data-quick-sheet="install" class="col-span-2 p-3 rounded-xl bg-white hover:bg-zinc-50 hairline text-center font-medium text-zinc-700">📲 安裝成手機 App（Android / iOS）</button>
       </div>
     </div>
@@ -6581,6 +6585,7 @@
             </div>`
           : '';
         const html = `
+          ${buildPhotoAutofillBarHtml('上傳薪資條／入帳通知截圖 AI 自動填單')}
           ${quickBonusBar}
           <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div><label class="block text-xs font-medium text-zinc-600 mb-1">入帳日期</label><input id="irec-date" name="date" type="date" required value="${escapeHtml(dateDefault)}" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" /></div>
@@ -6672,6 +6677,7 @@
           }
         });
         wireCurrencyAccountSelect(accDefault);
+        attachPhotoAutofill('income');
 
         // Quick-fill bonus presets
         document.querySelectorAll('#modal-form [data-inc-preset]').forEach((btn) => {
@@ -6772,6 +6778,7 @@
         const isEdit = Boolean(item);
         const r = item || { date: todayISO(), category: '餐飲美食', title: '', currency: 'TWD', amount: 0, account: '現金（TWD）', deductStatus: 'unpaid', note: '' };
         const html = `
+          ${buildPhotoAutofillBarHtml('拍收據／發票／消費截圖 AI 自動填單')}
           <div class="grid grid-cols-2 gap-3">
             <div><label class="block text-xs font-medium text-zinc-600 mb-1">消費日期</label><input name="date" type="date" required value="${escapeHtml(r.date)}" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" /></div>
             <div><label class="block text-xs font-medium text-zinc-600 mb-1">類別</label><select name="category" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white">${buildExpenseCategoryOptionsHtml(r.category)}</select></div>
@@ -6819,6 +6826,7 @@
         });
         wireCurrencyAccountSelect(r.account);
         wireRandomExpenseTitleSearch();
+        attachPhotoAutofill('expense');
       }
 
       function wireRandomExpenseTitleSearch() {
@@ -9704,13 +9712,358 @@
         btn.addEventListener('click', () => {
           const act = btn.dataset.quickSheet;
           closeQuickSheet();
-          if (act === 'expense') { switchTab('expenses'); openRandomExpenseModal(null); }
+          if (act === 'photo') { openQuickPhotoBatchModal('personal'); }
+          else if (act === 'expense') { switchTab('expenses'); openRandomExpenseModal(null); }
           else if (act === 'income') { switchTab('income'); openIncomeReceiptModal((state.fixedIncomes && state.fixedIncomes[0]) || null); }
           else if (act === 'transfer') { switchTab('cash'); openCashTransferModal(); }
+          else if (act === 'trips') { switchTab('trips'); }
           else if (act === 'ai') { switchTab('migrate'); }
           else if (act === 'install') { openInstallAppGuide(); }
         });
       });
+
+      // ============================================================
+      // UNIFIED PHOTO AI RECOGNITION (SINGLE AUTOFILL & MULTI BATCH)
+      // ============================================================
+      function buildPhotoAutofillBarHtml(labelText) {
+        return `
+          <div class="rounded-lg bg-[#f7f7f5] hairline px-3 py-2 flex flex-wrap items-center justify-between gap-2">
+            <div class="min-w-0">
+              <div class="text-xs font-medium text-zinc-800">📷 ${escapeHtml(labelText || '拍照／選圖 AI 自動填單')}</div>
+              <div id="modal-photo-ai-status" class="text-[11px] text-zinc-500">支援拍發票、收據、帳單或轉帳截圖，自動填入下方欄位</div>
+            </div>
+            <label class="btn-focus inline-flex items-center h-7 px-3 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white text-[11px] font-medium cursor-pointer shrink-0">
+              <span>拍照／選圖</span>
+              <input id="modal-photo-ai-input" type="file" accept="image/*" class="hidden" />
+            </label>
+          </div>
+        `;
+      }
+
+      function mapTripCategoryHeuristic(rawCat) {
+        const s = String(rawCat || '').trim();
+        if (/餐|食|吃|咖啡|茶|拉麵|合菜|餐廳|food/i.test(s)) return '餐飲';
+        if (/宿|飯店|民宿|旅館|hotel/i.test(s)) return '住宿';
+        if (/交通|油|停車|車|計程車|高鐵|捷運|船|機票|過路|uber/i.test(s)) return '交通停車';
+        if (/票|門票|樂園|活動|展覽|導覽|ticket/i.test(s)) return '門票活動';
+        if (/飲料|零食|超商|手搖|酒|宵夜/i.test(s)) return '飲料零食';
+        if (/伴手禮|名產|禮品|禮物/i.test(s)) return '伴手禮';
+        return '其他';
+      }
+
+      function attachPhotoAutofill(mode) {
+        const input = document.getElementById('modal-photo-ai-input');
+        const statusEl = document.getElementById('modal-photo-ai-status');
+        if (!input) return;
+        input.addEventListener('change', async (e) => {
+          const file = e.target.files && e.target.files[0];
+          if (!file) return;
+          if (statusEl) statusEl.textContent = '正在壓縮圖片並呼叫 AI 辨識...';
+          try {
+            const img = await compressImageToBase64(file);
+            const resp = await callAiEndpoint({
+              systemPrompt: '你是精準的繁體中文收據、發票與金融截圖辨識專家，只回傳合法 JSON。',
+              prompt: buildExtractionPrompt('transactions'),
+              attachments: [{ mimeType: img.mimeType, base64: img.base64 }],
+              expectJson: true
+            });
+            const parsed = extractJsonFromAiText(resp.text);
+            const items = normalizeAiExtractedPayload(parsed, state);
+            const form = document.getElementById('modal-form');
+            if (!form) return;
+
+            let target = null;
+            if (mode === 'income') {
+              target = items.find((x) => x.kind === 'income') || items[0];
+            } else {
+              target = items.find((x) => x.kind === 'expense') || items[0];
+            }
+
+            if (!target) {
+              if (statusEl) statusEl.textContent = '未能從圖片辨識出金額或明細，請確認圖片清晰度';
+              showToast('未能辨識出收支項目');
+              return;
+            }
+
+            const setVal = (name, val) => {
+              const el = form.querySelector(`[name="${name}"]`);
+              if (el && val !== undefined && val !== null && val !== '') {
+                el.value = String(val);
+                el.dispatchEvent(new Event('change', { bubbles: true }));
+              }
+            };
+
+            setVal('date', target.date);
+            setVal('currency', target.currency || 'TWD');
+            setVal('note', target.note || '');
+
+            if (mode === 'income') {
+              setVal('name', target.title);
+              setVal('actualAmount', target.amount);
+              const catEl = form.querySelector('[name="category"]');
+              if (catEl && target.category) {
+                const matched = [...catEl.options].find((o) => o.value.includes(target.category) || target.category.includes(o.value));
+                if (matched) catEl.value = matched.value;
+              }
+            } else if (mode === 'expense') {
+              setVal('title', target.title);
+              setVal('amount', target.amount);
+              setVal('category', target.category || '其他隨機支出');
+              if (target.date && target.date < todayISO()) {
+                setVal('deductStatus', 'paid');
+              }
+            } else if (mode === 'trip') {
+              setVal('title', target.title);
+              setVal('amount', target.amount);
+              setVal('category', mapTripCategoryHeuristic(target.category || target.title));
+            }
+
+            const extraHint = items.length > 1 ? `（共偵測到 ${items.length} 筆，已帶入第 1 筆；若要全部匯入請改用「📷 拍照批次記帳」）` : '';
+            if (statusEl) statusEl.textContent = `✓ AI 已自動填入：${target.title} (${target.currency || 'TWD'} ${target.amount})${extraHint}`;
+            showToast(`AI 辨識完成！已自動填入「${target.title}」`);
+          } catch (err) {
+            if (statusEl) statusEl.textContent = `辨識失敗：${err.message}`;
+            showToast(`照片辨識失敗：${err.message}`);
+          } finally {
+            input.value = '';
+          }
+        });
+      }
+
+      function openQuickPhotoBatchModal(context = 'personal') {
+        const isTrip = context === 'trip';
+        const trip = isTrip ? getCurrentTrip() : null;
+        if (isTrip && (!trip || !(trip.groups && trip.groups.length))) {
+          showToast('請先建立旅程並新增至少 1 個參與家庭／成員');
+          return;
+        }
+        let batchItems = [];
+        const titleMap = {
+          personal: '📷 拍照／選圖 AI 記帳（單筆或多筆收支）',
+          expense: '📷 拍照批次辨識支出（支援多張發票／收據／帳單）',
+          income: '📷 截圖批次辨識收入（薪資條／獎金／轉帳通知）',
+          trip: `📷 拍收據批次匯入團帳（${trip ? trip.name : ''}）`
+        };
+
+        const tripControlsHtml = isTrip ? `
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 p-3 rounded-lg bg-[#f7f7f5] hairline text-xs">
+            <div>
+              <label class="block text-[11px] font-medium text-zinc-600 mb-1">付款來源</label>
+              <select id="qpb-trip-payer" class="w-full h-8 px-2 rounded-lg hairline bg-white text-xs">
+                ${isTripAdmin() ? '<option value="pool">從「公費池」直接支付</option>' : ''}
+                ${(trip.groups || []).map((g) => `<option value="${escapeHtml(g.id)}" ${!isTripAdmin() && g.id === tripMyGroupId ? 'selected' : ''}>${escapeHtml(g.name)} 代墊</option>`).join('')}
+              </select>
+            </div>
+            <div>
+              <label class="block text-[11px] font-medium text-zinc-600 mb-1">分攤方式</label>
+              <select id="qpb-trip-split" class="w-full h-8 px-2 rounded-lg hairline bg-white text-xs">
+                <option value="weighted">依大人／小孩權重均分</option>
+                <option value="adults_only">僅大人均分</option>
+                <option value="equal_groups">按家庭組數平分</option>
+              </select>
+            </div>
+          </div>
+        ` : `
+          <label class="inline-flex items-center gap-2 text-xs text-zinc-700 cursor-pointer select-none">
+            <input id="qpb-history-only" type="checkbox" checked class="rounded border-zinc-300 text-zinc-900" />
+            <span>預設標記為已入帳／已扣款（僅記帳，不異動現有銀行餘額）</span>
+          </label>
+        `;
+
+        const html = `
+          <div class="space-y-3">
+            <div class="rounded-lg bg-[#f7f7f5] hairline p-3.5 flex flex-wrap items-center justify-between gap-2">
+              <div class="space-y-0.5">
+                <div class="text-xs font-semibold text-zinc-900">一次可選 1～5 張發票、收據、餐廳帳單或網銀截圖</div>
+                <div id="qpb-status" class="text-[11px] text-zinc-500">選完照片後會自動呼叫 AI 辨識全部單筆與多筆明細</div>
+              </div>
+              <label class="btn-focus inline-flex items-center h-8 px-3.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-medium cursor-pointer shrink-0">
+                <span>選擇／拍攝照片</span>
+                <input id="qpb-file-input" type="file" accept="image/*" multiple class="hidden" />
+              </label>
+            </div>
+            <div id="qpb-thumbs" class="flex flex-wrap gap-1.5"></div>
+            ${tripControlsHtml}
+            <div id="qpb-list-wrap" class="hidden space-y-2">
+              <div id="qpb-list-summary" class="text-xs font-mono-num text-zinc-700 font-medium"></div>
+              <div class="max-h-64 overflow-y-auto rounded-lg hairline divide-y divide-zinc-900/[0.06] bg-white" id="qpb-list-body"></div>
+            </div>
+          </div>
+        `;
+
+        openFormModal(titleMap[context] || titleMap.personal, html, () => {
+          const selected = batchItems.filter((x) => x.checked);
+          if (selected.length === 0) {
+            showToast('尚未辨識或勾選任何項目');
+            return;
+          }
+          if (isTrip) {
+            const payerVal = (document.getElementById('qpb-trip-payer') && document.getElementById('qpb-trip-payer').value) || 'pool';
+            const splitMode = (document.getElementById('qpb-trip-split') && document.getElementById('qpb-trip-split').value) || 'weighted';
+            const isPool = payerVal === 'pool';
+            const status = (!isTripAdmin() && trip.requireApproval !== false) ? 'pending' : 'approved';
+            if (!Array.isArray(trip.expenses)) trip.expenses = [];
+            selected.forEach((it) => {
+              const cur = it.currency || 'TWD';
+              trip.expenses.push({
+                id: uid('texp'),
+                date: it.date || todayISO(),
+                title: it.title || '拍照收據',
+                category: mapTripCategoryHeuristic(it.category || it.title),
+                currency: cur,
+                amount: it.amount,
+                amountBase: Math.round(it.amount * getTripRate(trip, cur)),
+                payerType: isPool ? 'pool' : 'member',
+                payerGroupId: isPool ? '' : payerVal,
+                payerMemberName: '',
+                splitMode,
+                participantGroupIds: (trip.groups || []).map((g) => g.id),
+                customShares: {},
+                status,
+                reimbursedFromPool: false,
+                note: it.note ? `${it.note}（AI拍照）` : 'AI 拍照辨識'
+              });
+            });
+            persistTrip(trip, true);
+            showToast(`已將 ${selected.length} 筆拍照收據匯入「${trip.name}」${status === 'pending' ? '（待總務核准）' : ''}`);
+          } else {
+            const histOnly = document.getElementById('qpb-history-only') ? document.getElementById('qpb-history-only').checked : true;
+            let cExp = 0, cInc = 0;
+            if (!Array.isArray(state.randomExpenses)) state.randomExpenses = [];
+            if (!Array.isArray(state.incomeReceipts)) state.incomeReceipts = [];
+            selected.forEach((it) => {
+              if (it.kind === 'income') {
+                state.incomeReceipts.push({
+                  id: uid('irec'),
+                  date: it.date || todayISO(),
+                  name: it.title || '拍照辨識收入',
+                  category: it.category || '其他收入',
+                  currency: it.currency || 'TWD',
+                  expectedAmount: 0,
+                  actualAmount: it.amount,
+                  account: it.account || '',
+                  depositMode: histOnly ? 'already_in_bank' : 'new_deposit',
+                  note: it.note ? `${it.note}（AI拍照）` : 'AI 拍照辨識'
+                });
+                if (!histOnly && it.account) {
+                  const bank = (state.cash || []).find((c) => c.bank === it.account && c.currency === (it.currency || 'TWD'));
+                  if (bank) bank.amount = Number((safeNum(bank.amount) + safeNum(it.amount)).toFixed(2));
+                }
+                cInc += 1;
+              } else {
+                state.randomExpenses.push({
+                  id: uid('rexp'),
+                  date: it.date || todayISO(),
+                  category: ALL_EXPENSE_CATEGORIES.includes(it.category) ? it.category : '其他隨機支出',
+                  title: it.title || '拍照辨識支出',
+                  currency: it.currency || 'TWD',
+                  amount: it.amount,
+                  account: it.account || '',
+                  deductStatus: histOnly ? 'paid' : 'unpaid',
+                  note: it.note ? `${it.note}（AI拍照）` : 'AI 拍照辨識'
+                });
+                cExp += 1;
+              }
+            });
+            saveState();
+            renderAll();
+            const parts = [];
+            if (cExp) parts.push(`支出 ${cExp} 筆`);
+            if (cInc) parts.push(`收入 ${cInc} 筆`);
+            showToast(`AI 拍照記帳完成：已寫入 ${parts.join('、')}`);
+          }
+        });
+
+        const submitBtn = document.querySelector('#modal-form button[type="submit"]');
+        if (submitBtn) submitBtn.textContent = '確認匯入已勾選項目';
+
+        const renderQpbList = () => {
+          const wrap = document.getElementById('qpb-list-wrap');
+          const sumEl = document.getElementById('qpb-list-summary');
+          const body = document.getElementById('qpb-list-body');
+          if (!wrap || !body) return;
+          if (batchItems.length === 0) { wrap.classList.add('hidden'); return; }
+          wrap.classList.remove('hidden');
+          const checkedCount = batchItems.filter((x) => x.checked).length;
+          if (sumEl) sumEl.textContent = `共辨識出 ${batchItems.length} 筆（已勾選 ${checkedCount} 筆）`;
+          body.innerHTML = batchItems.map((it, i) => {
+            const isInc = it.kind === 'income' && !isTrip;
+            return `
+              <label class="flex items-center justify-between gap-2 p-2.5 text-xs hover:bg-[#f7f7f5] cursor-pointer ${it.checked ? '' : 'opacity-45'}">
+                <div class="flex items-center gap-2 min-w-0">
+                  <input type="checkbox" data-qpb-idx="${i}" ${it.checked ? 'checked' : ''} class="rounded border-zinc-300 text-zinc-900 shrink-0" />
+                  <div class="min-w-0">
+                    <div class="flex items-center gap-1.5 flex-wrap">
+                      <span class="px-1.5 py-0.5 rounded text-[10px] font-medium ${isInc ? 'bg-rose-50 text-rose-700' : 'bg-emerald-50 text-emerald-700'}">${isTrip ? mapTripCategoryHeuristic(it.category || it.title) : (isInc ? '收入' : it.category)}</span>
+                      <span class="font-medium text-zinc-900 truncate">${escapeHtml(it.title)}</span>
+                      ${it.isDuplicate && !isTrip ? '<span class="px-1 py-0.5 rounded bg-amber-100 text-amber-800 text-[10px]">疑似重複</span>' : ''}
+                    </div>
+                    <div class="text-[11px] font-mono-num text-zinc-400">${escapeHtml(it.date)}${it.account ? ` · ${escapeHtml(it.account)}` : ''}</div>
+                  </div>
+                </div>
+                <span class="font-mono-num font-semibold shrink-0 ${isInc ? 'text-rose-700' : 'text-emerald-700'}">${escapeHtml(it.currency || 'TWD')} ${fmtNum(it.amount, (it.currency || 'TWD') === 'TWD' ? 0 : 2)}</span>
+              </label>
+            `;
+          }).join('');
+        };
+
+        const bodyEl = document.getElementById('qpb-list-body');
+        if (bodyEl) {
+          bodyEl.addEventListener('change', (ev) => {
+            const idx = ev.target.dataset.qpbIdx;
+            if (idx === undefined) return;
+            if (batchItems[Number(idx)]) {
+              batchItems[Number(idx)].checked = ev.target.checked;
+              renderQpbList();
+            }
+          });
+        }
+
+        const fileInput = document.getElementById('qpb-file-input');
+        const statusEl = document.getElementById('qpb-status');
+        const thumbsEl = document.getElementById('qpb-thumbs');
+        if (fileInput) {
+          fileInput.addEventListener('change', async (ev) => {
+            const files = [...(ev.target.files || [])].slice(0, 5);
+            if (!files.length) return;
+            if (statusEl) statusEl.textContent = `正在壓縮並透過 AI 辨識 ${files.length} 張照片...`;
+            try {
+              const imgs = await Promise.all(files.map((f) => compressImageToBase64(f)));
+              if (thumbsEl) {
+                thumbsEl.innerHTML = imgs.map((im) => `<img src="${im.previewUrl}" class="w-14 h-14 object-cover rounded-lg hairline" />`).join('');
+              }
+              const resp = await callAiEndpoint({
+                systemPrompt: '你是精準的繁體中文財務收據、發票、薪資條與帳單截圖辨識專家，只回傳合法 JSON。',
+                prompt: buildExtractionPrompt('transactions'),
+                attachments: imgs.map((im) => ({ mimeType: im.mimeType, base64: im.base64 })),
+                expectJson: true
+              });
+              const parsed = extractJsonFromAiText(resp.text);
+              let items = normalizeAiExtractedPayload(parsed, state).filter((x) => x.kind === 'expense' || x.kind === 'income');
+              if (context === 'income') {
+                items = items.map((x) => ({ ...x, kind: 'income' }));
+              } else if (context === 'expense' || isTrip) {
+                items = items.map((x) => ({ ...x, kind: 'expense', checked: isTrip ? true : x.checked }));
+              }
+              batchItems = items;
+              renderQpbList();
+              if (statusEl) statusEl.textContent = items.length > 0 ? `✓ AI 辨識完成！共擷取 ${items.length} 筆，請確認勾選後按下方匯入` : '未能從照片中辨識出任何交易明細';
+            } catch (err) {
+              if (statusEl) statusEl.textContent = `辨識失敗：${err.message}`;
+              showToast(`照片辨識失敗：${err.message}`);
+            } finally {
+              fileInput.value = '';
+            }
+          });
+        }
+      }
+
+      const btnPhotoExp = document.getElementById('btn-photo-batch-expense');
+      if (btnPhotoExp) btnPhotoExp.addEventListener('click', () => openQuickPhotoBatchModal('expense'));
+      const btnPhotoInc = document.getElementById('btn-photo-batch-income');
+      if (btnPhotoInc) btnPhotoInc.addEventListener('click', () => openQuickPhotoBatchModal('income'));
+      const btnPhotoTrip = document.getElementById('btn-photo-batch-trip');
+      if (btnPhotoTrip) btnPhotoTrip.addEventListener('click', () => openQuickPhotoBatchModal('trip'));
 
       // ============================================================
       // GROUP TRIP SPLITTER ENGINE (揪團出遊公費與多家庭分帳)
@@ -10354,6 +10707,7 @@
         const pIdsSet = new Set(Array.isArray(e.participantGroupIds) && e.participantGroupIds.length > 0 ? e.participantGroupIds : groups.map((g) => g.id));
 
         const html = `
+          ${buildPhotoAutofillBarHtml('拍餐廳帳單／發票／外幣收據 AI 自動填單')}
           ${memberSubmitMode ? `<div class="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-[11px] text-amber-900">${trip.requireApproval !== false ? '送出後將標記為「待總務核准」，總務確認後即自動計入最終結算（抵扣補繳或退款）。' : '送出後將直接計入最終結算！'}</div>` : ''}
           <div class="grid grid-cols-2 gap-3">
             <div><label class="block text-xs font-medium text-zinc-600 mb-1">日期</label><input name="date" type="date" required value="${escapeHtml(e.date || todayISO())}" class="w-full h-9 px-2.5 rounded-lg hairline text-xs font-mono-num" /></div>
@@ -10460,6 +10814,7 @@
             document.getElementById('te-custom-shares-wrap').classList.toggle('hidden', ev.target.value !== 'custom');
           });
         }
+        attachPhotoAutofill('trip');
       }
 
       async function openTripShareModal(trip) {
