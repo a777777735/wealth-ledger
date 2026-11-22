@@ -5209,6 +5209,13 @@
         const initAcc = firstTpl ? (firstTpl.account || '') : '';
         const initAmt = firstTpl ? safeNum(firstTpl.amount) : 0;
         const initName = firstTpl ? firstTpl.name : '';
+        const initCat = firstTpl ? (firstTpl.category || (isInc ? '薪資收入' : '居住與房貸')) : (isInc ? '薪資收入' : '居住與房貸');
+        const batchCatList = isInc
+          ? ['薪資收入', '三節／年終獎金', '未休假轉薪', '績效／專案獎金', '加班費／津貼', '租金收入', '定存與債息', '副業與顧問', '其他固定收入']
+          : ['居住與房貸', '保險與醫療', '水電與通訊', '訂閱與會員', '家庭與孝親', '交通與車貸', '餐飲美食', '購物與生活', '旅遊與娛樂', '其他固定支出', '其他隨機支出'];
+        const batchCatOptions = [...new Set([...batchCatList, initCat])].map((c) =>
+          `<option value="${escapeHtml(c)}" ${c === initCat ? 'selected' : ''}>${escapeHtml(c)}</option>`
+        ).join('');
 
         const now = new Date();
         const pad2 = (n) => String(n).padStart(2, '0');
@@ -5229,10 +5236,14 @@
              <option value="deduct_now">立即從銀行扣除 — 每筆自動扣減所選銀行餘額</option>`;
 
         const html = `
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
               <label class="block text-xs font-medium text-zinc-600 mb-1">${isInc ? '選擇固定收入來源' : '選擇固定支出項目'}</label>
               <select id="batch-tpl-select" name="tplId" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white">${tplOptions}</select>
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-zinc-600 mb-1">類別</label>
+              <select id="batch-item-cat" name="category" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white">${batchCatOptions}</select>
             </div>
             <div>
               <label class="block text-xs font-medium text-zinc-600 mb-1">項目名稱</label>
@@ -5278,6 +5289,7 @@
           const tplId = String(fd.get('tplId') || '');
           const tpl = templates.find((x) => x.id === tplId) || null;
           const itemName = String(fd.get('itemName') || '').trim();
+          const chosenCat = String(fd.get('category') || '').trim();
           const cur = String(fd.get('currency') || 'TWD');
           const acc = resolveModalAccount(fd);
           const balanceMode = String(fd.get('balanceMode') || (isInc ? 'already_in_bank' : 'paid'));
@@ -5302,7 +5314,7 @@
           let bankDelta = 0;
           if (isInc) {
             if (!Array.isArray(state.incomeReceipts)) state.incomeReceipts = [];
-            const cat = tpl ? (tpl.category || '薪資收入') : '薪資收入';
+            const cat = chosenCat || (tpl ? (tpl.category || '薪資收入') : '薪資收入');
             rows.forEach((r) => {
               state.incomeReceipts.push({
                 id: uid('irec'),
@@ -5329,7 +5341,7 @@
             });
           } else {
             if (!Array.isArray(state.randomExpenses)) state.randomExpenses = [];
-            const cat = tpl ? (tpl.category || '其他固定支出') : '其他固定支出';
+            const cat = chosenCat || (tpl ? (tpl.category || '其他固定支出') : '其他固定支出');
             const statusVal = balanceMode === 'unpaid' ? 'unpaid' : 'paid';
             rows.forEach((r) => {
               state.randomExpenses.push({
@@ -5417,6 +5429,16 @@
           const t = templates.find((x) => x.id === tplSel.value);
           if (!t) return;
           nameInput.value = t.name;
+          const catSel = document.getElementById('batch-item-cat');
+          if (catSel && t.category) {
+            if (!Array.from(catSel.options).some((o) => o.value === t.category)) {
+              const opt = document.createElement('option');
+              opt.value = t.category;
+              opt.textContent = t.category;
+              catSel.appendChild(opt);
+            }
+            catSel.value = t.category;
+          }
           const curSel = form.querySelector('select[name="currency"]');
           if (curSel) {
             curSel.value = t.currency || 'TWD';
@@ -5991,16 +6013,94 @@
           if (item) {
             const cur = item.currency || 'TWD';
             const amt = safeNum(item.amount);
-            const rate = cur === 'TWD' ? 1 : safeNum(state.fx[cur], 1);
-            const bank = (state.cash || []).find((c) => c.bank === item.account && c.currency === cur);
-            if (bank) {
-              bank.amount = Number((safeNum(bank.amount) - amt).toFixed(2));
+            const accDefault = item.account || '';
+            const html = `
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div><label class="block text-xs font-medium text-zinc-600 mb-1">扣款日期</label><input id="fexp-pay-date" name="date" type="date" required value="${todayISO()}" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" /></div>
+                <div><label class="block text-xs font-medium text-zinc-600 mb-1">項目名稱</label><input name="title" required value="${escapeHtml(item.name)}" class="w-full h-9 px-3 rounded-lg hairline text-sm" /></div>
+              </div>
+              <div class="grid grid-cols-2 gap-3">
+                <div><label class="block text-xs font-medium text-zinc-600 mb-1">幣別（連動帳戶）</label><select name="currency" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white">${buildCurrencyOptionsHtml(cur, true)}</select></div>
+                <div><label class="block text-xs font-medium text-zinc-600 mb-1">本次實付金額</label><input name="amount" type="number" step="0.01" min="0.01" required value="${amt > 0 ? amt : ''}" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" /></div>
+              </div>
+              <div class="grid grid-cols-1 gap-3">
+                <div>
+                  <label class="block text-xs font-medium text-zinc-600 mb-1">扣款銀行卡／帳戶</label>
+                  <select name="accountSelect" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white">${buildAccountOptionsHtml(cur, accDefault)}</select>
+                  <input name="accountCustom" placeholder="輸入自訂帳戶名稱" class="hidden mt-2 w-full h-9 px-3 rounded-lg hairline text-sm" />
+                </div>
+                <div>
+                  <label class="block text-xs font-medium text-zinc-600 mb-1">銀行餘額處理方式（避免重複扣款）</label>
+                  <select id="fexp-pay-mode" name="balanceMode" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white">
+                    <option value="deduct_now" selected>立即從銀行扣除 — 自動扣減上述銀行帳戶餘額</option>
+                    <option value="already_deducted">已從銀行扣除 — 僅記帳並寫入支出明細，不重複扣減餘額</option>
+                  </select>
+                </div>
+              </div>
+              <div><label class="block text-xs font-medium text-zinc-600 mb-1">備註</label><input name="note" value="${escapeHtml(item.note || '')}" placeholder="例如：11月帳單扣款" class="w-full h-9 px-3 rounded-lg hairline text-sm" /></div>
+            `;
+            openFormModal(`登記固定支出扣款：${item.name}`, html, (fd) => {
+              const payDate = String(fd.get('date') || todayISO());
+              const payTitle = String(fd.get('title') || item.name).trim();
+              const payCur = String(fd.get('currency') || cur);
+              const payAmt = safeNum(fd.get('amount'));
+              const payAcc = resolveModalAccount(fd);
+              const payMode = String(fd.get('balanceMode') || 'deduct_now');
+              const payNote = String(fd.get('note') || '').trim();
+              const rate = payCur === 'TWD' ? 1 : safeNum(state.fx[payCur], 1);
+
+              let bankUpdated = false;
+              if (payMode === 'deduct_now' && payAcc) {
+                const bank = (state.cash || []).find((c) => c.bank === payAcc && c.currency === payCur);
+                if (bank) {
+                  bank.amount = Number((safeNum(bank.amount) - payAmt).toFixed(2));
+                  bankUpdated = true;
+                }
+              }
+              item.deductStatus = 'paid';
+              if (!Array.isArray(state.randomExpenses)) state.randomExpenses = [];
+              state.randomExpenses.push({
+                id: uid('rexp'),
+                date: payDate,
+                category: item.category || '其他固定支出',
+                title: payTitle,
+                currency: payCur,
+                amount: payAmt,
+                account: payAcc,
+                deductStatus: 'paid',
+                note: payNote || '固定支出扣款'
+              });
+              state.ledger.push({
+                id: uid('led'),
+                date: payDate,
+                type: '其他收支',
+                title: `${payTitle} 扣款`,
+                amountTWD: -Math.round(payAmt * rate),
+                note: `${payMode === 'deduct_now' ? '立即扣款' : '已扣款（僅記帳）'}${payAcc ? ' · ' + payAcc : ''}${payNote ? ' · ' + payNote : ''}`
+              });
+              saveState();
+              renderAll();
+              if (payMode === 'deduct_now') {
+                showToast(bankUpdated ? `已寫入支出明細，並自 ${payAcc} 扣除 ${payCur} ${payAmt}` : '已寫入支出明細與收支流水');
+              } else {
+                showToast('已補登固定支出明細（維持原銀行餘額不重複扣款）');
+              }
+            });
+            wireCurrencyAccountSelect(accDefault);
+
+            const dEl = document.getElementById('fexp-pay-date');
+            const mEl = document.getElementById('fexp-pay-mode');
+            let mManual = false;
+            if (mEl) mEl.addEventListener('change', () => { mManual = true; });
+            if (dEl && mEl) {
+              const onDateChg = () => {
+                if (!mManual && /^\d{4}-\d{2}-\d{2}$/.test(dEl.value)) {
+                  mEl.value = dEl.value < todayISO() ? 'already_deducted' : 'deduct_now';
+                }
+              };
+              dEl.addEventListener('input', onDateChg);
+              dEl.addEventListener('change', onDateChg);
             }
-            item.deductStatus = 'paid';
-            state.ledger.push({ id: uid('led'), date: todayISO(), type: '其他收支', title: `${item.name} 扣款`, amountTWD: -Math.round(amt * rate), note: item.account ? `從 ${item.account} 扣款` : '' });
-            saveState();
-            renderAll();
-            showToast(bank ? `已標記已扣款，並自 ${bank.bank} 扣除 ${cur} ${amt}` : '已標記為已扣款並寫入收支流水');
           }
         }
         else if (action === 'pay-random-exp') {
