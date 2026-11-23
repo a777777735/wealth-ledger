@@ -1613,11 +1613,15 @@
             <div id="cfg-ai-live-test-bar" class="hidden rounded-lg bg-amber-50 border border-amber-200/80 px-3.5 py-2 text-xs text-amber-900 font-mono-num"></div>
 
             <!-- Saved Multi-Key Failover List -->
-            <div class="pt-3 hairline-t space-y-2">
-              <div class="flex items-center justify-between text-xs">
+            <div class="pt-3 hairline-t space-y-2.5">
+              <div class="flex flex-wrap items-center justify-between gap-2 text-xs">
                 <span class="font-semibold text-zinc-800">已加入的 AI Key 備援輪替清單（依順序自動切換）</span>
                 <span id="cfg-ai-key-count" class="text-[11px] font-mono-num text-zinc-400">0 組</span>
               </div>
+              <label class="inline-flex items-center gap-2 text-xs text-zinc-700 cursor-pointer select-none">
+                <input id="cfg-ai-sync-cloud" type="checkbox" checked class="rounded border-zinc-300 text-zinc-900" />
+                <span>同步多組 API Key 至我的私人 Google 雲端（換瀏覽器／手機登入自動帶回，匯出 JSON 備份仍會排除金鑰）</span>
+              </label>
               <div id="cfg-ai-key-list" class="space-y-2"></div>
             </div>
           </div>
@@ -2594,6 +2598,86 @@
         initialCloudSynced = false;
       }
 
+      function mergeAndApplyRemoteAiKeys(docData) {
+        if (appConfig.syncAiKeysToCloud === false) return { localHadNewerKeys: false, remoteHadNewerKeys: false };
+        if (!docData || !docData.aiKeysPayload) {
+          const localKeys = (typeof ensureAiKeysPool === 'function') ? ensureAiKeysPool() : (appConfig.aiKeys || []);
+          return { localHadNewerKeys: localKeys.length > 0, remoteHadNewerKeys: false };
+        }
+        let remoteWrap;
+        try {
+          remoteWrap = JSON.parse(docData.aiKeysPayload);
+        } catch (e) {
+          return { localHadNewerKeys: false, remoteHadNewerKeys: false };
+        }
+        const remKeys = Array.isArray(remoteWrap && remoteWrap.keys) ? remoteWrap.keys : [];
+        const remDel = (remoteWrap && remoteWrap.deletedIds && typeof remoteWrap.deletedIds === 'object') ? remoteWrap.deletedIds : {};
+        const remTs = safeNum(remoteWrap && remoteWrap.updatedAtMs, safeNum(docData.updatedAtMs, 0));
+
+        const localKeys = (typeof ensureAiKeysPool === 'function') ? ensureAiKeysPool() : (Array.isArray(appConfig.aiKeys) ? appConfig.aiKeys : []);
+        const localDel = (appConfig.aiKeysDeletedIds && typeof appConfig.aiKeysDeletedIds === 'object') ? appConfig.aiKeysDeletedIds : {};
+        const localTs = safeNum(appConfig.aiKeysUpdatedAtMs, 0);
+        const remoteIsNewer = remTs >= localTs;
+
+        const mergedDel = { ...localDel };
+        Object.keys(remDel).forEach((id) => {
+          mergedDel[id] = Math.max(safeNum(mergedDel[id], 0), safeNum(remDel[id], 0));
+        });
+
+        const byId = new Map();
+        const primaryOrder = remoteIsNewer ? [...remKeys, ...localKeys] : [...localKeys, ...remKeys];
+        const locById = new Map(localKeys.filter((k) => k && k.id).map((k) => [k.id, k]));
+        const remById = new Map(remKeys.filter((k) => k && k.id).map((k) => [k.id, k]));
+
+        let localHadNewerKeys = false;
+        let remoteHadNewerKeys = false;
+        const seenCreds = new Set();
+        const mergedKeys = [];
+
+        primaryOrder.forEach((raw) => {
+          if (!raw || !raw.id || byId.has(raw.id)) return;
+          byId.set(raw.id, true);
+          const locK = locById.get(raw.id);
+          const remK = remById.get(raw.id);
+          const delTs = safeNum(mergedDel[raw.id], 0);
+          const locKTs = locK ? safeNum(locK._updatedAt, localTs) : 0;
+          const remKTs = remK ? safeNum(remK._updatedAt, remTs) : 0;
+          if (delTs > 0 && delTs >= Math.max(locKTs, remKTs)) {
+            if (locK && !remK) remoteHadNewerKeys = true;
+            if (remK && !locK) localHadNewerKeys = true;
+            return;
+          }
+          let chosen = null;
+          if (locK && !remK) {
+            chosen = locK;
+            localHadNewerKeys = true;
+          } else if (remK && !locK) {
+            chosen = remK;
+            remoteHadNewerKeys = true;
+          } else if (locK && remK) {
+            chosen = (locKTs > remKTs || (locKTs === remKTs && !remoteIsNewer)) ? locK : remK;
+            if (JSON.stringify(locK) !== JSON.stringify(remK)) {
+              if (chosen === locK) localHadNewerKeys = true;
+              else remoteHadNewerKeys = true;
+            }
+          }
+          if (chosen) {
+            const credSig = `${chosen.provider}|${chosen.apiKey || ''}|${chosen.baseUrl || ''}`;
+            if (!seenCreds.has(credSig)) {
+              seenCreds.add(credSig);
+              mergedKeys.push(chosen);
+            }
+          }
+        });
+
+        appConfig.aiKeys = mergedKeys;
+        appConfig.aiKeysDeletedIds = mergedDel;
+        appConfig.aiKeysUpdatedAtMs = Math.max(localTs, remTs);
+        saveConfig();
+        if (typeof syncAiConfigUI === 'function') syncAiConfigUI();
+        return { localHadNewerKeys, remoteHadNewerKeys };
+      }
+
       function applyRemotePayload(docData, isManualPull = false) {
         if (!docData || !docData.payload) return false;
         let parsed;
@@ -2610,6 +2694,7 @@
         }
 
         const { merged, localHadNewer, remoteHadNewer } = mergeStates(state, parsed);
+        const { localHadNewerKeys, remoteHadNewerKeys } = mergeAndApplyRemoteAiKeys(docData);
         const prevDirty = Boolean(state._dirty);
         state = merged;
         if (state.quoteSettings) {
@@ -2619,19 +2704,19 @@
           if (state.quoteSettings.refreshIntervalMin !== undefined) appConfig.refreshIntervalMin = safeNum(state.quoteSettings.refreshIntervalMin, 5);
           saveConfig();
         }
-        state._dirty = Boolean(localHadNewer || prevDirty);
+        state._dirty = Boolean(localHadNewer || localHadNewerKeys || prevDirty);
         saveState(false);
         renderAll();
 
         // If local had unsynced additions/edits (e.g. from another browser or offline), immediately push merged result
-        if (localHadNewer || prevDirty) {
+        if (localHadNewer || localHadNewerKeys || prevDirty) {
           scheduleCloudPush();
         } else {
           cloudSyncState = 'synced';
           lastCloudSyncTimeStr = nowTimeHHMMSS();
           updateCloudStatusUI();
         }
-        return remoteHadNewer;
+        return Boolean(remoteHadNewer || remoteHadNewerKeys);
       }
 
       function startCloudRealtimeSync() {
@@ -2839,6 +2924,7 @@
                   renderAll();
                 }
               } catch (e) {}
+              mergeAndApplyRemoteAiKeys(snap.data());
             }
           }
 
@@ -2848,13 +2934,26 @@
           const payloadObj = { ...state };
           delete payloadObj._dirty;
 
-          await docRef.set({
+          const docWrite = {
             updatedAt: new Date(pushTs).toISOString(),
             updatedAtMs: pushTs,
             clientId: CLIENT_ID,
             email: currentUser.email || '',
             payload: JSON.stringify(payloadObj)
-          });
+          };
+          if (appConfig.syncAiKeysToCloud !== false) {
+            const keysToSync = (typeof ensureAiKeysPool === 'function') ? ensureAiKeysPool() : (appConfig.aiKeys || []);
+            const keysTs = Math.max(safeNum(appConfig.aiKeysUpdatedAtMs, 0), pushTs);
+            docWrite.aiKeysPayload = JSON.stringify({
+              updatedAtMs: keysTs,
+              keys: keysToSync,
+              deletedIds: appConfig.aiKeysDeletedIds || {}
+            });
+          } else {
+            docWrite.aiKeysPayload = '';
+          }
+
+          await docRef.set(docWrite);
 
           lastPushedAtMs = pushTs;
           state._dirty = false;
@@ -9447,6 +9546,8 @@
         }
         const curProv = (provEl && provEl.value) || provider;
         if (baseWrap) baseWrap.classList.toggle('hidden', curProv !== 'custom');
+        const syncChk = document.getElementById('cfg-ai-sync-cloud');
+        if (syncChk) syncChk.checked = appConfig.syncAiKeysToCloud !== false;
         updateAiProviderGuide(curProv);
         renderAiKeyPool();
 
@@ -10243,6 +10344,27 @@
         }
       }
 
+      function markAiKeysDirtyAndSync() {
+        appConfig.aiKeysUpdatedAtMs = Date.now();
+        saveConfig();
+        if (currentUser && fbDb && appConfig.syncAiKeysToCloud !== false) {
+          scheduleCloudPush();
+        }
+      }
+
+      const cfgAiSyncCloudEl = document.getElementById('cfg-ai-sync-cloud');
+      if (cfgAiSyncCloudEl) {
+        cfgAiSyncCloudEl.addEventListener('change', (e) => {
+          appConfig.syncAiKeysToCloud = Boolean(e.target.checked);
+          appConfig.aiKeysUpdatedAtMs = Date.now();
+          saveConfig();
+          if (currentUser && fbDb) {
+            scheduleCloudPush();
+          }
+          showToast(appConfig.syncAiKeysToCloud ? '已開啟：多組 API Key 將即時同步至你的私人 Google 雲端' : '已關閉雲端同步（並清除雲端上的 API Key 副本，僅保留本機）');
+        });
+      }
+
       const btnSaveAiCfg = document.getElementById('btn-save-ai-cfg');
       if (btnSaveAiCfg) {
         btnSaveAiCfg.addEventListener('click', () => {
@@ -10268,15 +10390,16 @@
             model,
             apiKey,
             baseUrl,
-            enabled: true
+            enabled: true,
+            _updatedAt: Date.now()
           });
-          saveConfig();
+          markAiKeysDirtyAndSync();
           const keyEl = document.getElementById('cfg-ai-key');
           const lblEl = document.getElementById('cfg-ai-label');
           if (keyEl) keyEl.value = '';
           if (lblEl) lblEl.value = '';
           syncAiConfigUI();
-          showToast(`已加入「${label}」至輪替清單（共 ${keys.length} 組）`);
+          showToast(`已加入「${label}」至輪替清單（共 ${keys.length} 組${currentUser && appConfig.syncAiKeysToCloud !== false ? '，已同步雲端' : ''}）`);
         });
       }
 
@@ -10293,24 +10416,27 @@
 
           if (act === 'up' && idx > 0) {
             [keys[idx - 1], keys[idx]] = [keys[idx], keys[idx - 1]];
-            saveConfig();
+            markAiKeysDirtyAndSync();
             syncAiConfigUI();
           } else if (act === 'down' && idx < keys.length - 1) {
             [keys[idx], keys[idx + 1]] = [keys[idx + 1], keys[idx]];
-            saveConfig();
+            markAiKeysDirtyAndSync();
             syncAiConfigUI();
           } else if (act === 'toggle') {
             keys[idx].enabled = keys[idx].enabled === false ? true : false;
-            saveConfig();
+            keys[idx]._updatedAt = Date.now();
+            markAiKeysDirtyAndSync();
             syncAiConfigUI();
           } else if (act === 'del') {
             const removed = keys.splice(idx, 1)[0];
             delete aiKeyTestStates[id];
+            if (!appConfig.aiKeysDeletedIds || typeof appConfig.aiKeysDeletedIds !== 'object') appConfig.aiKeysDeletedIds = {};
+            appConfig.aiKeysDeletedIds[id] = Date.now();
             if (keys.length === 0) {
               appConfig.aiApiKey = '';
               appConfig.aiBaseUrl = '';
             }
-            saveConfig();
+            markAiKeysDirtyAndSync();
             syncAiConfigUI();
             showToast(`已移除「${removed.label || removed.provider}」`);
           } else if (act === 'test') {
