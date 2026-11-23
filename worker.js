@@ -34,6 +34,10 @@ export default {
       return withCors(await handleAiModels(request, env));
     }
 
+    if (url.pathname === '/api/ai/openrouter-exchange') {
+      return withCors(await handleOpenRouterExchange(request));
+    }
+
     if (url.pathname === '/api/ai') {
       return withCors(await handleAiProxy(request, env));
     }
@@ -229,6 +233,7 @@ function handleAiStatus(env) {
   return jsonResp({
     ok: true,
     hasServerKey: {
+      cloudflare: Boolean(env && env.AI),
       groq: Boolean(env && env.GROQ_API_KEY),
       openrouter: Boolean(env && env.OPENROUTER_API_KEY),
       mistral: Boolean(env && env.MISTRAL_API_KEY),
@@ -257,6 +262,7 @@ async function handleAiProxy(request, env) {
 
   const provider = String(body.provider || 'gemini').toLowerCase().trim();
   const userKey = String(body.apiKey || '').trim();
+  const userEmail = String(body.userEmail || '').toLowerCase().trim();
   const systemPrompt = String(body.systemPrompt || '').trim();
   const prompt = String(body.prompt || '').trim();
   const expectJson = body.expectJson !== false;
@@ -277,8 +283,8 @@ async function handleAiProxy(request, env) {
   };
   const apiKey = userKey || String(envKeyMap[provider] || '').trim();
 
-  if (!apiKey && provider !== 'custom') {
-    return jsonResp({ ok: false, error: '尚未填寫 API Key，請先至「匯率與備份 → AI 模型設定」填寫金鑰' }, 400);
+  if (!apiKey && provider !== 'custom' && provider !== 'cloudflare') {
+    return jsonResp({ ok: false, error: '尚未填寫 API Key，請先至「匯率與備份 → AI 模型設定」填寫金鑰或使用一鍵連結 OpenRouter' }, 400);
   }
 
   try {
@@ -286,7 +292,25 @@ async function handleAiProxy(request, env) {
     let text = '';
     let usedModel = '';
 
-    if (provider === 'gemini') {
+    if (provider === 'cloudflare') {
+      if (!env || !env.AI) {
+        return jsonResp({ ok: false, error: '此站尚未啟用 Cloudflare Workers AI 綁定' }, 400);
+      }
+      const allowListRaw = String((env && env.CF_AI_ALLOWED_EMAILS) || '').trim();
+      if (allowListRaw) {
+        const allowed = allowListRaw.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+        if (!userEmail || !allowed.includes(userEmail)) {
+          return jsonResp({ ok: false, error: '站內免費保底 AI 僅限站長授權帳號使用，請點「一鍵連結 OpenRouter」使用您自己的免費額度' }, 403);
+        }
+      }
+      const hasPdf = attachments.some((a) => String(a.mimeType || '').includes('pdf'));
+      if (hasPdf) {
+        return jsonResp({ ok: false, error: 'Cloudflare Workers AI 不支援直接上傳 PDF，請改用截圖或 Google Gemini' }, 400);
+      }
+      const cfRes = await callCloudflareAI({ env, model: String(body.model || '').trim(), systemPrompt, prompt, attachments });
+      text = cfRes.text;
+      usedModel = cfRes.model;
+    } else if (provider === 'gemini') {
       const reqModel = String(body.model || '').trim();
       const primary = (!reqModel || reqModel === 'gemini-2.5-flash') ? 'gemini-3.8-flash' : reqModel;
       const gRes = await callGemini({ apiKey, model: primary, systemPrompt, prompt, attachments, expectJson });
@@ -600,7 +624,14 @@ async function handleAiModels(request, env) {
   try {
     let models = [];
 
-    if (provider === 'openrouter') {
+    if (provider === 'cloudflare') {
+      models = [
+        { id: '@cf/meta/llama-4-scout-17b-16e-instruct', label: '@cf/meta/llama-4-scout-17b-16e-instruct [圖+文・推薦]' },
+        { id: '@cf/meta/llama-3.2-11b-vision-instruct', label: '@cf/meta/llama-3.2-11b-vision-instruct [圖+文]' },
+        { id: '@cf/meta/llama-3.3-70b-instruct-fp8-fast', label: '@cf/meta/llama-3.3-70b-instruct-fp8-fast [純文字極速]' },
+        { id: '@cf/meta/llama-3.1-8b-instruct-fast', label: '@cf/meta/llama-3.1-8b-instruct-fast [輕量超快]' }
+      ];
+    } else if (provider === 'openrouter') {
       const headers = { 'Content-Type': 'application/json' };
       if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`;
       const res = await fetch('https://openrouter.ai/api/v1/models', { headers, signal: makeTimeoutSignal(10000) });
@@ -709,4 +740,79 @@ async function handleAiModels(request, env) {
     return jsonResp({ ok: false, error: (err && err.message) || '取得線上模型清單失敗' }, 502);
   }
 }
+
+async function callCloudflareAI({ env, model, systemPrompt, prompt, attachments = [] }) {
+  const hasImg = attachments.length > 0;
+  const candidates = hasImg
+    ? [...new Set([model, '@cf/meta/llama-4-scout-17b-16e-instruct', '@cf/meta/llama-3.2-11b-vision-instruct'].filter(Boolean))]
+    : [...new Set([model, '@cf/meta/llama-3.3-70b-instruct-fp8-fast', '@cf/meta/llama-4-scout-17b-16e-instruct', '@cf/meta/llama-3.1-8b-instruct-fast'].filter(Boolean))];
+
+  const messages = [];
+  if (systemPrompt) messages.push({ role: 'system', content: systemPrompt });
+  if (hasImg) {
+    const content = [];
+    if (prompt) content.push({ type: 'text', text: prompt });
+    for (const att of attachments) {
+      if (att && att.base64 && att.mimeType) {
+        content.push({
+          type: 'image_url',
+          image_url: { url: `data:${att.mimeType};base64,${att.base64}` }
+        });
+      }
+    }
+    messages.push({ role: 'user', content });
+  } else {
+    messages.push({ role: 'user', content: prompt });
+  }
+
+  let lastErr = 'Cloudflare Workers AI 呼叫失敗';
+  for (const m of candidates) {
+    try {
+      const out = await env.AI.run(m, { messages, max_tokens: 2048, temperature: 0.1 });
+      const text = (out && typeof out.response === 'string' && out.response)
+        || (out && out.choices && out.choices[0] && out.choices[0].message && out.choices[0].message.content)
+        || '';
+      if (text) return { text: String(text), model: m };
+    } catch (err) {
+      lastErr = (err && err.message) || lastErr;
+    }
+  }
+  throw new Error(lastErr);
+}
+
+async function handleOpenRouterExchange(request) {
+  if (request.method === 'OPTIONS') return new Response(null, { status: 204 });
+  if (request.method !== 'POST') return jsonResp({ ok: false, error: '僅支援 POST 請求' }, 405);
+  let body;
+  try {
+    body = await request.json();
+  } catch (e) {
+    return jsonResp({ ok: false, error: '請求 JSON 格式錯誤' }, 400);
+  }
+  const code = String(body.code || '').trim();
+  const codeVerifier = String(body.code_verifier || '').trim();
+  if (!code || !codeVerifier) {
+    return jsonResp({ ok: false, error: '缺少授權碼或驗證碼' }, 400);
+  }
+  try {
+    const res = await fetch('https://openrouter.ai/api/v1/auth/keys', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        code,
+        code_verifier: codeVerifier,
+        code_challenge_method: 'S256'
+      }),
+      signal: makeTimeoutSignal(12000)
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data || !data.key) {
+      throw new Error((data && (data.error || data.message)) || `OpenRouter 授權交換失敗 (${res.status})`);
+    }
+    return jsonResp({ ok: true, key: String(data.key) });
+  } catch (err) {
+    return jsonResp({ ok: false, error: (err && err.message) || 'OpenRouter 授權交換失敗' }, 502);
+  }
+}
+
 
