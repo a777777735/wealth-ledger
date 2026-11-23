@@ -38,6 +38,18 @@ export default {
       return withCors(await handleOpenRouterExchange(request));
     }
 
+    if (url.pathname === '/api/ai/cf-access/status') {
+      return withCors(await handleCfAccessStatus(request, env));
+    }
+
+    if (url.pathname === '/api/ai/cf-access/request') {
+      return withCors(await handleCfAccessRequest(request, env));
+    }
+
+    if (url.pathname === '/api/ai/cf-access/decide') {
+      return withCors(await handleCfAccessDecide(request, env));
+    }
+
     if (url.pathname === '/api/ai') {
       return withCors(await handleAiProxy(request, env));
     }
@@ -296,12 +308,10 @@ async function handleAiProxy(request, env) {
       if (!env || !env.AI) {
         return jsonResp({ ok: false, error: '此站尚未啟用 Cloudflare Workers AI 綁定' }, 400);
       }
-      const allowListRaw = String((env && env.CF_AI_ALLOWED_EMAILS) || '').trim();
-      if (allowListRaw) {
-        const allowed = allowListRaw.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
-        if (!userEmail || !allowed.includes(userEmail)) {
-          return jsonResp({ ok: false, error: '站內免費保底 AI 僅限站長授權帳號使用，請點「一鍵連結 OpenRouter」使用您自己的免費額度' }, 403);
-        }
+      const idToken = extractBearerToken(request, body);
+      const access = await checkCfAiAccess(idToken, env);
+      if (!access.allowed) {
+        return jsonResp({ ok: false, error: access.reason || 'Cloudflare Workers AI 需向站長申請並經同意後方可使用' }, 403);
       }
       const hasPdf = attachments.some((a) => String(a.mimeType || '').includes('pdf'));
       if (hasPdf) {
@@ -814,5 +824,313 @@ async function handleOpenRouterExchange(request) {
     return jsonResp({ ok: false, error: (err && err.message) || 'OpenRouter 授權交換失敗' }, 502);
   }
 }
+
+const DEFAULT_FIREBASE_PROJECT_ID = 'wealth-ledger-5ee42';
+const DEFAULT_FIREBASE_API_KEY = 'AIzaSyCDv2Xn_XLJ0irvq2W_TdTlPNI8exIndYM';
+
+function extractBearerToken(request, body) {
+  const auth = String(request.headers.get('Authorization') || '').trim();
+  if (/^Bearer\s+/i.test(auth)) {
+    return auth.replace(/^Bearer\s+/i, '').trim();
+  }
+  return String((body && body.firebaseIdToken) || '').trim();
+}
+
+function getCfAdminEmails(env) {
+  const raw = String((env && (env.CF_AI_ADMIN_EMAIL || env.CF_AI_ADMIN_EMAILS)) || '').trim();
+  return raw.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+}
+
+function getCfStaticAllowedEmails(env) {
+  const raw = String((env && env.CF_AI_ALLOWED_EMAILS) || '').trim();
+  return raw.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+}
+
+async function verifyFirebaseIdToken(idToken, env) {
+  if (!idToken) return null;
+  const apiKey = String((env && env.FIREBASE_API_KEY) || DEFAULT_FIREBASE_API_KEY).trim();
+  try {
+    const res = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${encodeURIComponent(apiKey)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ idToken }),
+      signal: makeTimeoutSignal(8000)
+    });
+    if (!res.ok) return null;
+    const data = await res.json().catch(() => null);
+    const u = data && Array.isArray(data.users) && data.users[0];
+    if (!u || !u.localId) return null;
+    return {
+      uid: String(u.localId),
+      email: String(u.email || '').toLowerCase().trim(),
+      displayName: String(u.displayName || '').trim()
+    };
+  } catch (e) {
+    return null;
+  }
+}
+
+async function computeCfApprovalSig(env, uid, email) {
+  const secretSeed = String(
+    (env && env.CF_AI_SIGNING_SECRET)
+    || (env && (env.CF_AI_ADMIN_EMAIL || env.CF_AI_ADMIN_EMAILS))
+    || ''
+  ).trim();
+  if (!secretSeed || !uid || !email) return '';
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    'raw',
+    enc.encode(`wealth-ledger-cf-ai-v1::${secretSeed}`),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+  const sigBuf = await crypto.subtle.sign('HMAC', key, enc.encode(`${uid}:${email.toLowerCase().trim()}:approved`));
+  return Array.from(new Uint8Array(sigBuf)).map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+function fsBaseUrl(env) {
+  const projectId = String((env && env.FIREBASE_PROJECT_ID) || DEFAULT_FIREBASE_PROJECT_ID).trim();
+  return `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(projectId)}/databases/(default)/documents`;
+}
+
+function fsParseCfDoc(doc) {
+  if (!doc || !doc.fields) return null;
+  const f = doc.fields;
+  const str = (k) => (f[k] && typeof f[k].stringValue === 'string' ? f[k].stringValue : '');
+  const num = (k) => (f[k] && f[k].integerValue !== undefined ? Number(f[k].integerValue) : 0);
+  const nameParts = String(doc.name || '').split('/');
+  const uidFromName = nameParts[nameParts.length - 1] || '';
+  return {
+    uid: str('uid') || uidFromName,
+    email: str('email').toLowerCase(),
+    displayName: str('displayName'),
+    note: str('note'),
+    status: str('status') || 'pending',
+    requestedAt: num('requestedAt'),
+    decidedAt: num('decidedAt'),
+    decidedBy: str('decidedBy'),
+    approvalSig: str('approvalSig')
+  };
+}
+
+function fsSanitizeForClient(rec) {
+  if (!rec) return null;
+  return {
+    uid: rec.uid,
+    email: rec.email,
+    displayName: rec.displayName,
+    note: rec.note,
+    status: rec.status,
+    requestedAt: rec.requestedAt,
+    decidedAt: rec.decidedAt,
+    decidedBy: rec.decidedBy
+  };
+}
+
+async function fsGetCfRequest(uid, idToken, env) {
+  const url = `${fsBaseUrl(env)}/cf_ai_requests/${encodeURIComponent(uid)}`;
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${idToken}` },
+    signal: makeTimeoutSignal(8000)
+  });
+  if (res.status === 404) return null;
+  if (!res.ok) return null;
+  const doc = await res.json().catch(() => null);
+  return fsParseCfDoc(doc);
+}
+
+async function fsListCfRequests(idToken, env) {
+  const url = `${fsBaseUrl(env)}/cf_ai_requests?pageSize=200`;
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${idToken}` },
+    signal: makeTimeoutSignal(8000)
+  });
+  if (!res.ok) return [];
+  const data = await res.json().catch(() => null);
+  const docs = (data && Array.isArray(data.documents)) ? data.documents : [];
+  const list = docs.map(fsParseCfDoc).filter(Boolean);
+  const rank = { pending: 0, approved: 1, rejected: 2 };
+  list.sort((a, b) => ((rank[a.status] ?? 9) - (rank[b.status] ?? 9)) || ((b.requestedAt || 0) - (a.requestedAt || 0)));
+  return list;
+}
+
+async function fsWriteCfRequest(uid, rec, idToken, env) {
+  const url = `${fsBaseUrl(env)}/cf_ai_requests/${encodeURIComponent(uid)}`;
+  const payload = {
+    fields: {
+      uid: { stringValue: String(rec.uid || uid) },
+      email: { stringValue: String(rec.email || '').toLowerCase() },
+      displayName: { stringValue: String(rec.displayName || '') },
+      note: { stringValue: String(rec.note || '') },
+      status: { stringValue: String(rec.status || 'pending') },
+      requestedAt: { integerValue: String(Math.floor(rec.requestedAt || Date.now())) },
+      decidedAt: { integerValue: String(Math.floor(rec.decidedAt || 0)) },
+      decidedBy: { stringValue: String(rec.decidedBy || '') },
+      approvalSig: { stringValue: String(rec.approvalSig || '') }
+    }
+  };
+  const res = await fetch(url, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${idToken}`
+    },
+    body: JSON.stringify(payload),
+    signal: makeTimeoutSignal(8000)
+  });
+  if (!res.ok) {
+    const errText = await res.text().catch(() => '');
+    throw new Error(`Firestore 寫入失敗 (${res.status})：${errText.slice(0, 120)}`);
+  }
+  return true;
+}
+
+async function checkCfAiAccess(idToken, env) {
+  const hasAiBinding = Boolean(env && env.AI);
+  const admins = getCfAdminEmails(env);
+  const staticAllowed = getCfStaticAllowedEmails(env);
+  const configured = admins.length > 0 || staticAllowed.length > 0;
+
+  if (!hasAiBinding) {
+    return { allowed: false, hasAiBinding: false, configured, isAdmin: false, status: 'disabled', reason: '此站尚未啟用 Cloudflare Workers AI 綁定' };
+  }
+  if (!configured) {
+    return {
+      allowed: false,
+      hasAiBinding: true,
+      configured: false,
+      isAdmin: false,
+      status: 'unconfigured',
+      reason: '站長尚未在 Cloudflare 環境變數設定 CF_AI_ADMIN_EMAIL，為保護額度目前已預設鎖定 Cloudflare Workers AI'
+    };
+  }
+  const user = await verifyFirebaseIdToken(idToken, env);
+  if (!user || !user.email) {
+    return {
+      allowed: false,
+      hasAiBinding: true,
+      configured: true,
+      isAdmin: false,
+      status: 'unauthenticated',
+      reason: 'Cloudflare Workers AI 僅限向站長申請並經同意的帳號使用，請先登入 Google 帳號並送出申請'
+    };
+  }
+  if (admins.includes(user.email)) {
+    return { allowed: true, hasAiBinding: true, configured: true, isAdmin: true, status: 'admin', user };
+  }
+  if (staticAllowed.includes(user.email)) {
+    return { allowed: true, hasAiBinding: true, configured: true, isAdmin: false, status: 'approved', user };
+  }
+  const doc = await fsGetCfRequest(user.uid, idToken, env);
+  if (doc && doc.status === 'approved') {
+    const expectedSig = await computeCfApprovalSig(env, user.uid, user.email);
+    if (expectedSig && doc.approvalSig === expectedSig) {
+      return { allowed: true, hasAiBinding: true, configured: true, isAdmin: false, status: 'approved', user, request: doc };
+    }
+  }
+  const st = (doc && doc.status === 'approved') ? 'none' : ((doc && doc.status) || 'none');
+  const reason = st === 'pending'
+    ? '你的 Cloudflare Workers AI 申請正在等待站長審核同意，請稍候（這期間可先用「⚡ 一鍵連結 OpenRouter」免費額度）'
+    : (st === 'rejected'
+      ? '你的 Cloudflare Workers AI 申請未獲同意，請改用「⚡ 一鍵連結 OpenRouter」或自己的免費 API Key'
+      : 'Cloudflare Workers AI 僅限向站長申請並經同意的使用者使用，請至「設定 → AI 智慧匯入」點擊申請');
+  return { allowed: false, hasAiBinding: true, configured: true, isAdmin: false, status: st, user, request: doc, reason };
+}
+
+async function handleCfAccessStatus(request, env) {
+  if (request.method === 'OPTIONS') return new Response(null, { status: 204 });
+  if (request.method !== 'POST') return jsonResp({ ok: false, error: '僅支援 POST 請求' }, 405);
+  const body = await request.json().catch(() => ({}));
+  const idToken = extractBearerToken(request, body);
+  const access = await checkCfAiAccess(idToken, env);
+  let requests = [];
+  if (access.isAdmin && idToken) {
+    const all = await fsListCfRequests(idToken, env);
+    requests = all.map(fsSanitizeForClient);
+  }
+  return jsonResp({
+    ok: true,
+    hasAiBinding: access.hasAiBinding,
+    configured: access.configured,
+    isAdmin: access.isAdmin,
+    allowed: access.allowed,
+    status: access.status,
+    reason: access.reason || '',
+    request: fsSanitizeForClient(access.request),
+    requests
+  });
+}
+
+async function handleCfAccessRequest(request, env) {
+  if (request.method === 'OPTIONS') return new Response(null, { status: 204 });
+  if (request.method !== 'POST') return jsonResp({ ok: false, error: '僅支援 POST 請求' }, 405);
+  const body = await request.json().catch(() => ({}));
+  const idToken = extractBearerToken(request, body);
+  const access = await checkCfAiAccess(idToken, env);
+  if (!access.configured) {
+    return jsonResp({ ok: false, error: access.reason }, 400);
+  }
+  if (!access.user) {
+    return jsonResp({ ok: false, error: '請先登入 Google 帳號才能送出申請' }, 401);
+  }
+  if (access.allowed) {
+    return jsonResp({ ok: true, status: access.status, message: '你已擁有 Cloudflare Workers AI 使用權限' });
+  }
+  const note = String(body.note || '').trim().slice(0, 120);
+  try {
+    await fsWriteCfRequest(access.user.uid, {
+      uid: access.user.uid,
+      email: access.user.email,
+      displayName: access.user.displayName,
+      note,
+      status: 'pending',
+      requestedAt: Date.now(),
+      decidedAt: 0,
+      decidedBy: '',
+      approvalSig: ''
+    }, idToken, env);
+    return jsonResp({ ok: true, status: 'pending', message: '已送出申請，請等待站長同意！' });
+  } catch (err) {
+    return jsonResp({ ok: false, error: (err && err.message) || '送出申請失敗' }, 502);
+  }
+}
+
+async function handleCfAccessDecide(request, env) {
+  if (request.method === 'OPTIONS') return new Response(null, { status: 204 });
+  if (request.method !== 'POST') return jsonResp({ ok: false, error: '僅支援 POST 請求' }, 405);
+  const body = await request.json().catch(() => ({}));
+  const idToken = extractBearerToken(request, body);
+  const caller = await verifyFirebaseIdToken(idToken, env);
+  const admins = getCfAdminEmails(env);
+  if (!caller || !admins.includes(caller.email)) {
+    return jsonResp({ ok: false, error: '只有站長可以審核 Cloudflare Workers AI 使用申請' }, 403);
+  }
+  const targetUid = String(body.targetUid || '').trim();
+  const decision = String(body.decision || '').trim();
+  if (!targetUid || !['approved', 'rejected'].includes(decision)) {
+    return jsonResp({ ok: false, error: '缺少申請者 UID 或無效的審核動作' }, 400);
+  }
+  const existing = await fsGetCfRequest(targetUid, idToken, env);
+  if (!existing) {
+    return jsonResp({ ok: false, error: '找不到該筆申請紀錄' }, 404);
+  }
+  const approvalSig = decision === 'approved'
+    ? await computeCfApprovalSig(env, targetUid, existing.email)
+    : '';
+  try {
+    await fsWriteCfRequest(targetUid, {
+      ...existing,
+      status: decision,
+      decidedAt: Date.now(),
+      decidedBy: caller.email,
+      approvalSig
+    }, idToken, env);
+    return jsonResp({ ok: true, targetUid, decision });
+  } catch (err) {
+    return jsonResp({ ok: false, error: (err && err.message) || '更新審核狀態失敗' }, 502);
+  }
+}
+
 
 

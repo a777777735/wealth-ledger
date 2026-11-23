@@ -1631,6 +1631,18 @@
               </label>
               <div id="cfg-ai-key-list" class="space-y-2"></div>
             </div>
+
+            <!-- Cloudflare Workers AI Approval & Admin Panel -->
+            <div id="cf-ai-access-panel" class="pt-3 hairline-t space-y-2.5 hidden">
+              <div class="flex flex-wrap items-center justify-between gap-2 text-xs">
+                <div class="flex items-center gap-2">
+                  <span class="font-semibold text-zinc-800">🔒 Cloudflare Workers AI 權限申請／站長審核</span>
+                  <span id="cf-ai-access-badge" class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-zinc-100 text-zinc-600">檢查中…</span>
+                </div>
+                <button id="btn-cf-access-refresh" type="button" class="btn-focus h-7 px-2.5 rounded-lg bg-white hover:bg-zinc-50 text-zinc-700 hairline text-[11px] font-medium">🔄 重新整理狀態</button>
+              </div>
+              <div id="cf-ai-access-body" class="space-y-2 text-xs"></div>
+            </div>
           </div>
 
           <!-- Live Quote Feed -->
@@ -2799,6 +2811,9 @@
               startCloudRealtimeSync();
             } else {
               stopCloudRealtimeSync();
+            }
+            if (typeof refreshCfAiAccessStatus === 'function') {
+              refreshCfAiAccessStatus();
             }
           });
           updateCloudStatusUI();
@@ -9575,7 +9590,7 @@
         updateAiProviderGuide(curProv);
         renderAiKeyPool();
 
-        const serverHasAny = Object.values(aiServerKeyStatus).some(Boolean);
+        const serverHasAny = Object.entries(aiServerKeyStatus).some(([k, v]) => Boolean(v) && (k !== 'cloudflare' || Boolean(cfAiAccessState && cfAiAccessState.allowed)));
         const hasKey = enabledKeys.length > 0 || serverHasAny;
         const primary = enabledKeys[0];
         const statusText = enabledKeys.length > 1
@@ -9597,10 +9612,155 @@
         if (typeof updateAiCopilotModelBadge === 'function') updateAiCopilotModelBadge();
       }
 
+      let cfAiAccessState = {
+        hasAiBinding: false,
+        configured: false,
+        isAdmin: false,
+        allowed: false,
+        status: 'unauthenticated',
+        reason: '',
+        request: null,
+        requests: []
+      };
+
+      async function getCurrentFirebaseIdToken() {
+        try {
+          if (currentUser && typeof currentUser.getIdToken === 'function') {
+            return await currentUser.getIdToken();
+          }
+        } catch (e) {}
+        return '';
+      }
+
+      function renderCfAiAccessPanel() {
+        const panel = document.getElementById('cf-ai-access-panel');
+        const badge = document.getElementById('cf-ai-access-badge');
+        const body = document.getElementById('cf-ai-access-body');
+        if (!panel || !badge || !body) return;
+        const show = Boolean(aiServerKeyStatus.cloudflare || cfAiAccessState.hasAiBinding);
+        panel.classList.toggle('hidden', !show);
+        if (!show) return;
+
+        const st = cfAiAccessState;
+        const setBadge = (text, tone) => {
+          const cls = tone === 'emerald'
+            ? 'bg-emerald-50 text-emerald-700'
+            : (tone === 'amber' ? 'bg-amber-50 text-amber-800' : (tone === 'rose' ? 'bg-rose-50 text-rose-700' : 'bg-zinc-100 text-zinc-600'));
+          badge.className = `inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium ${cls}`;
+          badge.textContent = text;
+        };
+
+        if (!st.configured) {
+          setBadge('未設定站長（已鎖定）', 'amber');
+          body.innerHTML = `<div class="rounded-lg bg-amber-50 border border-amber-200/80 px-3 py-2 text-amber-900">站長尚未在 Cloudflare Worker 環境變數設定 <code class="font-mono-num">CF_AI_ADMIN_EMAIL=你的Gmail</code>，為保護額度目前已預設鎖定 Cloudflare Workers AI。</div>`;
+          return;
+        }
+
+        if (st.status === 'unauthenticated') {
+          setBadge('請先登入 Google', 'zinc');
+          body.innerHTML = `<div class="rounded-lg bg-[#f7f7f5] hairline px-3 py-2 text-zinc-600">Cloudflare Workers AI 僅限向站長申請並經同意的帳號使用。請先點擊左上角登入 Google 帳號後即可提出申請；或直接點擊上方「⚡ 一鍵連結 OpenRouter」使用自己的免費額度。</div>`;
+          return;
+        }
+
+        if (st.isAdmin) {
+          const reqs = Array.isArray(st.requests) ? st.requests : [];
+          const pendingCount = reqs.filter((r) => r.status === 'pending').length;
+          setBadge(pendingCount > 0 ? `🛡️ 站長（${pendingCount} 筆待審核）` : '🛡️ 站長（完整權限）', pendingCount > 0 ? 'amber' : 'emerald');
+          if (reqs.length === 0) {
+            body.innerHTML = `<div class="rounded-lg bg-emerald-50/70 border border-emerald-200/70 px-3 py-2 text-emerald-900">目前尚無其他使用者的 Cloudflare AI 使用申請。有人申請時會顯示在此處讓你一鍵「同意」或「拒絕」。</div>`;
+            return;
+          }
+          body.innerHTML = reqs.map((r) => {
+            const stBadge = r.status === 'approved'
+              ? '<span class="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 text-[10px] font-medium">已同意</span>'
+              : (r.status === 'rejected'
+                ? '<span class="px-1.5 py-0.5 rounded bg-rose-50 text-rose-700 text-[10px] font-medium">已拒絕</span>'
+                : '<span class="px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 text-[10px] font-medium">待審核</span>');
+            const timeStr = r.requestedAt ? new Date(r.requestedAt).toLocaleString('zh-TW', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '';
+            const approveBtn = r.status !== 'approved'
+              ? `<button type="button" data-cf-decide="approved" data-cf-uid="${escapeHtml(r.uid)}" class="btn-focus h-7 px-2.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-[11px] font-medium">✅ 同意</button>`
+              : '';
+            const rejectBtn = r.status !== 'rejected'
+              ? `<button type="button" data-cf-decide="rejected" data-cf-uid="${escapeHtml(r.uid)}" class="btn-focus h-7 px-2.5 rounded-lg bg-white hover:bg-rose-50 text-rose-700 hairline text-[11px] font-medium">${r.status === 'approved' ? '撤銷權限' : '❌ 拒絕'}</button>`
+              : '';
+            return `
+              <div class="rounded-lg bg-[#f7f7f5] hairline px-3 py-2 flex flex-wrap items-center justify-between gap-2">
+                <div class="min-w-0 space-y-0.5">
+                  <div class="flex flex-wrap items-center gap-1.5">
+                    <span class="font-medium text-zinc-900">${escapeHtml(r.displayName || r.email)}</span>
+                    <span class="text-[11px] font-mono-num text-zinc-500">${escapeHtml(r.email)}</span>
+                    ${stBadge}
+                    ${timeStr ? `<span class="text-[10px] font-mono-num text-zinc-400">${escapeHtml(timeStr)}</span>` : ''}
+                  </div>
+                  ${r.note ? `<p class="text-[11px] text-zinc-600">備註：${escapeHtml(r.note)}</p>` : ''}
+                </div>
+                <div class="flex items-center gap-1.5 shrink-0">${approveBtn}${rejectBtn}</div>
+              </div>
+            `;
+          }).join('');
+          return;
+        }
+
+        if (st.allowed) {
+          setBadge('✅ 站長已同意', 'emerald');
+          body.innerHTML = `<div class="rounded-lg bg-emerald-50 border border-emerald-200/80 px-3 py-2 text-emerald-900">站長已同意你的使用權限！你現在可以直接使用 Cloudflare Workers AI（並已自動加入免費保底）。</div>`;
+          return;
+        }
+
+        if (st.status === 'pending') {
+          setBadge('⏳ 等待站長同意', 'amber');
+          body.innerHTML = `<div class="rounded-lg bg-amber-50 border border-amber-200/80 px-3 py-2 text-amber-900">你已送出 Cloudflare Workers AI 使用申請，請等待站長審核同意（這期間可先點上方「⚡ 一鍵連結 OpenRouter」免費使用自己的額度）。</div>`;
+          return;
+        }
+
+        setBadge(st.status === 'rejected' ? '❌ 未獲同意' : '🔒 尚未申請', st.status === 'rejected' ? 'rose' : 'zinc');
+        body.innerHTML = `
+          <div class="rounded-lg bg-[#f7f7f5] hairline p-3 space-y-2">
+            <p class="text-zinc-600">${st.status === 'rejected' ? '先前的申請未獲同意，你可以補充說明後重新申請，或點上方「⚡ 一鍵連結 OpenRouter」使用自己的免費額度。' : 'Cloudflare Workers AI 使用站長帳號額度，需先送出申請並由站長同意後方可使用。'}</p>
+            <div class="flex flex-wrap items-center gap-2">
+              <input id="cf-ai-req-note" type="text" maxlength="120" placeholder="給站長的備註（選填，例如：我是誰／用途）" class="flex-1 min-w-[200px] h-8 px-3 rounded-lg hairline bg-white text-xs" />
+              <button id="btn-cf-access-apply" type="button" class="btn-focus h-8 px-3 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-medium shrink-0">📨 申請使用 Cloudflare AI</button>
+            </div>
+          </div>
+        `;
+      }
+
+      async function refreshCfAiAccessStatus() {
+        try {
+          const idToken = await getCurrentFirebaseIdToken();
+          const res = await fetch(apiUrl('/api/ai/cf-access/status'), {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(idToken ? { Authorization: `Bearer ${idToken}` } : {})
+            },
+            body: JSON.stringify({ firebaseIdToken: idToken })
+          });
+          const data = await res.json().catch(() => null);
+          if (data && data.ok) {
+            cfAiAccessState = {
+              hasAiBinding: Boolean(data.hasAiBinding),
+              configured: Boolean(data.configured),
+              isAdmin: Boolean(data.isAdmin),
+              allowed: Boolean(data.allowed),
+              status: data.status || 'unauthenticated',
+              reason: data.reason || '',
+              request: data.request || null,
+              requests: Array.isArray(data.requests) ? data.requests : []
+            };
+            renderCfAiAccessPanel();
+            syncAiConfigUI();
+          }
+        } catch (e) {}
+      }
+
       fetch(apiUrl('/api/ai/status')).then((r) => r.json()).then((d) => {
         if (d && d.ok && d.hasServerKey) {
           aiServerKeyStatus = d.hasServerKey;
           syncAiConfigUI();
+          if (aiServerKeyStatus.cloudflare) {
+            refreshCfAiAccessStatus();
+          }
         }
       }).catch(() => {});
 
@@ -9921,15 +10081,20 @@
 
       async function callAiSingleKey(keyEntry, { systemPrompt, prompt, attachments = [], expectJson = true }) {
         const provider = (keyEntry && keyEntry.provider) || appConfig.aiProvider || 'gemini';
+        const idToken = provider === 'cloudflare' ? await getCurrentFirebaseIdToken() : '';
         const res = await fetch(apiUrl('/api/ai'), {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            ...(idToken ? { Authorization: `Bearer ${idToken}` } : {})
+          },
           body: JSON.stringify({
             provider,
             apiKey: (keyEntry && keyEntry.apiKey) || '',
             model: (keyEntry && keyEntry.model) || AI_PROVIDER_DEFAULTS[provider] || '',
             baseUrl: (keyEntry && keyEntry.baseUrl) || '',
             userEmail: (currentUser && currentUser.email) || '',
+            ...(idToken ? { firebaseIdToken: idToken } : {}),
             systemPrompt,
             prompt,
             attachments,
@@ -9945,6 +10110,7 @@
 
       async function callAiEndpoint({ systemPrompt, prompt, attachments = [], expectJson = true, onProgress = null }) {
         const keys = ensureAiKeysPool().filter((k) => k.enabled !== false);
+        const cfApproved = Boolean(aiServerKeyStatus.cloudflare && cfAiAccessState && cfAiAccessState.allowed);
         const cfFallback = {
           id: 'cf_builtin',
           label: 'Cloudflare 內建免費保底',
@@ -9964,7 +10130,7 @@
                   apiKey: appConfig.aiApiKey || '',
                   baseUrl: appConfig.aiBaseUrl || ''
                 }]
-              : (aiServerKeyStatus.cloudflare
+              : (cfApproved
                   ? [cfFallback]
                   : [{
                       id: 'default',
@@ -9974,7 +10140,7 @@
                       apiKey: '',
                       baseUrl: appConfig.aiBaseUrl || ''
                     }]));
-        if (aiServerKeyStatus.cloudflare && !candidates.some((c) => c.provider === 'cloudflare')) {
+        if (cfApproved && !candidates.some((c) => c.provider === 'cloudflare')) {
           candidates.push(cfFallback);
         }
 
@@ -10512,6 +10678,89 @@
       const btnOpenRouterOAuth = document.getElementById('btn-openrouter-oauth');
       if (btnOpenRouterOAuth) {
         btnOpenRouterOAuth.addEventListener('click', startOpenRouterOAuth);
+      }
+
+      const btnCfAccessRefresh = document.getElementById('btn-cf-access-refresh');
+      if (btnCfAccessRefresh) {
+        btnCfAccessRefresh.addEventListener('click', async () => {
+          btnCfAccessRefresh.disabled = true;
+          try {
+            await refreshCfAiAccessStatus();
+            showToast('已更新 Cloudflare AI 權限狀態');
+          } finally {
+            btnCfAccessRefresh.disabled = false;
+          }
+        });
+      }
+
+      const cfAiAccessBodyEl = document.getElementById('cf-ai-access-body');
+      if (cfAiAccessBodyEl) {
+        cfAiAccessBodyEl.addEventListener('click', async (ev) => {
+          const applyBtn = ev.target.closest('#btn-cf-access-apply');
+          if (applyBtn) {
+            const idToken = await getCurrentFirebaseIdToken();
+            if (!idToken) {
+              showToast('請先登入 Google 帳號才能送出申請');
+              return;
+            }
+            const noteEl = document.getElementById('cf-ai-req-note');
+            const note = (noteEl && noteEl.value || '').trim();
+            applyBtn.disabled = true;
+            const orig = applyBtn.textContent;
+            applyBtn.textContent = '送出申請中…';
+            try {
+              const res = await fetch(apiUrl('/api/ai/cf-access/request'), {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  Authorization: `Bearer ${idToken}`
+                },
+                body: JSON.stringify({ firebaseIdToken: idToken, note })
+              });
+              const data = await res.json().catch(() => ({}));
+              if (!res.ok || !data.ok) {
+                throw new Error(data.error || `申請失敗 (${res.status})`);
+              }
+              showToast(data.message || '已送出申請，請等待站長同意！');
+              await refreshCfAiAccessStatus();
+            } catch (err) {
+              showToast(`送出申請失敗：${err.message || err}`);
+            } finally {
+              applyBtn.disabled = false;
+              applyBtn.textContent = orig;
+            }
+            return;
+          }
+
+          const decBtn = ev.target.closest('[data-cf-decide]');
+          if (decBtn) {
+            const decision = decBtn.dataset.cfDecide;
+            const targetUid = decBtn.dataset.cfUid;
+            const idToken = await getCurrentFirebaseIdToken();
+            if (!idToken || !targetUid) return;
+            decBtn.disabled = true;
+            try {
+              const res = await fetch(apiUrl('/api/ai/cf-access/decide'), {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  Authorization: `Bearer ${idToken}`
+                },
+                body: JSON.stringify({ firebaseIdToken: idToken, targetUid, decision })
+              });
+              const data = await res.json().catch(() => ({}));
+              if (!res.ok || !data.ok) {
+                throw new Error(data.error || `審核失敗 (${res.status})`);
+              }
+              showToast(decision === 'approved' ? '已同意該使用者的 Cloudflare AI 權限！' : '已拒絕／撤銷該使用者的 Cloudflare AI 權限');
+              await refreshCfAiAccessStatus();
+            } catch (err) {
+              showToast(`審核失敗：${err.message || err}`);
+            } finally {
+              decBtn.disabled = false;
+            }
+          }
+        });
       }
 
       const cfgAiKeyListEl = document.getElementById('cfg-ai-key-list');
@@ -12851,7 +13100,7 @@
         const badge = document.getElementById('ai-copilot-model-badge');
         if (!badge) return;
         const enabled = ensureAiKeysPool().filter((k) => k.enabled !== false);
-        const serverHasAny = Object.values(aiServerKeyStatus).some(Boolean);
+        const serverHasAny = Object.entries(aiServerKeyStatus).some(([k, v]) => Boolean(v) && (k !== 'cloudflare' || Boolean(cfAiAccessState && cfAiAccessState.allowed)));
         const hasKey = enabled.length > 0 || serverHasAny;
         if (enabled.length > 1) {
           badge.textContent = `${enabled.length} 組 Key 輪替 · ${enabled[0].label || enabled[0].provider}`;
