@@ -10164,7 +10164,7 @@
         return data;
       }
 
-      async function callAiEndpoint({ systemPrompt, prompt, attachments = [], expectJson = true, onProgress = null }) {
+      async function callAiEndpoint({ systemPrompt, prompt, attachments = [], expectJson = true, onProgress = null, avoidKeyId = '' }) {
         const keys = ensureAiKeysPool().filter((k) => k.enabled !== false);
         const cfApproved = Boolean(aiServerKeyStatus.cloudflare && cfAiAccessState && cfAiAccessState.allowed);
         const cfFallback = {
@@ -10203,20 +10203,22 @@
         // Smart routing:
         // 1. If request has image attachments, prioritize vision-capable keys over text-only models
         // 2. Deprioritize keys currently in cooldown (circuit breaker) so we don't waste 40s retrying overloaded models
+        // 3. If avoidKeyId is set (user clicked "換組重辨識"), move that key behind other healthy vision keys
         const hasImages = Array.isArray(attachments) && attachments.some((a) => String(a && a.mimeType || '').startsWith('image/'));
         const scored = rawCandidates.map((k, origIdx) => {
           const cdSec = getAiKeyCooldownRemainingSec(k.id);
           const visionOk = !hasImages || isAiKeyVisionCapable(k);
-          // Tier 0: healthy + vision-capable
-          // Tier 1: cooling down + vision-capable (fallback if all healthy fail)
-          // Tier 2: text-only (last resort when images attached)
-          const tier = !visionOk ? 2 : (cdSec > 0 ? 1 : 0);
+          const isAvoided = Boolean(avoidKeyId && k.id === avoidKeyId && rawCandidates.length > 1);
+          // Tier 0: healthy + vision-capable (not avoided)
+          // Tier 1: avoided key (when user requests switching model on retry)
+          // Tier 2: cooling down + vision-capable (fallback if all healthy fail)
+          // Tier 3: text-only (last resort when images attached)
+          const tier = !visionOk ? 3 : (cdSec > 0 ? 2 : (isAvoided ? 1 : 0));
           return { k, origIdx, tier, cdSec };
         });
         scored.sort((a, b) => (a.tier - b.tier) || (a.origIdx - b.origIdx));
-        // If there is at least one tier-0 key, skip tier-1 (cooling down) and tier-2 (non-vision) unless tier-0 all fail
         const candidates = scored.map((s) => s.k);
-        const skippedCooldownLabels = scored.filter((s) => s.tier === 1).map((s) => s.k.label || s.k.provider);
+        const skippedCooldownLabels = scored.filter((s) => s.tier === 2).map((s) => s.k.label || s.k.provider);
 
         const errors = [];
         for (let i = 0; i < candidates.length; i++) {
@@ -10388,13 +10390,15 @@
         }
       }
 
+      let migrateBatchesMeta = []; // [{ batchIdx, imgs, target, userHint, usedKeyId, usedKeyLabel, model, count }]
+
       function renderMigratePreview() {
         const sec = document.getElementById('migrate-preview-section');
         const sumEl = document.getElementById('migrate-preview-summary');
         const tbody = document.getElementById('migrate-preview-tbody');
         if (!sec || !sumEl || !tbody) return;
 
-        if (migratePreviewItems.length === 0) {
+        if (migratePreviewItems.length === 0 && migrateBatchesMeta.length === 0) {
           sec.classList.add('hidden');
           return;
         }
@@ -10411,7 +10415,31 @@
         const expSumTWD = expItems.reduce((s, x) => s + safeNum(x.amount) * rateOf(x.currency), 0);
         const incSumTWD = incItems.reduce((s, x) => s + safeNum(x.amount) * rateOf(x.currency), 0);
 
+        const batchBarHtml = migrateBatchesMeta.length > 0 ? `
+          <div class="col-span-full rounded-lg bg-[#f7f7f5] hairline p-3 space-y-1.5 text-xs">
+            <div class="font-medium text-zinc-700">🤖 各批次辨識模組與單批重跑（不同批次若用到不同 API Key 導致差異，可單獨點該批換組重辨識）：</div>
+            ${migrateBatchesMeta.map((b, bIdx) => {
+              const labelStr = migrateBatchesMeta.length > 1 ? `第 ${bIdx + 1}/${migrateBatchesMeta.length} 批（${(b.imgs || []).length} 張圖）` : `本次辨識（${(b.imgs || []).length || 1} 張）`;
+              return `
+                <div class="flex flex-wrap items-center justify-between gap-2 bg-white rounded-md px-2.5 py-1.5 hairline text-[11px]">
+                  <div class="flex flex-wrap items-center gap-1.5">
+                    <span class="px-1.5 py-0.5 rounded bg-zinc-900 text-white text-[10px] font-mono-num">${escapeHtml(labelStr)}</span>
+                    <span class="font-medium text-zinc-800">${escapeHtml(b.usedKeyLabel || 'AI')}</span>
+                    <span class="text-zinc-500 font-mono-num">${escapeHtml(b.model || '')}</span>
+                    <span class="text-emerald-700 font-mono-num">→ 擷取 ${b.count || 0} 筆</span>
+                  </div>
+                  <div class="flex items-center gap-1 shrink-0">
+                    <button type="button" data-mig-rerun-batch="${bIdx}" data-mig-switch="0" class="btn-focus h-6 px-2 rounded bg-[#f7f7f5] hover:bg-zinc-200/70 hairline text-zinc-800 text-[10px] font-medium">🔄 原組重跑此批</button>
+                    <button type="button" data-mig-rerun-batch="${bIdx}" data-mig-switch="1" class="btn-focus h-6 px-2 rounded bg-zinc-900 hover:bg-zinc-800 text-white text-[10px] font-medium">⚡ 換組重辨識此批</button>
+                  </div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        ` : '';
+
         sumEl.innerHTML = `
+          ${batchBarHtml}
           <div class="p-3 rounded-lg bg-[#f7f7f5] hairline">
             <div class="text-[11px] text-zinc-500">待匯入支出</div>
             <div class="mt-0.5 text-sm font-semibold font-mono-num text-emerald-700">${expItems.length} 筆 · ${fmtTWD(expSumTWD)}</div>
@@ -10434,6 +10462,7 @@
         const visible = migratePreviewItems.slice(0, showLimit);
         const rowsHtml = visible.map((it, idx) => {
           const dupBadge = it.isDuplicate ? '<span class="ml-1 px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 text-[10px] font-sans">疑似重複</span>' : '';
+          const modBadge = it._batchTag ? `<span class="ml-1 px-1.5 py-0.5 rounded bg-[#f7f7f5] hairline text-zinc-600 text-[10px] font-mono-num">🤖 ${escapeHtml(it._batchTag)}</span>` : '';
           if (it.kind === 'expense' || it.kind === 'income') {
             const isInc = it.kind === 'income';
             return `
@@ -10442,7 +10471,7 @@
                 <td class="py-2 px-2 font-sans"><span class="px-1.5 py-0.5 rounded text-[10px] font-medium ${isInc ? 'bg-rose-50 text-rose-700' : 'bg-emerald-50 text-emerald-700'}">${isInc ? '收入' : '支出'}</span></td>
                 <td class="py-2 px-2 text-zinc-700 whitespace-nowrap">${escapeHtml(it.date)}</td>
                 <td class="py-2 px-2 font-sans text-zinc-700">${escapeHtml(it.category)}</td>
-                <td class="py-2 px-2 font-sans text-zinc-900">${escapeHtml(it.title)}${dupBadge}</td>
+                <td class="py-2 px-2 font-sans text-zinc-900">${escapeHtml(it.title)}${modBadge}${dupBadge}</td>
                 <td class="py-2 px-2 text-right font-semibold ${isInc ? 'text-rose-700' : 'text-emerald-700'}">${it.currency !== 'TWD' ? `${escapeHtml(it.currency)} ` : ''}${fmtNum(it.amount, it.currency === 'TWD' ? 0 : 2)}</td>
                 <td class="py-2 px-2 font-sans text-zinc-500">${escapeHtml(it.account || it.note || '')}</td>
               </tr>
@@ -10454,7 +10483,7 @@
                 <td class="py-2 px-2 font-sans"><span class="px-1.5 py-0.5 rounded text-[10px] font-medium bg-zinc-900 text-white">股票</span></td>
                 <td class="py-2 px-2 text-zinc-700">${escapeHtml(it.market)}</td>
                 <td class="py-2 px-2 font-semibold text-zinc-900">${escapeHtml(it.symbol)}</td>
-                <td class="py-2 px-2 font-sans text-zinc-800">${escapeHtml(it.name)}${dupBadge}</td>
+                <td class="py-2 px-2 font-sans text-zinc-800">${escapeHtml(it.name)}${modBadge}${dupBadge}</td>
                 <td class="py-2 px-2 text-right text-zinc-900">${fmtNum(it.shares, 2)} 股 @ ${fmtNum(it.avgCost, 2)}</td>
                 <td class="py-2 px-2 font-sans text-zinc-500">${escapeHtml(it.account || it.currency)}</td>
               </tr>
@@ -10466,7 +10495,7 @@
                 <td class="py-2 px-2 font-sans"><span class="px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-700">現金</span></td>
                 <td class="py-2 px-2 text-zinc-700">${escapeHtml(it.currency)}</td>
                 <td class="py-2 px-2 font-sans text-zinc-700">銀行帳戶</td>
-                <td class="py-2 px-2 font-sans text-zinc-900">${escapeHtml(it.bank)}${dupBadge}</td>
+                <td class="py-2 px-2 font-sans text-zinc-900">${escapeHtml(it.bank)}${modBadge}${dupBadge}</td>
                 <td class="py-2 px-2 text-right font-semibold text-zinc-900">${escapeHtml(it.currency)} ${fmtNum(it.amount, it.currency === 'TWD' ? 0 : 2)}</td>
                 <td class="py-2 px-2 font-sans text-zinc-500">${escapeHtml(it.note || '')}</td>
               </tr>
@@ -11451,6 +11480,57 @@
         });
       }
 
+      const migPreviewSummaryEl = document.getElementById('migrate-preview-summary');
+      if (migPreviewSummaryEl) {
+        migPreviewSummaryEl.addEventListener('click', async (ev) => {
+          const btn = ev.target.closest('[data-mig-rerun-batch]');
+          if (!btn) return;
+          const bIdx = Number(btn.dataset.migRerunBatch);
+          const switchKey = btn.dataset.migSwitch === '1';
+          const meta = migrateBatchesMeta[bIdx];
+          if (!meta) return;
+          btn.disabled = true;
+          const origText = btn.textContent;
+          btn.textContent = '重跑中…';
+          setMigrateStatus(`正在重新辨識第 ${bIdx + 1} 批截圖...`);
+          try {
+            const resp = await callAiEndpoint({
+              systemPrompt: '你是精準的繁體中文財務單據與金融 App 截圖辨識專家，只回傳合法 JSON。',
+              prompt: buildExtractionPrompt(meta.target || 'auto', meta.userHint || ''),
+              attachments: (meta.imgs || []).map((x) => ({ mimeType: x.mimeType, base64: x.base64 })),
+              expectJson: true,
+              avoidKeyId: switchKey ? (meta.usedKeyId || '') : '',
+              onProgress: (p) => { if (p && p.message) setMigrateStatus(`[重跑第 ${bIdx + 1} 批] ${p.message}`); }
+            });
+            const parsed = extractJsonFromAiText(resp.text);
+            const keyLabel = resp.usedKeyLabel || resp.usedProvider || 'AI';
+            const tag = migrateBatchesMeta.length > 1 ? `第${bIdx + 1}批·${keyLabel}` : `${keyLabel}${resp.model ? ` (${resp.model})` : ''}`;
+            const newPart = normalizeAiExtractedPayload(parsed, state).map((it) => ({
+              ...it,
+              _batchIdx: bIdx,
+              _batchTag: tag
+            }));
+            const keptOther = migratePreviewItems.filter((it) => it._batchIdx !== bIdx);
+            migratePreviewItems = [...keptOther, ...newPart].toSorted((a, b) => (a._batchIdx ?? 0) - (b._batchIdx ?? 0));
+            migrateBatchesMeta[bIdx] = {
+              ...meta,
+              usedKeyId: resp.usedKeyId || '',
+              usedKeyLabel: keyLabel,
+              model: resp.model || '',
+              count: newPart.length
+            };
+            renderMigratePreview();
+            showToast(`第 ${bIdx + 1} 批已由「${keyLabel}」重新辨識完成（共 ${newPart.length} 筆）`);
+          } catch (err) {
+            showToast(`重跑第 ${bIdx + 1} 批失敗：${err.message}`);
+          } finally {
+            setMigrateStatus('');
+            btn.disabled = false;
+            btn.textContent = origText;
+          }
+        });
+      }
+
       const btnImgRun = document.getElementById('btn-migrate-img-run');
       if (btnImgRun) {
         btnImgRun.addEventListener('click', async () => {
@@ -11460,25 +11540,28 @@
           setMigrateStatus(`AI 正在平行辨識 ${migrateImages.length} 張截圖...`);
           btnImgRun.disabled = true;
           try {
-            const batchResults = await callAiImagesInParallelBatches({
-              imgs: migrateImages,
-              batchSize: 2,
-              runSingleBatch: (chunk, idx, total) => callAiEndpoint({
-                systemPrompt: '你是精準的繁體中文財務單據與金融 App 截圖辨識專家，只回傳合法 JSON。',
-                prompt: buildExtractionPrompt(target, userHint),
-                attachments: chunk.map((x) => ({ mimeType: x.mimeType, base64: x.base64 })),
-                expectJson: true,
-                onProgress: (p) => {
-                  if (p && p.message) setMigrateStatus(total > 1 ? `[批次 ${idx + 1}/${total}] ${p.message}` : p.message);
-                }
-              })
-            });
+            const chunks = [];
+            for (let i = 0; i < migrateImages.length; i += 2) chunks.push(migrateImages.slice(i, i + 2));
+            const batchResults = await Promise.all(chunks.map((chunk, idx) => callAiEndpoint({
+              systemPrompt: '你是精準的繁體中文財務單據與金融 App 截圖辨識專家，只回傳合法 JSON。',
+              prompt: buildExtractionPrompt(target, userHint),
+              attachments: chunk.map((x) => ({ mimeType: x.mimeType, base64: x.base64 })),
+              expectJson: true,
+              onProgress: (p) => {
+                if (p && p.message) setMigrateStatus(chunks.length > 1 ? `[批次 ${idx + 1}/${chunks.length}] ${p.message}` : p.message);
+              }
+            })));
             const mergedItems = [];
             const seenBatchKeys = new Set();
-            batchResults.forEach((resp) => {
+            migrateBatchesMeta = [];
+            batchResults.forEach((resp, bIdx) => {
+              let count = 0;
+              const keyLabel = resp.usedKeyLabel || resp.usedProvider || 'AI';
+              const tag = batchResults.length > 1 ? `第${bIdx + 1}批·${keyLabel}` : `${keyLabel}${resp.model ? ` (${resp.model})` : ''}`;
               try {
                 const parsed = extractJsonFromAiText(resp.text);
                 const list = normalizeAiExtractedPayload(parsed, state);
+                count = list.length;
                 list.forEach((it) => {
                   const bKey = `${it.kind}|${it.date || ''}|${Math.round(safeNum(it.amount))}|${String(it.title || it.symbol || it.bank || '').toLowerCase()}`;
                   if (seenBatchKeys.has(bKey)) {
@@ -11487,9 +11570,23 @@
                   } else {
                     seenBatchKeys.add(bKey);
                   }
-                  mergedItems.push(it);
+                  mergedItems.push({
+                    ...it,
+                    _batchIdx: bIdx,
+                    _batchTag: tag
+                  });
                 });
               } catch (e) {}
+              migrateBatchesMeta.push({
+                batchIdx: bIdx,
+                imgs: chunks[bIdx] || [],
+                target,
+                userHint,
+                usedKeyId: resp.usedKeyId || '',
+                usedKeyLabel: keyLabel,
+                model: resp.model || '',
+                count
+              });
             });
             migratePreviewItems = mergedItems;
             migrateSkippedTransfers = 0;
@@ -11744,17 +11841,21 @@
         if (!input) return;
         let lastImg = null;
 
-        const runAutofillWithImg = async (img) => {
+        let lastUsedKeyId = '';
+        const runAutofillWithImg = async (img, switchKey = false) => {
           if (!img) return;
-          if (statusEl) statusEl.textContent = '正在呼叫 AI 辨識圖片...';
+          if (statusEl) statusEl.textContent = switchKey ? '正在切換另一組 AI 模型重新辨識圖片...' : '正在呼叫 AI 辨識圖片...';
           try {
             const resp = await callAiEndpoint({
               systemPrompt: '你是精準的繁體中文收據、發票與金融截圖辨識專家，只回傳合法 JSON。',
               prompt: buildExtractionPrompt('transactions'),
               attachments: [{ mimeType: img.mimeType, base64: img.base64 }],
               expectJson: true,
+              avoidKeyId: switchKey ? lastUsedKeyId : '',
               onProgress: (p) => { if (statusEl && p && p.message) statusEl.textContent = p.message; }
             });
+            lastUsedKeyId = resp.usedKeyId || '';
+            const modelBadge = `${resp.usedKeyLabel || resp.usedProvider || 'AI'}${resp.model ? ` (${resp.model})` : ''}`;
             const parsed = extractJsonFromAiText(resp.text);
             const items = normalizeAiExtractedPayload(parsed, state);
             const form = document.getElementById('modal-form');
@@ -11769,7 +11870,7 @@
 
             if (!target) {
               if (statusEl) {
-                statusEl.innerHTML = `<span>未能從圖片辨識出金額或明細</span> <button type="button" id="btn-modal-photo-retry" class="ml-1.5 px-2 py-0.5 rounded bg-zinc-900 text-white text-[10px] font-medium hover:bg-zinc-800">🔄 重送辨識</button>`;
+                statusEl.innerHTML = `<span>[${escapeHtml(modelBadge)}] 未能從圖片辨識出金額或明細</span> <button type="button" id="btn-modal-photo-retry" class="ml-1.5 px-2 py-0.5 rounded bg-zinc-900 text-white text-[10px] font-medium hover:bg-zinc-800">🔄 換組重辨識</button>`;
               }
               showToast('未能辨識出收支項目');
               return;
@@ -11818,13 +11919,15 @@
               setVal('category', mapTripCategoryHeuristic(target.category || target.title));
             }
 
-            const dupHint = target.isDuplicate ? ' ⚠️（注意：帳本已有相似日期與金額紀錄）' : '';
-            const extraHint = items.length > 1 ? `（共偵測到 ${items.length} 筆，已帶入第 1 筆；若要全部匯入請改用「📷 拍照批次記帳」）` : '';
-            if (statusEl) statusEl.textContent = `✓ AI 已自動填入：${target.title} (${target.currency || 'TWD'} ${target.amount})${dupHint}${extraHint}`;
-            showToast(`AI 辨識完成！已自動填入「${target.title}」${dupHint}`);
+            const dupHint = target.isDuplicate ? ' ⚠️（帳本已有相似日期與金額紀錄）' : '';
+            const extraHint = items.length > 1 ? `（共偵測到 ${items.length} 筆，已帶入第 1 筆）` : '';
+            if (statusEl) {
+              statusEl.innerHTML = `<span class="text-emerald-700 font-medium">✓ 已填入：${escapeHtml(target.title)} (${escapeHtml(target.currency || 'TWD')} ${escapeHtml(String(target.amount))})</span> <span class="px-1.5 py-0.5 rounded bg-white hairline text-[10px] font-mono-num text-zinc-600">🤖 ${escapeHtml(modelBadge)}</span>${escapeHtml(dupHint)}${escapeHtml(extraHint)} <button type="button" id="btn-modal-photo-retry" class="ml-1 px-2 py-0.5 rounded bg-white hover:bg-zinc-100 hairline text-zinc-800 text-[10px] font-medium">🔄 換組重辨識</button>`;
+            }
+            showToast(`AI 辨識完成（${modelBadge}）！已自動填入「${target.title}」`);
           } catch (err) {
             if (statusEl) {
-              statusEl.innerHTML = `<span class="text-rose-700">辨識失敗：${escapeHtml(err.message)}</span> <button type="button" id="btn-modal-photo-retry" class="ml-1.5 px-2 py-0.5 rounded bg-zinc-900 text-white text-[10px] font-medium hover:bg-zinc-800">🔄 重送辨識</button>`;
+              statusEl.innerHTML = `<span class="text-rose-700">辨識失敗：${escapeHtml(err.message)}</span> <button type="button" id="btn-modal-photo-retry" class="ml-1.5 px-2 py-0.5 rounded bg-zinc-900 text-white text-[10px] font-medium hover:bg-zinc-800">🔄 重新辨識</button>`;
             }
             showToast(`照片辨識失敗：${err.message}`);
           }
@@ -11833,7 +11936,7 @@
         if (statusEl) {
           statusEl.addEventListener('click', (ev) => {
             if (ev.target && ev.target.id === 'btn-modal-photo-retry' && lastImg) {
-              runAutofillWithImg(lastImg);
+              runAutofillWithImg(lastImg, true);
             }
           });
         }
@@ -11994,6 +12097,7 @@
             </div>
             ${tripControlsHtml}
             <div id="qpb-list-wrap" class="hidden space-y-2">
+              <div id="qpb-batch-stats-bar" class="hidden rounded-lg bg-[#f7f7f5] hairline p-2.5 space-y-1.5 text-[11px]"></div>
               <div class="flex items-center justify-between gap-2">
                 <div id="qpb-list-summary" class="text-xs font-mono-num text-zinc-700 font-medium"></div>
                 <button id="btn-qpb-add-row" type="button" class="text-xs font-medium text-zinc-700 hover:text-zinc-900">＋ 手動加一列</button>
@@ -12132,12 +12236,44 @@
           sumEl.textContent = `共 ${batchItems.length} 筆明細（已勾選 ${checkedCount} 筆，可直接修改各欄位）`;
         };
 
+        let qpbBatchesMeta = []; // [{ batchIdx, imgs, usedKeyId, usedKeyLabel, model, count }]
+
+        const renderQpbBatchStats = () => {
+          const bar = document.getElementById('qpb-batch-stats-bar');
+          if (!bar) return;
+          if (!qpbBatchesMeta.length) {
+            bar.classList.add('hidden');
+            return;
+          }
+          bar.classList.remove('hidden');
+          bar.innerHTML = `<div class="font-medium text-zinc-700">🤖 各批次辨識模組與單批重跑（若某批辨識結果不理想，可單獨點該批換組重辨識）：</div>` +
+            qpbBatchesMeta.map((b, bIdx) => {
+              const imgCount = Array.isArray(b.imgs) ? b.imgs.length : 0;
+              const imgRange = qpbBatchesMeta.length > 1 ? `第 ${bIdx + 1}/${qpbBatchesMeta.length} 批（${imgCount} 張圖）` : `本次辨識（${imgCount || 1} 張）`;
+              return `
+                <div class="flex flex-wrap items-center justify-between gap-2 bg-white rounded-md px-2.5 py-1.5 hairline">
+                  <div class="flex flex-wrap items-center gap-1.5">
+                    <span class="px-1.5 py-0.5 rounded bg-zinc-900 text-white text-[10px] font-mono-num">${escapeHtml(imgRange)}</span>
+                    <span class="font-medium text-zinc-800">${escapeHtml(b.usedKeyLabel || 'AI')}</span>
+                    <span class="text-zinc-500 font-mono-num">${escapeHtml(b.model || '')}</span>
+                    <span class="text-emerald-700 font-mono-num">→ 擷取 ${b.count || 0} 筆</span>
+                  </div>
+                  <div class="flex items-center gap-1 shrink-0">
+                    <button type="button" data-qpb-rerun-batch="${bIdx}" data-qpb-switch="0" class="btn-focus h-6 px-2 rounded bg-[#f7f7f5] hover:bg-zinc-200/70 hairline text-zinc-800 text-[10px] font-medium">🔄 原組重跑此批</button>
+                    <button type="button" data-qpb-rerun-batch="${bIdx}" data-qpb-switch="1" class="btn-focus h-6 px-2 rounded bg-zinc-900 hover:bg-zinc-800 text-white text-[10px] font-medium">⚡ 換組重辨識此批</button>
+                  </div>
+                </div>
+              `;
+            }).join('');
+        };
+
         const renderQpbList = () => {
           const wrap = document.getElementById('qpb-list-wrap');
           const body = document.getElementById('qpb-list-body');
           if (!wrap || !body) return;
-          if (batchItems.length === 0) { wrap.classList.add('hidden'); return; }
+          if (batchItems.length === 0 && qpbBatchesMeta.length === 0) { wrap.classList.add('hidden'); return; }
           wrap.classList.remove('hidden');
+          renderQpbBatchStats();
           updateQpbSummary();
           body.innerHTML = batchItems.map((it, i) => {
             const isInc = it.kind === 'income' && !isTrip;
@@ -12152,6 +12288,9 @@
             ).join('');
             const showCustomAcc = Boolean(it._customAcc || (it.account && !isKnownAccountForCurrency(cur, it.account)));
             const accOptions = !isTrip ? buildAccountOptionsHtml(cur, showCustomAcc ? '__CUSTOM__' : (it.account || '')) : '';
+            const batchBadge = it._batchTag
+              ? `<span class="px-1.5 py-0.5 rounded bg-[#f7f7f5] hairline text-zinc-600 text-[10px] font-mono-num" title="辨識此筆的批次與 AI 模型">🤖 ${escapeHtml(it._batchTag)}</span>`
+              : '';
             return `
               <div class="p-2.5 space-y-2 text-xs ${it.checked ? '' : 'opacity-45'}">
                 <div class="flex flex-wrap items-center gap-1.5">
@@ -12165,6 +12304,7 @@
                   <input type="date" data-qpb-idx="${i}" data-qpb-field="date" value="${escapeHtml(it.date || todayISO())}" class="h-7 px-1.5 rounded hairline bg-white text-[11px] font-mono-num" title="日期" />
                   <input type="time" data-qpb-idx="${i}" data-qpb-field="time" value="${escapeHtml(it.time || '')}" class="h-7 px-1.5 rounded hairline bg-white text-[11px] font-mono-num" title="時間（選填）" />
                   <select data-qpb-idx="${i}" data-qpb-field="category" class="h-7 px-1.5 rounded hairline bg-white text-[11px] max-w-[120px]">${catOptions}</select>
+                  ${batchBadge}
                   ${it.isDuplicate && !isTrip ? '<span class="px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 text-[10px]">疑似重複</span>' : ''}
                 </div>
                 <div class="grid grid-cols-12 gap-1.5 pl-5">
@@ -12376,6 +12516,88 @@
           });
         }
 
+        const normalizeQpbBatchItems = (parsed, bIdx, totalBatches, resp) => {
+          const rawDefAcc = (document.getElementById('qpb-default-account') && document.getElementById('qpb-default-account').value) || '';
+          const defParsed = parseDefaultAccVal(rawDefAcc);
+          const keyLabel = resp.usedKeyLabel || resp.usedProvider || 'AI';
+          const batchTag = totalBatches > 1 ? `第${bIdx + 1}批·${keyLabel}` : `${keyLabel}${resp.model ? ` (${resp.model})` : ''}`;
+          let part = normalizeAiExtractedPayload(parsed, state).filter((x) => x.kind === 'expense' || x.kind === 'income');
+          if (context === 'income') {
+            part = part.map((x) => ({ ...x, kind: 'income' }));
+          } else if (context === 'expense' || isTrip) {
+            part = part.map((x) => ({
+              ...x,
+              kind: 'expense',
+              category: isTrip ? mapTripCategoryHeuristic(x.category || x.title) : x.category,
+              checked: isTrip ? !x.isDuplicate : x.checked
+            }));
+          }
+          if (!isTrip) {
+            part = part.map((x) => {
+              const rowCur = x.currency || 'TWD';
+              const fallbackAcc = (defParsed.acc && (!defParsed.cur || defParsed.cur === rowCur))
+                ? defParsed.acc
+                : defaultAccountForCurrency(rowCur);
+              return { ...x, account: x.account || fallbackAcc };
+            });
+          }
+          return part.map((x) => ({
+            ...x,
+            _batchIdx: bIdx,
+            _batchTag: batchTag,
+            _usedKeyId: resp.usedKeyId || '',
+            _usedKeyLabel: keyLabel,
+            _usedModel: resp.model || ''
+          }));
+        };
+
+        const batchStatsBarEl = document.getElementById('qpb-batch-stats-bar');
+        if (batchStatsBarEl) {
+          batchStatsBarEl.addEventListener('click', async (ev) => {
+            const btn = ev.target.closest('[data-qpb-rerun-batch]');
+            if (!btn) return;
+            const bIdx = Number(btn.dataset.qpbRerunBatch);
+            const switchKey = btn.dataset.qpbSwitch === '1';
+            const meta = qpbBatchesMeta[bIdx];
+            if (!meta) return;
+            const userHint = ((document.getElementById('qpb-user-hint') && document.getElementById('qpb-user-hint').value) || '').trim();
+            const fallbackDate = (document.getElementById('qpb-default-date') && document.getElementById('qpb-default-date').value) || todayISO();
+            btn.disabled = true;
+            const origText = btn.textContent;
+            btn.textContent = '重跑中…';
+            try {
+              const resp = await callAiEndpoint({
+                systemPrompt: '你是精準的繁體中文財務收據、發票、月統計表、薪資條與帳單截圖辨識專家，只回傳合法 JSON。',
+                prompt: buildExtractionPrompt('transactions', userHint, fallbackDate),
+                attachments: (meta.imgs || []).map((im) => ({ mimeType: im.mimeType, base64: im.base64 })),
+                expectJson: true,
+                avoidKeyId: switchKey ? (meta.usedKeyId || '') : '',
+                onProgress: (p) => { if (statusEl && p && p.message) statusEl.textContent = `[重跑第 ${bIdx + 1} 批] ${p.message}`; }
+              });
+              const parsed = extractJsonFromAiText(resp.text);
+              const newPart = normalizeQpbBatchItems(parsed, bIdx, qpbBatchesMeta.length, resp);
+              // Replace only items belonging to bIdx, preserving user edits in other batches
+              const keptOther = batchItems.filter((it) => it._batchIdx !== bIdx);
+              batchItems = [...keptOther, ...newPart].toSorted((a, b) => (a._batchIdx ?? 0) - (b._batchIdx ?? 0));
+              qpbBatchesMeta[bIdx] = {
+                ...meta,
+                usedKeyId: resp.usedKeyId || '',
+                usedKeyLabel: resp.usedKeyLabel || resp.usedProvider || 'AI',
+                model: resp.model || '',
+                count: newPart.length
+              };
+              renderQpbList();
+              if (statusEl) statusEl.textContent = `✓ 第 ${bIdx + 1} 批已由「${qpbBatchesMeta[bIdx].usedKeyLabel} (${qpbBatchesMeta[bIdx].model})」重新辨識完成（共 ${newPart.length} 筆）`;
+              showToast(`第 ${bIdx + 1} 批已重新辨識（${qpbBatchesMeta[bIdx].usedKeyLabel}）`);
+            } catch (err) {
+              showToast(`重跑第 ${bIdx + 1} 批失敗：${err.message}`);
+            } finally {
+              btn.disabled = false;
+              btn.textContent = origText;
+            }
+          });
+        }
+
         if (btnRunAi) {
           btnRunAi.addEventListener('click', async () => {
             const userHint = ((document.getElementById('qpb-user-hint') && document.getElementById('qpb-user-hint').value) || '').trim();
@@ -12392,29 +12614,32 @@
                 : '正在透過 AI 解析文字明細...';
             }
             try {
-              const batchResults = await callAiImagesInParallelBatches({
-                imgs: stagedImgs,
-                batchSize: 2,
-                runSingleBatch: (chunk, idx, total) => callAiEndpoint({
-                  systemPrompt: '你是精準的繁體中文財務收據、發票、月統計表、薪資條與帳單截圖辨識專家，只回傳合法 JSON。',
-                  prompt: buildExtractionPrompt('transactions', userHint, fallbackDate),
-                  attachments: chunk.map((im) => ({ mimeType: im.mimeType, base64: im.base64 })),
-                  expectJson: true,
-                  onProgress: (p) => {
-                    if (statusEl && p && p.message) {
-                      statusEl.textContent = total > 1 ? `[批次 ${idx + 1}/${total}] ${p.message}` : p.message;
-                    }
+              const chunks = [];
+              if (!stagedImgs.length) {
+                chunks.push([]);
+              } else {
+                for (let i = 0; i < stagedImgs.length; i += 2) chunks.push(stagedImgs.slice(i, i + 2));
+              }
+              const batchResults = await Promise.all(chunks.map((chunk, idx) => callAiEndpoint({
+                systemPrompt: '你是精準的繁體中文財務收據、發票、月統計表、薪資條與帳單截圖辨識專家，只回傳合法 JSON。',
+                prompt: buildExtractionPrompt('transactions', userHint, fallbackDate),
+                attachments: chunk.map((im) => ({ mimeType: im.mimeType, base64: im.base64 })),
+                expectJson: true,
+                onProgress: (p) => {
+                  if (statusEl && p && p.message) {
+                    statusEl.textContent = chunks.length > 1 ? `[批次 ${idx + 1}/${chunks.length}] ${p.message}` : p.message;
                   }
-                })
-              });
-              const rawDefAcc = (document.getElementById('qpb-default-account') && document.getElementById('qpb-default-account').value) || '';
-              const defParsed = parseDefaultAccVal(rawDefAcc);
+                }
+              })));
               let items = [];
               const seenBatchKeys = new Set();
-              batchResults.forEach((resp) => {
+              qpbBatchesMeta = [];
+              batchResults.forEach((resp, bIdx) => {
+                let count = 0;
                 try {
                   const parsed = extractJsonFromAiText(resp.text);
-                  const part = normalizeAiExtractedPayload(parsed, state).filter((x) => x.kind === 'expense' || x.kind === 'income');
+                  const part = normalizeQpbBatchItems(parsed, bIdx, batchResults.length, resp);
+                  count = part.length;
                   part.forEach((it) => {
                     const bKey = `${it.kind}|${it.date || ''}|${Math.round(safeNum(it.amount))}|${String(it.title || '').toLowerCase()}`;
                     if (seenBatchKeys.has(bKey)) {
@@ -12426,30 +12651,19 @@
                     items.push(it);
                   });
                 } catch (e) {}
-              });
-              if (context === 'income') {
-                items = items.map((x) => ({ ...x, kind: 'income' }));
-              } else if (context === 'expense' || isTrip) {
-                items = items.map((x) => ({
-                  ...x,
-                  kind: 'expense',
-                  category: isTrip ? mapTripCategoryHeuristic(x.category || x.title) : x.category,
-                  checked: isTrip ? !x.isDuplicate : x.checked
-                }));
-              }
-              if (!isTrip) {
-                items = items.map((x) => {
-                  const rowCur = x.currency || 'TWD';
-                  const fallbackAcc = (defParsed.acc && (!defParsed.cur || defParsed.cur === rowCur))
-                    ? defParsed.acc
-                    : defaultAccountForCurrency(rowCur);
-                  return { ...x, account: x.account || fallbackAcc };
+                qpbBatchesMeta.push({
+                  batchIdx: bIdx,
+                  imgs: chunks[bIdx] || [],
+                  usedKeyId: resp.usedKeyId || '',
+                  usedKeyLabel: resp.usedKeyLabel || resp.usedProvider || 'AI',
+                  model: resp.model || '',
+                  count
                 });
-              }
+              });
               batchItems = items;
               renderQpbList();
-              if (statusEl) statusEl.textContent = items.length > 0 ? `✓ AI 辨識完成！共擷取 ${items.length} 筆，可逐筆微調或修改補充說明後重新辨識` : '未能辨識出任何交易明細，可補充說明後重試';
-              btnRunAi.textContent = '重新 AI 辨識';
+              if (statusEl) statusEl.textContent = items.length > 0 ? `✓ AI 辨識完成！共擷取 ${items.length} 筆，可逐筆微調或針對個別批次換組重跑` : '未能辨識出任何交易明細，可點下方換組重辨識或補充說明後重試';
+              btnRunAi.textContent = '🔄 全部重新辨識';
             } catch (err) {
               if (statusEl) statusEl.textContent = `辨識失敗：${err.message}（可點右側按鈕直接重送）`;
               showToast(`AI 辨識失敗：${err.message}`);
@@ -13938,9 +14152,36 @@
             `;
           }
           const actions = Array.isArray(msg.actions) ? msg.actions : [];
+          const batches = Array.isArray(msg.batches) ? msg.batches : [];
           const pendingCount = actions.filter((a) => a._status === 'pending').length;
           const hasDoneExpense = actions.some((a) => a._status === 'done' && a.type === 'add_expense');
           const hasDoneIncome = actions.some((a) => a._status === 'done' && a.type === 'add_income');
+          const batchesHtml = batches.length > 0 ? `
+            <div class="mt-2 pt-2 hairline-t space-y-1.5 text-[11px]">
+              <div class="font-medium text-zinc-600">🤖 ${batches.length > 1 ? `分批平行辨識模組（共 ${batches.length} 批，可針對單批重跑）` : '辨識模組與重新辨識'}</div>
+              ${batches.map((b, bIdx) => {
+                const imgCount = Array.isArray(b.imgs) ? b.imgs.length : 0;
+                const bTitle = batches.length > 1 ? `第 ${bIdx + 1}/${batches.length} 批${imgCount ? `(${imgCount}圖)` : ''}` : `本次${imgCount ? `(${imgCount}圖)` : ''}`;
+                const canRerunBatch = Array.isArray(b.imgs) && b.imgs.length > 0;
+                return `
+                  <div class="p-1.5 rounded-lg bg-[#f7f7f5] hairline flex flex-wrap items-center justify-between gap-1.5">
+                    <div class="flex flex-wrap items-center gap-1 min-w-0">
+                      <span class="px-1.5 py-0.5 rounded bg-zinc-900 text-white text-[10px] font-mono-num">${escapeHtml(bTitle)}</span>
+                      <span class="font-medium text-zinc-800">${escapeHtml(b.usedKeyLabel || 'AI')}</span>
+                      <span class="text-[10px] font-mono-num text-zinc-500 truncate">${escapeHtml(b.model || '')}</span>
+                      <span class="text-[10px] font-mono-num text-emerald-700">→ ${b.count || 0} 筆</span>
+                    </div>
+                    ${canRerunBatch ? `
+                      <div class="flex items-center gap-1 shrink-0">
+                        <button type="button" data-copilot-rerun-batch="${mIdx}:${bIdx}:0" class="px-1.5 py-0.5 rounded bg-white hover:bg-zinc-100 hairline text-[10px] text-zinc-700 font-medium" title="使用原本優先順序重跑這批圖片">🔄 重跑此批</button>
+                        <button type="button" data-copilot-rerun-batch="${mIdx}:${bIdx}:1" class="px-1.5 py-0.5 rounded bg-zinc-900 hover:bg-zinc-800 text-white text-[10px] font-medium" title="跳過此批剛用的模型，換另一組 API Key 重辨識這批圖片">⚡ 換組重跑</button>
+                      </div>
+                    ` : ''}
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          ` : '';
           const actionsHtml = actions.length > 0 ? `
             <div class="mt-2.5 pt-2.5 hairline-t space-y-2">
               <div class="flex items-center justify-between gap-2 text-[11px]">
@@ -13959,6 +14200,9 @@
                 const dupBadge = (a._isDuplicate && a._status === 'pending')
                   ? '<span class="px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 text-[10px] font-medium shrink-0" title="帳本中已有相同日期與金額的紀錄，已暫停自動寫入">⚠️ 疑似已記過</span>'
                   : '';
+                const batchTagHtml = a._batchTag
+                  ? `<span class="px-1.5 py-0.5 rounded bg-white hairline text-zinc-500 text-[10px] font-mono-num" title="辨識此筆的批次與 AI 模型">🤖 ${escapeHtml(a._batchTag)}</span>`
+                  : '';
                 const statusBadge = a._status === 'done'
                   ? `<div class="flex items-center gap-1 shrink-0"><span class="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 text-[10px] font-medium">已新增 ✓</span>${editBtnHtml}${undoBtnHtml}</div>`
                   : (a._status === 'undone'
@@ -13968,7 +14212,10 @@
                       : `<div class="flex items-center gap-1 shrink-0">${dupBadge}${editBtnHtml}<button type="button" data-copilot-run="${mIdx}:${aIdx}" class="px-2.5 py-1 rounded-md text-[11px] font-medium shrink-0 ${isDanger ? 'bg-rose-700 hover:bg-rose-800 text-white' : 'bg-zinc-900 hover:bg-zinc-800 text-white'}">${isDanger ? '確認刪除' : (a._isDuplicate ? '仍要新增' : '確認執行')}</button></div>`));
                 return `
                   <div class="p-2 rounded-lg bg-[#f7f7f5] hairline flex flex-wrap items-center justify-between gap-2 text-[11px]">
-                    <span class="text-zinc-800 leading-snug">${escapeHtml(describeAiAction(a))}</span>
+                    <div class="space-y-0.5 min-w-0">
+                      <div class="text-zinc-800 leading-snug">${escapeHtml(describeAiAction(a))}</div>
+                      ${batchTagHtml ? `<div>${batchTagHtml}</div>` : ''}
+                    </div>
                     ${statusBadge}
                   </div>
                 `;
@@ -13982,15 +14229,17 @@
             </div>
           ` : '';
           const retryHtml = msg._retryPayload ? `
-            <div class="mt-2 pt-2 hairline-t flex flex-wrap items-center justify-end gap-2">
+            <div class="mt-2 pt-2 hairline-t flex flex-wrap items-center justify-end gap-1.5">
               ${msg._noActionImg ? '<button type="button" data-copilot-open-expense="1" class="btn-focus h-7 px-2.5 rounded-lg bg-white hover:bg-zinc-50 text-zinc-800 hairline text-[11px] font-medium">➕ 手動新增支出</button>' : ''}
-              <button type="button" data-copilot-retry="${mIdx}" class="btn-focus h-7 px-3 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white text-[11px] font-medium">🔄 重新發送</button>
+              <button type="button" data-copilot-retry="${mIdx}:0" class="btn-focus h-7 px-2.5 rounded-lg bg-white hover:bg-zinc-50 text-zinc-800 hairline text-[11px] font-medium">🔄 重新辨識</button>
+              <button type="button" data-copilot-retry="${mIdx}:1" class="btn-focus h-7 px-2.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white text-[11px] font-medium">⚡ 換組重新開始</button>
             </div>
           ` : '';
           return `
             <div class="flex justify-start">
               <div class="max-w-[92%] rounded-2xl rounded-bl-sm bg-white hairline px-3.5 py-2.5 text-xs text-zinc-800 leading-relaxed">
                 <div class="whitespace-pre-wrap">${escapeHtml(msg.text)}</div>
+                ${batchesHtml}
                 ${actionsHtml}
                 ${retryHtml}
                 ${msg.meta ? `<div class="mt-1.5 text-[10px] font-mono-num text-zinc-400">${escapeHtml(msg.meta)}</div>` : ''}
@@ -14296,41 +14545,66 @@
           };
 
           // Parallel multi-image recognition when >2 images attached
-          const batchResponses = await callAiImagesInParallelBatches({
-            imgs: imgsToSend,
-            batchSize: 2,
-            runSingleBatch: (chunk, idx, total) => callAiEndpoint({
-              systemPrompt: buildAiCopilotSystemPrompt(),
-              prompt,
-              attachments: chunk.map((im) => ({ mimeType: im.mimeType, base64: im.base64 })),
-              expectJson: true,
-              onProgress: (p) => {
-                if (p && p.message && aiCopilotHistory[targetIdx]) {
-                  const prefix = total > 1 ? `[平行批次 ${idx + 1}/${total}] ` : '';
-                  aiCopilotHistory[targetIdx] = { role: 'assistant', text: `${prefix}${p.message}`, actions: [] };
-                  renderAiCopilotMessages();
-                }
+          const chunks = [];
+          if (!imgsToSend.length) {
+            chunks.push([]);
+          } else {
+            for (let i = 0; i < imgsToSend.length; i += 2) chunks.push(imgsToSend.slice(i, i + 2));
+          }
+          const avoidKeyIdOnRetry = (retryOpts && retryOpts.avoidKeyId) || '';
+          const batchResponses = await Promise.all(chunks.map((chunk, idx) => callAiEndpoint({
+            systemPrompt: buildAiCopilotSystemPrompt(),
+            prompt,
+            attachments: chunk.map((im) => ({ mimeType: im.mimeType, base64: im.base64 })),
+            expectJson: true,
+            avoidKeyId: avoidKeyIdOnRetry,
+            onProgress: (p) => {
+              if (p && p.message && aiCopilotHistory[targetIdx]) {
+                const prefix = chunks.length > 1 ? `[平行批次 ${idx + 1}/${chunks.length}] ` : '';
+                aiCopilotHistory[targetIdx] = { role: 'assistant', text: `${prefix}${p.message}`, actions: [] };
+                renderAiCopilotMessages();
               }
-            })
-          });
+            }
+          })));
 
           const resp = batchResponses[0];
           const sec = ((performance.now() - t0) / 1000).toFixed(1);
           const upSec = resp && resp.upstreamMs ? `（AI 伺服器 ${(resp.upstreamMs / 1000).toFixed(1)}s${batchResponses.length > 1 ? ` · ${batchResponses.length} 批平行` : ''}）` : '';
-          const keyTag = resp && resp.usedKeyLabel ? `${resp.usedKeyLabel} · ` : '';
 
           const replies = [];
           const actions = [];
+          const batchesMeta = [];
           const seenBatchKeys = new Set();
-          batchResponses.forEach((r) => {
+          batchResponses.forEach((r, bIdx) => {
             const norm = normalizeCopilotAiResponse(r.text);
-            if (norm.reply) replies.push(norm.reply);
+            const keyLabel = r.usedKeyLabel || r.usedProvider || 'AI';
+            const tag = batchResponses.length > 1 ? `第${bIdx + 1}批·${keyLabel} (${r.model || ''})` : `${keyLabel} (${r.model || ''})`;
+            if (norm.reply) {
+              replies.push(batchResponses.length > 1 ? `【第 ${bIdx + 1} 批 · ${keyLabel}】\n${norm.reply}` : norm.reply);
+            }
             norm.actions.forEach((a) => {
               const isDup = isCopilotActionDuplicate(a, seenBatchKeys);
-              actions.push({ ...a, _isDuplicate: isDup });
+              actions.push({
+                ...a,
+                _isDuplicate: isDup,
+                _batchIdx: bIdx,
+                _batchTag: tag,
+                _usedKeyId: r.usedKeyId || ''
+              });
+            });
+            batchesMeta.push({
+              batchIdx: bIdx,
+              imgs: chunks[bIdx] || [],
+              text,
+              usedKeyId: r.usedKeyId || '',
+              usedKeyLabel: keyLabel,
+              model: r.model || '',
+              count: norm.actions.length,
+              reply: norm.reply
             });
           });
           const replyText = replies.join('\n\n') || '已完成分析';
+          const distinctModels = [...new Set(batchesMeta.map((b) => `${b.usedKeyLabel}${b.model ? ` (${b.model})` : ''}`))].join(' / ');
 
           const autoExec = Boolean(document.getElementById('ai-copilot-auto-exec') && document.getElementById('ai-copilot-auto-exec').checked);
           let autoDoneCount = 0;
@@ -14358,14 +14632,16 @@
             role: 'assistant',
             text: replyText,
             actions,
-            ...(imgsToSend.length > 0 && actions.length === 0 ? { _retryPayload: { text, imgs: imgsToSend }, _noActionImg: true } : {}),
-            meta: `${keyTag}${(resp && resp.model) || appConfig.aiModel || ''} · 總耗時 ${sec}s${upSec}`
+            batches: batchesMeta,
+            _retryPayload: { text, imgs: imgsToSend, lastUsedKeyId: (resp && resp.usedKeyId) || '' },
+            ...(imgsToSend.length > 0 && actions.length === 0 ? { _noActionImg: true } : {}),
+            meta: `🤖 ${distinctModels} · 總耗時 ${sec}s${upSec}`
           };
           renderAiCopilotMessages();
         } catch (err) {
           aiCopilotHistory[targetIdx] = {
             role: 'assistant',
-            text: `連線失敗：${err.message}\n\n提示：可直接點下方「🔄 重新發送」（保留原文字與附圖），或點上方「換模型」切換 Groq 免費高速模型。`,
+            text: `連線失敗：${err.message}\n\n提示：可直接點下方「🔄 重新辨識」或「⚡ 換組重新開始」（保留原文字與附圖）。`,
             actions: [],
             _retryPayload: { text, imgs: imgsToSend }
           };
@@ -14373,6 +14649,109 @@
         } finally {
           aiCopilotBusy = false;
           if (sendBtn) { sendBtn.disabled = false; sendBtn.textContent = '送出'; }
+        }
+      }
+
+      async function rerunCopilotSingleBatch(mIdx, bIdx, switchKey = false) {
+        if (aiCopilotBusy) return;
+        const msg = aiCopilotHistory[mIdx];
+        if (!msg || !Array.isArray(msg.batches) || !msg.batches[bIdx]) return;
+        const batch = msg.batches[bIdx];
+        const imgs = Array.isArray(batch.imgs) ? batch.imgs : [];
+        const text = batch.text || (msg._retryPayload && msg._retryPayload.text) || '';
+
+        // If any action in this batch was already auto-executed, undo it cleanly before replacing
+        (msg.actions || []).forEach((act) => {
+          if (act._batchIdx === bIdx && act._status === 'done' && act._createdId) {
+            const cid = act._createdId;
+            if (act.type === 'add_expense') {
+              state.randomExpenses = (state.randomExpenses || []).filter((x) => x.id !== cid);
+              markDeletedId(state, cid);
+            } else if (act.type === 'add_income') {
+              state.incomeReceipts = (state.incomeReceipts || []).filter((x) => x.id !== cid);
+              markDeletedId(state, cid);
+            }
+          }
+        });
+        saveState();
+        renderAll();
+
+        aiCopilotBusy = true;
+        showToast(switchKey ? `⚡ 正在切換另一組 AI 重新辨識第 ${bIdx + 1} 批...` : `🔄 正在重新辨識第 ${bIdx + 1} 批...`);
+        try {
+          const defaultImgInstruction = '請詳細辨識所有附圖中的購物訂單、發票、收據或帳單明細（含商品/店家名稱、金額、幣別如 CNY/TWD/USD、日期與分類），在 reply 中列出辨識摘要，並為每一筆消費在 actions 陣列中產生對應的 add_expense 操作（amount 請填純數字）。';
+          const prompt = [
+            '【帳本即時摘要】：',
+            JSON.stringify(buildAiCopilotContext()),
+            `\n【使用者指令】：\n${text || defaultImgInstruction}`
+          ].join('\n');
+
+          const r = await callAiEndpoint({
+            systemPrompt: buildAiCopilotSystemPrompt(),
+            prompt,
+            attachments: imgs.map((im) => ({ mimeType: im.mimeType, base64: im.base64 })),
+            expectJson: true,
+            avoidKeyId: switchKey ? (batch.usedKeyId || '') : ''
+          });
+
+          const parsed = extractJsonFromAiText(r.text);
+          const keyLabel = r.usedKeyLabel || r.usedProvider || 'AI';
+          const totalBatches = msg.batches.length;
+          const tag = totalBatches > 1 ? `第${bIdx + 1}批·${keyLabel} (${r.model || ''})` : `${keyLabel} (${r.model || ''})`;
+          const items = normalizeAiExtractedPayload(parsed, state);
+          const rawActs = Array.isArray(parsed && parsed.actions) && parsed.actions.length > 0
+            ? parsed.actions.map((a) => ({
+                ...a,
+                amount: Math.abs(parseFlexibleNumber(a.amount)),
+                currency: normalizeAiCurrencyCode(a.currency, a.amount)
+              }))
+            : items.filter((x) => x.kind === 'expense' || x.kind === 'income').map((it) => (
+                it.kind === 'income'
+                  ? { type: 'add_income', date: it.date, name: it.title, category: it.category, currency: it.currency, amount: it.amount, account: it.account, depositNow: false, note: it.note }
+                  : { type: 'add_expense', date: it.date, time: it.time || '', title: it.title, category: it.category, currency: it.currency, amount: it.amount, account: it.account, deductNow: false, note: it.note }
+              ));
+
+          const autoExec = Boolean(document.getElementById('ai-copilot-auto-exec') && document.getElementById('ai-copilot-auto-exec').checked);
+          const newBatchActions = rawActs.map((a) => {
+            const actObj = {
+              ...a,
+              _status: 'pending',
+              _isDuplicate: isCopilotActionDuplicate(a),
+              _batchIdx: bIdx,
+              _batchTag: tag,
+              _usedKeyId: r.usedKeyId || ''
+            };
+            if (autoExec && !actObj._isDuplicate && AI_COPILOT_SAFE_AUTO_TYPES.has(actObj.type)) {
+              const res = executeAiCopilotAction(actObj);
+              actObj._status = res.ok ? 'done' : 'error';
+              actObj._err = res.ok ? '' : res.msg;
+            }
+            return actObj;
+          });
+
+          const newReply = (parsed && (parsed.reply || parsed.message || parsed.summary))
+            || (newBatchActions.length > 0 ? `已重新辨識出 ${newBatchActions.length} 筆明細：\n${newBatchActions.map((a, i) => `${i + 1}. ${describeAiAction(a)}`).join('\n')}` : '已完成重新辨識');
+
+          msg.batches[bIdx] = {
+            ...batch,
+            usedKeyId: r.usedKeyId || '',
+            usedKeyLabel: keyLabel,
+            model: r.model || '',
+            count: newBatchActions.length,
+            reply: newReply
+          };
+
+          const otherActions = (msg.actions || []).filter((a) => a._batchIdx !== bIdx);
+          msg.actions = [...otherActions, ...newBatchActions].toSorted((a, b) => (a._batchIdx ?? 0) - (b._batchIdx ?? 0));
+          msg.text = msg.batches.map((b, i) => (msg.batches.length > 1 ? `【第 ${i + 1} 批 · ${b.usedKeyLabel}】\n${b.reply || ''}` : (b.reply || ''))).join('\n\n') || msg.text;
+          const distinctModels = [...new Set(msg.batches.map((b) => `${b.usedKeyLabel}${b.model ? ` (${b.model})` : ''}`))].join(' / ');
+          msg.meta = `🤖 ${distinctModels} · 第 ${bIdx + 1} 批已重跑`;
+          renderAiCopilotMessages();
+          showToast(`✓ 第 ${bIdx + 1} 批已由「${keyLabel} (${r.model || ''})」重新辨識完成！`);
+        } catch (err) {
+          showToast(`重跑第 ${bIdx + 1} 批失敗：${err.message}`);
+        } finally {
+          aiCopilotBusy = false;
         }
       }
 
@@ -14521,6 +14900,12 @@
             sendAiCopilotMessage(quick.dataset.copilotQuick);
             return;
           }
+          const rerunBatchBtn = ev.target.closest('[data-copilot-rerun-batch]');
+          if (rerunBatchBtn) {
+            const [mIdx, bIdx, sw] = rerunBatchBtn.dataset.copilotRerunBatch.split(':').map(Number);
+            rerunCopilotSingleBatch(mIdx, bIdx, sw === 1);
+            return;
+          }
           const undoOne = ev.target.closest('[data-copilot-undo]');
           if (undoOne) {
             const [mIdx, aIdx] = undoOne.dataset.copilotUndo.split(':').map(Number);
@@ -14619,10 +15004,32 @@
           }
           const retryBtn = ev.target.closest('[data-copilot-retry]');
           if (retryBtn) {
-            const mIdx = Number(retryBtn.dataset.copilotRetry);
+            const [mIdxStr, swStr] = String(retryBtn.dataset.copilotRetry || '').split(':');
+            const mIdx = Number(mIdxStr);
+            const switchKey = swStr === '1';
             const msg = aiCopilotHistory[mIdx];
             if (msg && msg._retryPayload) {
-              sendAiCopilotMessage('', { replaceIdx: mIdx, text: msg._retryPayload.text, imgs: msg._retryPayload.imgs });
+              // Undo any auto-added records from this message before full restart
+              (msg.actions || []).forEach((act) => {
+                if (act._status === 'done' && act._createdId) {
+                  const cid = act._createdId;
+                  if (act.type === 'add_expense') {
+                    state.randomExpenses = (state.randomExpenses || []).filter((x) => x.id !== cid);
+                    markDeletedId(state, cid);
+                  } else if (act.type === 'add_income') {
+                    state.incomeReceipts = (state.incomeReceipts || []).filter((x) => x.id !== cid);
+                    markDeletedId(state, cid);
+                  }
+                }
+              });
+              saveState();
+              renderAll();
+              sendAiCopilotMessage('', {
+                replaceIdx: mIdx,
+                text: msg._retryPayload.text,
+                imgs: msg._retryPayload.imgs,
+                avoidKeyId: switchKey ? (msg._retryPayload.lastUsedKeyId || '') : ''
+              });
             }
             return;
           }
