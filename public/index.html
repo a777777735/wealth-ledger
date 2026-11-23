@@ -2255,15 +2255,225 @@
       let fbAuth = null;
       let fbDb = null;
       let currentUser = null;
+      let cloudUnsubscribe = null;
+      let cloudSyncInFlight = false;
+      let cloudSyncPending = false;
+      let cloudSyncRetryTimer = null;
+      let cloudSyncRetryCount = 0;
+      let initialCloudSynced = false;
+      let lastPushedAtMs = 0;
+      let lastCloudSyncTimeStr = '';
+      let cloudSyncState = 'idle'; // 'idle' | 'syncing' | 'synced' | 'error'
+
+      const CLIENT_ID = 'tab_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 7);
+      const SYNC_COLLECTIONS = [
+        'cash', 'stocks', 'investments', 'fixedIncomes', 'fixedExpenses',
+        'randomExpenses', 'fxTrades', 'incomeReceipts', 'investmentLogs',
+        'stockTrades', 'snapshots', 'ledger', 'groupTrips'
+      ];
+      let lastKnownItemFingerprints = new Map();
+
+      function normalizeStateShape(s) {
+        if (!s || typeof s !== 'object') return s;
+        if (!Array.isArray(s.cash)) s.cash = [];
+        if (!Array.isArray(s.stocks)) s.stocks = [];
+        if (!Array.isArray(s.investments)) s.investments = [];
+        if (!Array.isArray(s.fixedIncomes)) s.fixedIncomes = [];
+        if (!Array.isArray(s.fixedExpenses)) s.fixedExpenses = [];
+        if (!Array.isArray(s.randomExpenses)) s.randomExpenses = [];
+        if (!Array.isArray(s.fxTrades)) s.fxTrades = [];
+        if (!Array.isArray(s.incomeReceipts)) s.incomeReceipts = [];
+        if (!Array.isArray(s.investmentLogs)) s.investmentLogs = [];
+        if (!Array.isArray(s.stockTrades)) s.stockTrades = [];
+        if (!Array.isArray(s.snapshots)) s.snapshots = [];
+        if (!Array.isArray(s.ledger)) s.ledger = [];
+        if (!Array.isArray(s.groupTrips)) s.groupTrips = [];
+        if (!s.fx || typeof s.fx !== 'object') s.fx = { TWD: 1, USD: 33.022, JPY: 0.2069, HKD: 4.2097, CNY: 4.9525 };
+        if (!s.fx.JPY) s.fx.JPY = 0.2069;
+        if (!s.budgets || typeof s.budgets !== 'object') s.budgets = {};
+        if (!s._deletedIds || typeof s._deletedIds !== 'object') s._deletedIds = {};
+        return s;
+      }
+
+      function itemContentFingerprint(item) {
+        if (!item || typeof item !== 'object') return '';
+        const clone = { ...item };
+        delete clone._updatedAt;
+        return JSON.stringify(clone);
+      }
+
+      function rebuildFingerprints(s) {
+        const map = new Map();
+        SYNC_COLLECTIONS.forEach((col) => {
+          const arr = Array.isArray(s && s[col]) ? s[col] : [];
+          arr.forEach((item) => {
+            if (item && item.id) {
+              map.set(col + ':' + item.id, itemContentFingerprint(item));
+            }
+          });
+        });
+        lastKnownItemFingerprints = map;
+      }
+
+      normalizeStateShape(state);
+      rebuildFingerprints(state);
+
+      function stampLocalChanges(s, now) {
+        normalizeStateShape(s);
+        const newMap = new Map();
+        SYNC_COLLECTIONS.forEach((col) => {
+          const arr = s[col];
+          arr.forEach((item) => {
+            if (!item || typeof item !== 'object') return;
+            if (!item.id) item.id = uid(col.slice(0, 4));
+            const key = col + ':' + item.id;
+            const fp = itemContentFingerprint(item);
+            newMap.set(key, fp);
+            const prevFp = lastKnownItemFingerprints.get(key);
+            if (prevFp === undefined || prevFp !== fp) {
+              item._updatedAt = now;
+              if (s._deletedIds[item.id]) delete s._deletedIds[item.id];
+            } else if (!item._updatedAt) {
+              item._updatedAt = s._updatedAt || now;
+            }
+          });
+        });
+        // Record tombstones for any items removed since last save
+        lastKnownItemFingerprints.forEach((_, key) => {
+          if (!newMap.has(key)) {
+            const id = key.slice(key.indexOf(':') + 1);
+            if (id) s._deletedIds[id] = now;
+          }
+        });
+        // Prune tombstones older than 30 days
+        const cutoff = now - 30 * 86400 * 1000;
+        Object.keys(s._deletedIds).forEach((id) => {
+          if (safeNum(s._deletedIds[id]) < cutoff) delete s._deletedIds[id];
+        });
+        s._updatedAt = now;
+        s._clientId = CLIENT_ID;
+        lastKnownItemFingerprints = newMap;
+      }
+
+      function mergeStates(localRaw, remoteRaw) {
+        const localS = normalizeStateShape(JSON.parse(JSON.stringify(localRaw || {})));
+        const remoteS = normalizeStateShape(JSON.parse(JSON.stringify(remoteRaw || {})));
+        const locTs = safeNum(localS._updatedAt, 0);
+        const remTs = safeNum(remoteS._updatedAt, 0);
+        const remoteIsNewer = remTs >= locTs;
+
+        // 1. Merge deletion tombstones (latest timestamp wins)
+        const mergedDeleted = {};
+        Object.keys(localS._deletedIds || {}).forEach((id) => {
+          mergedDeleted[id] = safeNum(localS._deletedIds[id], 0);
+        });
+        Object.keys(remoteS._deletedIds || {}).forEach((id) => {
+          const t = safeNum(remoteS._deletedIds[id], 0);
+          mergedDeleted[id] = Math.max(mergedDeleted[id] || 0, t);
+        });
+
+        let localHadNewer = false;
+        let remoteHadNewer = false;
+        const merged = {
+          ...(remoteIsNewer ? localS : remoteS),
+          ...(remoteIsNewer ? remoteS : localS),
+          _deletedIds: mergedDeleted,
+          _updatedAt: Math.max(locTs, remTs),
+          _clientId: remoteIsNewer ? (remoteS._clientId || CLIENT_ID) : CLIENT_ID
+        };
+
+        // 2. Merge object maps (fx, budgets, quoteSettings, customCurrencies)
+        merged.fx = remoteIsNewer ? { ...localS.fx, ...remoteS.fx } : { ...remoteS.fx, ...localS.fx };
+        merged.budgets = remoteIsNewer ? { ...localS.budgets, ...remoteS.budgets } : { ...remoteS.budgets, ...localS.budgets };
+        if (localS.quoteSettings || remoteS.quoteSettings) {
+          merged.quoteSettings = remoteIsNewer
+            ? { ...(localS.quoteSettings || {}), ...(remoteS.quoteSettings || {}) }
+            : { ...(remoteS.quoteSettings || {}), ...(localS.quoteSettings || {}) };
+        }
+        if (Array.isArray(localS.customCurrencies) || Array.isArray(remoteS.customCurrencies)) {
+          merged.customCurrencies = [...new Set([...(localS.customCurrencies || []), ...(remoteS.customCurrencies || [])])];
+        }
+
+        // 3. Merge ID-based collections (union + per-item timestamp + tombstone)
+        SYNC_COLLECTIONS.forEach((col) => {
+          const locArr = Array.isArray(localS[col]) ? localS[col] : [];
+          const remArr = Array.isArray(remoteS[col]) ? remoteS[col] : [];
+          const locById = new Map();
+          const remById = new Map();
+          const order = [];
+          const seen = new Set();
+
+          locArr.forEach((it) => {
+            if (!it || !it.id) return;
+            locById.set(it.id, it);
+            if (!seen.has(it.id)) { seen.add(it.id); order.push(it.id); }
+          });
+          remArr.forEach((it) => {
+            if (!it || !it.id) return;
+            remById.set(it.id, it);
+            if (!seen.has(it.id)) { seen.add(it.id); order.push(it.id); }
+          });
+
+          const out = [];
+          order.forEach((id) => {
+            const locItem = locById.get(id);
+            const remItem = remById.get(id);
+            const delTs = safeNum(mergedDeleted[id], 0);
+            const locItemTs = locItem ? safeNum(locItem._updatedAt, locTs) : 0;
+            const remItemTs = remItem ? safeNum(remItem._updatedAt, remTs) : 0;
+
+            if (delTs > 0 && delTs >= Math.max(locItemTs, remItemTs)) {
+              if (locItem && !remItem) remoteHadNewer = true;
+              if (remItem && !locItem) localHadNewer = true;
+              return; // deleted
+            }
+
+            if (locItem && !remItem) {
+              out.push(locItem);
+              localHadNewer = true;
+            } else if (remItem && !locItem) {
+              out.push(remItem);
+              remoteHadNewer = true;
+            } else if (locItem && remItem) {
+              const locFp = itemContentFingerprint(locItem);
+              const remFp = itemContentFingerprint(remItem);
+              if (locFp === remFp) {
+                out.push(remItemTs >= locItemTs ? remItem : locItem);
+              } else if (locItemTs > remItemTs || (locItemTs === remItemTs && !remoteIsNewer)) {
+                out.push(locItem);
+                localHadNewer = true;
+              } else {
+                out.push(remItem);
+                remoteHadNewer = true;
+              }
+            }
+          });
+          merged[col] = out;
+        });
+
+        return { merged, localHadNewer, remoteHadNewer };
+      }
+
+      function persistLocalOnly(s) {
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(s));
+        } catch (e) {
+          showToast('警告：瀏覽器本機儲存空間不足，請立即匯出 JSON 備份！');
+        }
+      }
 
       function saveState(autoPushCloud = true) {
-        try {
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-        } catch (e) {
-          // ignore
+        if (autoPushCloud) {
+          const now = Date.now();
+          stampLocalChanges(state, now);
+          state._dirty = true;
+        } else {
+          normalizeStateShape(state);
+          rebuildFingerprints(state);
         }
+        persistLocalOnly(state);
         if (autoPushCloud && currentUser && fbDb) {
-          pushToCloud(true);
+          scheduleCloudPush();
         }
       }
 
@@ -2300,7 +2510,116 @@
           .replace(/"/g, '&quot;');
       }
 
-      // Firebase Cloud Sync
+      function nowTimeHHMMSS() {
+        const d = new Date();
+        return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
+      }
+
+      // Firebase Cloud Sync (Real-time onSnapshot + 2-Way Merge + Serialized Queue)
+      function stopCloudRealtimeSync() {
+        if (cloudUnsubscribe) {
+          try { cloudUnsubscribe(); } catch (e) {}
+          cloudUnsubscribe = null;
+        }
+        if (cloudSyncRetryTimer) {
+          clearTimeout(cloudSyncRetryTimer);
+          cloudSyncRetryTimer = null;
+        }
+        initialCloudSynced = false;
+      }
+
+      function applyRemotePayload(docData, isManualPull = false) {
+        if (!docData || !docData.payload) return false;
+        let parsed;
+        try {
+          parsed = JSON.parse(docData.payload);
+        } catch (e) {
+          return false;
+        }
+        if (!parsed || !Array.isArray(parsed.stocks)) return false;
+
+        // Skip our own echo from this exact tab
+        if (!isManualPull && docData.clientId === CLIENT_ID && safeNum(docData.updatedAtMs) === lastPushedAtMs && !state._dirty) {
+          return false;
+        }
+
+        const { merged, localHadNewer, remoteHadNewer } = mergeStates(state, parsed);
+        const prevDirty = Boolean(state._dirty);
+        state = merged;
+        if (state.quoteSettings) {
+          if (state.quoteSettings.gsheetCsvUrl !== undefined) appConfig.gsheetCsvUrl = state.quoteSettings.gsheetCsvUrl;
+          if (state.quoteSettings.finnhubKey !== undefined) appConfig.finnhubKey = state.quoteSettings.finnhubKey;
+          if (state.quoteSettings.autoRefresh !== undefined) appConfig.autoRefresh = Boolean(state.quoteSettings.autoRefresh);
+          if (state.quoteSettings.refreshIntervalMin !== undefined) appConfig.refreshIntervalMin = safeNum(state.quoteSettings.refreshIntervalMin, 5);
+          saveConfig();
+        }
+        state._dirty = Boolean(localHadNewer || prevDirty);
+        saveState(false);
+        renderAll();
+
+        // If local had unsynced additions/edits (e.g. from another browser or offline), immediately push merged result
+        if (localHadNewer || prevDirty) {
+          scheduleCloudPush();
+        } else {
+          cloudSyncState = 'synced';
+          lastCloudSyncTimeStr = nowTimeHHMMSS();
+          updateCloudStatusUI();
+        }
+        return remoteHadNewer;
+      }
+
+      function startCloudRealtimeSync() {
+        stopCloudRealtimeSync();
+        if (!currentUser || !fbDb) return;
+        const docRef = fbDb.collection('wealth_users').doc(currentUser.uid);
+        cloudUnsubscribe = docRef.onSnapshot((doc) => {
+          if (doc.metadata && doc.metadata.hasPendingWrites) return;
+          const wasInitial = !initialCloudSynced;
+          initialCloudSynced = true;
+          if (doc.exists && doc.data() && doc.data().payload) {
+            const changed = applyRemotePayload(doc.data(), false);
+            if (!wasInitial && changed) {
+              showToast('已即時同步其他裝置的最新變更');
+            }
+          } else {
+            // Cloud has no document yet — upload local state immediately
+            scheduleCloudPush();
+          }
+          if (wasInitial) {
+            runAutoDailySnapshotOnce();
+            scheduleAutoRefresh();
+            if (appConfig.autoRefresh !== false) refreshLivePricesAndFX(true);
+          }
+        }, (err) => {
+          cloudSyncState = 'error';
+          updateCloudStatusUI();
+        });
+      }
+
+      let dailySnapRan = false;
+      function runAutoDailySnapshotOnce() {
+        if (dailySnapRan) return;
+        dailySnapRan = true;
+        const totals = computeTotals(state);
+        if (totals.netWorthTWD <= 0) return;
+        const today = todayISO();
+        if (!Array.isArray(state.snapshots)) state.snapshots = [];
+        const exists = state.snapshots.some((s) => s.date === today);
+        if (!exists) {
+          state.snapshots.push({
+            id: uid('snap'),
+            date: today,
+            cashTWD: Math.round(totals.cashTWD),
+            stocksTWD: Math.round(totals.stocksTWD),
+            investmentsTWD: Math.round(totals.investmentsTWD),
+            totalTWD: Math.round(totals.netWorthTWD),
+            note: '每日自動快照'
+          });
+          saveState(true);
+          renderHistory();
+        }
+      }
+
       function initFirebaseFromConfig(silent = false) {
         if (!appConfig.firebaseConfigText || typeof firebase === 'undefined') {
           updateCloudStatusUI();
@@ -2318,7 +2637,11 @@
           fbAuth.onAuthStateChanged((user) => {
             currentUser = user || null;
             updateCloudStatusUI();
-            if (currentUser) pullFromCloud(true);
+            if (currentUser) {
+              startCloudRealtimeSync();
+            } else {
+              stopCloudRealtimeSync();
+            }
           });
           updateCloudStatusUI();
           if (!silent) showToast('已啟用 Google 登入設定');
@@ -2338,11 +2661,26 @@
 
         if (currentUser) {
           authLabel.textContent = `${currentUser.displayName || currentUser.email}（登出）`;
-          statusEl.textContent = `雲端已同步 · ${currentUser.email}`;
-          badge.textContent = '已連線雲端';
-          badge.className = 'text-xs font-mono-num text-emerald-700';
-          dot.className = 'w-1.5 h-1.5 rounded-full bg-emerald-600 shrink-0';
-          modeLabel.textContent = '雲端同步中';
+          if (cloudSyncState === 'syncing') {
+            statusEl.textContent = `雲端同步中… · ${currentUser.email}`;
+            badge.textContent = '同步中...';
+            badge.className = 'text-xs font-mono-num text-amber-700';
+            dot.className = 'w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse shrink-0';
+            modeLabel.textContent = '寫入雲端中…';
+          } else if (cloudSyncState === 'error') {
+            statusEl.textContent = `雲端寫入異常（已暫存本機，將自動重試）· ${currentUser.email}`;
+            badge.textContent = '同步重試中';
+            badge.className = 'text-xs font-mono-num text-rose-700';
+            dot.className = 'w-1.5 h-1.5 rounded-full bg-rose-600 shrink-0';
+            modeLabel.textContent = '同步異常（已存本機）';
+          } else {
+            const timeHint = lastCloudSyncTimeStr ? ` (${lastCloudSyncTimeStr})` : '';
+            statusEl.textContent = `即時雲端同步${timeHint} · ${currentUser.email}`;
+            badge.textContent = '已連線雲端';
+            badge.className = 'text-xs font-mono-num text-emerald-700';
+            dot.className = 'w-1.5 h-1.5 rounded-full bg-emerald-600 shrink-0';
+            modeLabel.textContent = '即時雙向同步';
+          }
         } else if (fbAuth) {
           authLabel.textContent = 'Google 登入';
           statusEl.textContent = '雲端已就緒 · 點右側 Google 登入同步私人帳本';
@@ -2368,6 +2706,10 @@
         }
         try {
           if (currentUser) {
+            if (state._dirty || cloudSyncPending || cloudSyncInFlight) {
+              await pushToCloud(true);
+            }
+            stopCloudRealtimeSync();
             await fbAuth.signOut();
             showToast('已登出 Google 帳號');
           } else {
@@ -2388,21 +2730,103 @@
         }
       }
 
+      function scheduleCloudPush() {
+        if (!currentUser || !fbDb) return;
+        cloudSyncPending = true;
+        if (cloudSyncRetryTimer) {
+          clearTimeout(cloudSyncRetryTimer);
+          cloudSyncRetryTimer = null;
+        }
+        if (!cloudSyncInFlight) {
+          flushCloudPush(true);
+        }
+      }
+
+      async function flushCloudPush(silent = true) {
+        if (!currentUser || !fbDb) {
+          if (!silent) showToast('請先完成 Google 帳號登入');
+          return;
+        }
+        if (cloudSyncInFlight) {
+          cloudSyncPending = true;
+          return;
+        }
+        cloudSyncInFlight = true;
+        cloudSyncPending = false;
+        cloudSyncState = 'syncing';
+        updateCloudStatusUI();
+
+        try {
+          const docRef = fbDb.collection('wealth_users').doc(currentUser.uid);
+          // Before first write in this session, safely merge with cloud so we never clobber another browser
+          if (!initialCloudSynced) {
+            const snap = await docRef.get();
+            initialCloudSynced = true;
+            if (snap.exists && snap.data() && snap.data().payload) {
+              try {
+                const remoteParsed = JSON.parse(snap.data().payload);
+                if (remoteParsed && Array.isArray(remoteParsed.stocks)) {
+                  const { merged } = mergeStates(state, remoteParsed);
+                  state = merged;
+                  rebuildFingerprints(state);
+                  persistLocalOnly(state);
+                  renderAll();
+                }
+              } catch (e) {}
+            }
+          }
+
+          const pushTs = Math.max(Date.now(), safeNum(state._updatedAt, 0));
+          state._updatedAt = pushTs;
+          state._clientId = CLIENT_ID;
+          const payloadObj = { ...state };
+          delete payloadObj._dirty;
+
+          await docRef.set({
+            updatedAt: new Date(pushTs).toISOString(),
+            updatedAtMs: pushTs,
+            clientId: CLIENT_ID,
+            email: currentUser.email || '',
+            payload: JSON.stringify(payloadObj)
+          });
+
+          lastPushedAtMs = pushTs;
+          state._dirty = false;
+          persistLocalOnly(state);
+          cloudSyncRetryCount = 0;
+          cloudSyncState = 'synced';
+          lastCloudSyncTimeStr = nowTimeHHMMSS();
+          updateCloudStatusUI();
+          if (!silent) showToast('已同步至 Google 雲端');
+        } catch (err) {
+          cloudSyncState = 'error';
+          updateCloudStatusUI();
+          cloudSyncRetryCount += 1;
+          const delayMs = Math.min(15000, 2500 * cloudSyncRetryCount);
+          if (!silent || cloudSyncRetryCount === 1) {
+            showToast('雲端寫入失敗（資料已保存在本機），將自動重試…');
+          }
+          cloudSyncRetryTimer = setTimeout(() => {
+            cloudSyncRetryTimer = null;
+            if (currentUser && fbDb && (state._dirty || cloudSyncPending)) {
+              flushCloudPush(true);
+            }
+          }, delayMs);
+        } finally {
+          cloudSyncInFlight = false;
+          if (cloudSyncPending && cloudSyncState !== 'error') {
+            flushCloudPush(true);
+          }
+        }
+      }
+
       async function pushToCloud(silent = false) {
         if (!currentUser || !fbDb) {
           if (!silent) showToast('請先完成 Google 帳號登入');
           return;
         }
-        try {
-          await fbDb.collection('wealth_users').doc(currentUser.uid).set({
-            updatedAt: new Date().toISOString(),
-            email: currentUser.email || '',
-            payload: JSON.stringify(state)
-          });
-          if (!silent) showToast('已同步至 Google 雲端');
-        } catch (err) {
-          if (!silent) showToast('雲端寫入失敗，請檢查 Firestore 權限');
-        }
+        cloudSyncPending = true;
+        await flushCloudPush(silent);
       }
 
       async function pullFromCloud(silent = false) {
@@ -2412,48 +2836,53 @@
         }
         try {
           const doc = await fbDb.collection('wealth_users').doc(currentUser.uid).get();
+          initialCloudSynced = true;
           if (doc.exists && doc.data() && doc.data().payload) {
-            const parsed = JSON.parse(doc.data().payload);
-            if (parsed && Array.isArray(parsed.stocks)) {
-              if (!Array.isArray(parsed.fixedIncomes)) parsed.fixedIncomes = [];
-              if (!Array.isArray(parsed.fixedExpenses)) parsed.fixedExpenses = [];
-              if (!Array.isArray(parsed.randomExpenses)) parsed.randomExpenses = [];
-              if (!Array.isArray(parsed.fxTrades)) parsed.fxTrades = [];
-              if (!Array.isArray(parsed.incomeReceipts)) parsed.incomeReceipts = [];
-              if (!Array.isArray(parsed.investmentLogs)) parsed.investmentLogs = [];
-              if (!Array.isArray(parsed.stockTrades)) parsed.stockTrades = [];
-              if (!parsed.fx) parsed.fx = { TWD: 1, USD: 33.022, JPY: 0.2069, HKD: 4.2097, CNY: 4.9525 };
-              if (!parsed.fx.JPY) parsed.fx.JPY = 0.2069;
-              state = parsed;
-              if (state.quoteSettings) {
-                if (state.quoteSettings.gsheetCsvUrl !== undefined) appConfig.gsheetCsvUrl = state.quoteSettings.gsheetCsvUrl;
-                if (state.quoteSettings.finnhubKey !== undefined) appConfig.finnhubKey = state.quoteSettings.finnhubKey;
-                if (state.quoteSettings.autoRefresh !== undefined) appConfig.autoRefresh = Boolean(state.quoteSettings.autoRefresh);
-                if (state.quoteSettings.refreshIntervalMin !== undefined) appConfig.refreshIntervalMin = safeNum(state.quoteSettings.refreshIntervalMin, 5);
-                saveConfig();
-              }
-              saveState(false);
-              renderAll();
-              (function autoDailySnapshot() {
-        const totals = computeTotals(state);
-        if (totals.netWorthTWD <= 0) return;
-        const today = todayISO();
-        if (!Array.isArray(state.snapshots)) state.snapshots = [];
-        const exists = state.snapshots.some((s) => s.date === today);
-        if (!exists) {
-          state.snapshots.push({
-            id: uid('snap'),
-            date: today,
-            cashTWD: Math.round(totals.cashTWD),
-            stocksTWD: Math.round(totals.stocksTWD),
-            investmentsTWD: Math.round(totals.investmentsTWD),
-            totalTWD: Math.round(totals.netWorthTWD),
-            note: '每日自動快照'
-          });
-          saveState();
-          renderHistory();
+            applyRemotePayload(doc.data(), true);
+            if (!silent) showToast('已與 Google 雲端完成雙向合併同步');
+          } else if (!silent) {
+            showToast('雲端尚無此帳號資料');
+          }
+        } catch (err) {
+          if (!silent) showToast('雲端讀取失敗，請檢查網路連線');
         }
-      })();
+      }
+
+      // Cross-tab sync within the same browser (even without cloud login)
+      window.addEventListener('storage', (ev) => {
+        if (ev.key !== STORAGE_KEY || !ev.newValue) return;
+        try {
+          const other = JSON.parse(ev.newValue);
+          if (!other || !Array.isArray(other.stocks)) return;
+          if (other._clientId === CLIENT_ID) return;
+          const { merged } = mergeStates(state, other);
+          state = merged;
+          rebuildFingerprints(state);
+          renderAll();
+        } catch (e) {}
+      });
+
+      // Retry pending cloud sync when network reconnects or tab returns to foreground
+      window.addEventListener('online', () => {
+        if (currentUser && fbDb && (state._dirty || cloudSyncPending || cloudSyncState === 'error')) {
+          scheduleCloudPush();
+        }
+      });
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible' && currentUser && fbDb && (state._dirty || cloudSyncPending || cloudSyncState === 'error')) {
+          scheduleCloudPush();
+        }
+      });
+
+      // Warn before closing tab if cloud upload is still in progress
+      window.addEventListener('beforeunload', (e) => {
+        if (currentUser && fbDb && (cloudSyncInFlight || cloudSyncPending || state._dirty)) {
+          e.preventDefault();
+          e.returnValue = '';
+        }
+      });
+
+      // Bind Welcome & Trend controls once at startup
       document.querySelectorAll('[data-welcome-action]').forEach((btn) => {
         btn.addEventListener('click', () => {
           const act = btn.dataset.welcomeAction;
@@ -2490,19 +2919,6 @@
           renderTrendChartOnCanvas('chart-history-trend', true);
         });
       });
-
-      switchTab(localStorage.getItem('wealth_skip_welcome') === '1' ? 'overview' : 'welcome');
-      scheduleAutoRefresh();
-              if (appConfig.autoRefresh !== false) refreshLivePricesAndFX(true);
-              if (!silent) showToast('已從雲端還原資料');
-            }
-          } else if (!silent) {
-            showToast('雲端尚無此帳號資料');
-          }
-        } catch (err) {
-          if (!silent) showToast('雲端讀取失敗');
-        }
-      }
 
       // Live Refresh
       function scheduleAutoRefresh() {
@@ -11726,6 +12142,7 @@
         } else if (sc === 'expense') { switchTab('expenses'); setTimeout(() => openRandomExpenseModal(null), 150); }
         else if (sc === 'reports') { switchTab('reports'); }
         else if (sc === 'migrate') { switchTab('migrate'); }
+        else { switchTab(localStorage.getItem('wealth_skip_welcome') === '1' ? 'overview' : 'welcome'); }
       } catch (e) {}
 
       scheduleAutoRefresh();
