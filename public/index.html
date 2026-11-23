@@ -7511,7 +7511,7 @@
       }
 
       function openRandomExpenseModal(item = null) {
-        const isEdit = Boolean(item);
+        const isEdit = Boolean(item && item.id);
         const r = item || { date: todayISO(), category: '餐飲美食', title: '', currency: 'TWD', amount: 0, account: '現金（TWD）', deductStatus: 'unpaid', note: '' };
         const html = `
           ${buildPhotoAutofillBarHtml('拍收據／發票／消費截圖 AI 自動填單')}
@@ -12725,9 +12725,30 @@
         'update_cash', 'transfer_cash', 'add_stock_trade', 'set_budget',
         'add_trip_expense', 'navigate', 'refresh_quotes', 'export_backup'
       ]);
-      let aiCopilotHistory = [];
+      const COPILOT_HIST_KEY = 'wealth_ai_copilot_hist_v1';
+      let aiCopilotHistory = (() => {
+        try {
+          const raw = localStorage.getItem(COPILOT_HIST_KEY);
+          const parsed = raw ? JSON.parse(raw) : [];
+          return Array.isArray(parsed) ? parsed.slice(-20) : [];
+        } catch (e) {
+          return [];
+        }
+      })();
       let aiCopilotStagedImgs = [];
       let aiCopilotBusy = false;
+
+      function saveAiCopilotHistory() {
+        try {
+          const compact = aiCopilotHistory.slice(-20).map((m) => ({
+            role: m.role,
+            text: m.text,
+            actions: Array.isArray(m.actions) ? m.actions : [],
+            meta: m.meta || ''
+          }));
+          localStorage.setItem(COPILOT_HIST_KEY, JSON.stringify(compact));
+        } catch (e) {}
+      }
 
       function updateAiCopilotModelBadge() {
         const badge = document.getElementById('ai-copilot-model-badge');
@@ -13169,11 +13190,15 @@
               </div>
               ${actions.map((a, aIdx) => {
                 const isDanger = a.type === 'delete_expense' || a.type === 'delete_income';
+                const canEditPrefill = (a.type === 'add_expense' || a.type === 'add_income') && a._status === 'pending';
+                const editBtnHtml = canEditPrefill
+                  ? `<button type="button" data-copilot-edit="${mIdx}:${aIdx}" class="px-2 py-1 rounded-md text-[11px] font-medium shrink-0 bg-white hover:bg-zinc-100 hairline text-zinc-700" title="帶入完整表單微調後儲存">✎ 帶入編輯</button>`
+                  : '';
                 const statusBadge = a._status === 'done'
                   ? '<span class="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 text-[10px] font-medium shrink-0">已執行 ✓</span>'
                   : (a._status === 'error'
                     ? `<span class="px-1.5 py-0.5 rounded bg-rose-50 text-rose-700 text-[10px] font-medium shrink-0">失敗：${escapeHtml(a._err || '')}</span>`
-                    : `<button type="button" data-copilot-run="${mIdx}:${aIdx}" class="px-2.5 py-1 rounded-md text-[11px] font-medium shrink-0 ${isDanger ? 'bg-rose-700 hover:bg-rose-800 text-white' : 'bg-zinc-900 hover:bg-zinc-800 text-white'}">${isDanger ? '確認刪除' : '確認執行'}</button>`);
+                    : `<div class="flex items-center gap-1 shrink-0">${editBtnHtml}<button type="button" data-copilot-run="${mIdx}:${aIdx}" class="px-2.5 py-1 rounded-md text-[11px] font-medium shrink-0 ${isDanger ? 'bg-rose-700 hover:bg-rose-800 text-white' : 'bg-zinc-900 hover:bg-zinc-800 text-white'}">${isDanger ? '確認刪除' : '確認執行'}</button></div>`);
                 return `
                   <div class="p-2 rounded-lg bg-[#f7f7f5] hairline flex items-center justify-between gap-2 text-[11px]">
                     <span class="text-zinc-800 leading-snug">${escapeHtml(describeAiAction(a))}</span>
@@ -13199,6 +13224,7 @@
             </div>
           `;
         }).join('');
+        saveAiCopilotHistory();
         box.scrollTop = box.scrollHeight;
       }
 
@@ -13465,6 +13491,7 @@
       if (btnCopilotClear) {
         btnCopilotClear.addEventListener('click', () => {
           aiCopilotHistory = [];
+          try { localStorage.removeItem(COPILOT_HIST_KEY); } catch (e) {}
           renderAiCopilotMessages();
         });
       }
@@ -13521,6 +13548,39 @@
           const quick = ev.target.closest('[data-copilot-quick]');
           if (quick) {
             sendAiCopilotMessage(quick.dataset.copilotQuick);
+            return;
+          }
+          const editOne = ev.target.closest('[data-copilot-edit]');
+          if (editOne) {
+            const [mIdx, aIdx] = editOne.dataset.copilotEdit.split(':').map(Number);
+            const act = aiCopilotHistory[mIdx] && aiCopilotHistory[mIdx].actions && aiCopilotHistory[mIdx].actions[aIdx];
+            if (!act) return;
+            closeAiCopilotDrawer();
+            if (act.type === 'add_expense') {
+              const cat = ALL_EXPENSE_CATEGORIES.includes(act.category) ? act.category : mapSingleCategoryHeuristic(act.category || act.title || '');
+              openRandomExpenseModal({
+                id: '',
+                date: parseFlexibleDate(act.date) || todayISO(),
+                category: ALL_EXPENSE_CATEGORIES.includes(cat) ? cat : '其他隨機支出',
+                title: String(act.title || '').trim(),
+                currency: String(act.currency || 'TWD').toUpperCase(),
+                amount: safeNum(act.amount),
+                account: String(act.account || '').trim(),
+                deductStatus: act.deductNow ? 'unpaid' : 'paid',
+                note: String(act.note || 'AI 助理帶入').trim()
+              });
+              // Ensure openRandomExpenseModal saves as a NEW record (not edit of empty id)
+              const modalTitleEl = document.getElementById('modal-title');
+              if (modalTitleEl) modalTitleEl.textContent = '新增隨機支出（AI 預填）';
+            } else if (act.type === 'add_income') {
+              openIncomeReceiptModal({
+                name: String(act.name || act.title || '').trim(),
+                category: String(act.category || '其他收入').trim(),
+                currency: String(act.currency || 'TWD').toUpperCase(),
+                amount: safeNum(act.amount),
+                account: String(act.account || '').trim()
+              }, null);
+            }
             return;
           }
           const runOne = ev.target.closest('[data-copilot-run]');
