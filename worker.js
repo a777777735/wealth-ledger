@@ -300,13 +300,13 @@ async function handleAiProxy(request, env) {
       };
       const presetDefaults = {
         openai: 'gpt-4o-mini',
-        groq: 'meta-llama/llama-4-scout-17b-16e-instruct',
+        groq: 'qwen/qwen3.8-27b',
         openrouter: 'qwen/qwen2.5-vl-72b-instruct:free',
         mistral: 'mistral-small-latest'
       };
       const presetFallbacks = {
-        groq: ['meta-llama/llama-4-maverick-17b-128e-instruct'],
-        openrouter: ['google/gemma-3-27b-it:free', 'meta-llama/llama-4-scout:free'],
+        groq: attachments.length > 0 ? [] : ['openai/gpt-oss-120b', 'openai/gpt-oss-20b'],
+        openrouter: ['google/gemma-3-27b-it:free', 'qwen/qwen3.8-27b'],
         mistral: ['pixtral-12b-2409']
       };
       const baseUrl = provider === 'custom'
@@ -318,7 +318,10 @@ async function handleAiProxy(request, env) {
       if (!/^https:\/\//i.test(baseUrl) && !/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?/i.test(baseUrl)) {
         return jsonResp({ ok: false, error: '自訂 Base URL 必須使用 https://（本機測試限 localhost）' }, 400);
       }
-      const primaryModel = String(body.model || presetDefaults[provider] || '').trim();
+      let primaryModel = String(body.model || presetDefaults[provider] || '').trim();
+      if (provider === 'groq' && /llama-4-(scout|maverick)/i.test(primaryModel)) {
+        primaryModel = 'qwen/qwen3.8-27b';
+      }
       if (!primaryModel) {
         return jsonResp({ ok: false, error: '自訂模式請填寫模型名稱（Model ID）' }, 400);
       }

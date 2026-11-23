@@ -1579,7 +1579,7 @@
               </div>
               <div class="space-y-1.5">
                 <label for="cfg-ai-model" class="block text-xs font-medium text-zinc-700">模型名稱 (Model ID)</label>
-                <input id="cfg-ai-model" type="text" placeholder="meta-llama/llama-4-scout-17b-16e-instruct" class="w-full h-9 px-3 rounded-lg hairline bg-white text-xs font-mono-num" />
+                <input id="cfg-ai-model" type="text" placeholder="qwen/qwen3.8-27b" class="w-full h-9 px-3 rounded-lg hairline bg-white text-xs font-mono-num" />
               </div>
               <div class="space-y-1.5">
                 <label for="cfg-ai-key" class="block text-xs font-medium text-zinc-700">API Key（僅存本機）</label>
@@ -9345,7 +9345,7 @@
       // AI SETTINGS & UNIVERSAL MIGRATION WIZARD ENGINE
       // ============================================================
       const AI_PROVIDER_DEFAULTS = {
-        groq: 'meta-llama/llama-4-scout-17b-16e-instruct',
+        groq: 'qwen/qwen3.8-27b',
         openrouter: 'qwen/qwen2.5-vl-72b-instruct:free',
         mistral: 'mistral-small-latest',
         gemini: 'gemini-3.8-flash',
@@ -9459,11 +9459,15 @@
             saveConfig();
           }
         }
-        // Auto-migrate deprecated gemini-2.5-flash inside pool
+        // Auto-migrate deprecated models inside pool
         let migrated = false;
         appConfig.aiKeys.forEach((k) => {
           if (k.provider === 'gemini' && k.model === 'gemini-2.5-flash') {
             k.model = 'gemini-3.8-flash';
+            migrated = true;
+          }
+          if (k.provider === 'groq' && /llama-4-(scout|maverick)/i.test(String(k.model || ''))) {
+            k.model = 'qwen/qwen3.8-27b';
             migrated = true;
           }
           if (k.enabled === undefined) k.enabled = true;
