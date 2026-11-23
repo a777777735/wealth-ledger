@@ -1551,16 +1551,16 @@
 
         <!-- TAB 8: SETTINGS, CLOUD SYNC & BACKUP -->
         <section id="tab-settings" class="tab-panel hidden space-y-6">
-          <!-- AI Provider Settings -->
+          <!-- AI Provider Settings (Multi-Key Failover Pool) -->
           <div class="bg-white rounded-xl p-6 hairline space-y-4">
             <div class="flex flex-wrap items-start justify-between gap-2">
               <div>
-                <h2 class="text-base font-semibold text-zinc-900">AI 模型設定（支援多供應商與免費極速方案）</h2>
-                <p class="text-xs text-zinc-500 mt-0.5">供「照片辨識記帳」與「AI 智慧搬家」（收據截圖、PDF 對帳單、文字記帳）使用；API Key 僅存於本機瀏覽器</p>
+                <h2 class="text-base font-semibold text-zinc-900">AI 模型與多組 API Key 輪流備援設定</h2>
+                <p class="text-xs text-zinc-500 mt-0.5">可一次加入多組 Key（如 Groq＋OpenRouter＋Gemini），呼叫時依序輪流測試，第一組失敗自動無縫切換下一組；金鑰僅存於本機瀏覽器</p>
               </div>
               <span id="cfg-ai-status-badge" class="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-zinc-100 text-zinc-600">尚未設定</span>
             </div>
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
               <div class="space-y-1.5">
                 <label for="cfg-ai-provider" class="block text-xs font-medium text-zinc-700">AI 供應商</label>
                 <select id="cfg-ai-provider" class="w-full h-9 px-3 rounded-lg hairline bg-white text-xs font-medium text-zinc-800">
@@ -1574,11 +1574,15 @@
                 </select>
               </div>
               <div class="space-y-1.5">
+                <label for="cfg-ai-label" class="block text-xs font-medium text-zinc-700">別名（選填，方便辨識）</label>
+                <input id="cfg-ai-label" type="text" placeholder="例如：主力 Groq、備用 Gemini" class="w-full h-9 px-3 rounded-lg hairline bg-white text-xs" />
+              </div>
+              <div class="space-y-1.5">
                 <label for="cfg-ai-model" class="block text-xs font-medium text-zinc-700">模型名稱 (Model ID)</label>
                 <input id="cfg-ai-model" type="text" placeholder="meta-llama/llama-4-scout-17b-16e-instruct" class="w-full h-9 px-3 rounded-lg hairline bg-white text-xs font-mono-num" />
               </div>
               <div class="space-y-1.5">
-                <label for="cfg-ai-key" class="block text-xs font-medium text-zinc-700">API Key（僅存本機，不寫入雲端帳本）</label>
+                <label for="cfg-ai-key" class="block text-xs font-medium text-zinc-700">API Key（僅存本機）</label>
                 <input id="cfg-ai-key" type="password" autocomplete="off" placeholder="貼上你的 API Key" class="w-full h-9 px-3 rounded-lg hairline bg-white text-xs font-mono-num" />
               </div>
             </div>
@@ -1600,9 +1604,21 @@
                 <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" class="underline hover:text-zinc-900">Google AI Studio</a>
               </div>
               <div class="flex items-center gap-2">
-                <button id="btn-save-ai-cfg" type="button" class="btn-focus h-8 px-3.5 rounded-lg bg-white hover:bg-zinc-50 text-zinc-800 hairline text-xs font-medium">儲存 AI 設定</button>
-                <button id="btn-test-ai" type="button" class="btn-focus h-8 px-3.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-medium">測試 AI 連線</button>
+                <button id="btn-save-ai-cfg" type="button" class="btn-focus h-8 px-3.5 rounded-lg bg-white hover:bg-zinc-50 text-zinc-800 hairline text-xs font-medium">＋ 加入輪替清單</button>
+                <button id="btn-test-ai" type="button" class="btn-focus h-8 px-3.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-medium">🔄 輪流測試全部 Key</button>
               </div>
+            </div>
+
+            <!-- Live Testing Status Banner -->
+            <div id="cfg-ai-live-test-bar" class="hidden rounded-lg bg-amber-50 border border-amber-200/80 px-3.5 py-2 text-xs text-amber-900 font-mono-num"></div>
+
+            <!-- Saved Multi-Key Failover List -->
+            <div class="pt-3 hairline-t space-y-2">
+              <div class="flex items-center justify-between text-xs">
+                <span class="font-semibold text-zinc-800">已加入的 AI Key 備援輪替清單（依順序自動切換）</span>
+                <span id="cfg-ai-key-count" class="text-[11px] font-mono-num text-zinc-400">0 組</span>
+              </div>
+              <div id="cfg-ai-key-list" class="space-y-2"></div>
             </div>
           </div>
 
@@ -9308,48 +9324,144 @@
         }
       }
 
-      function syncAiConfigUI() {
-        const provider = appConfig.aiProvider || 'gemini';
-        if (provider === 'gemini' && appConfig.aiModel === 'gemini-2.5-flash') {
-          appConfig.aiModel = 'gemini-3.8-flash';
-          saveConfig();
-        }
-        const model = appConfig.aiModel || AI_PROVIDER_DEFAULTS[provider] || '';
-        const key = appConfig.aiApiKey || '';
-        const baseUrl = appConfig.aiBaseUrl || '';
+      const AI_PROV_NAMES = {
+        groq: 'Groq',
+        openrouter: 'OpenRouter',
+        mistral: 'Mistral',
+        gemini: 'Google Gemini',
+        openai: 'OpenAI',
+        anthropic: 'Anthropic Claude',
+        custom: '自訂 OpenAI 相容'
+      };
+      const aiKeyTestStates = {}; // { [id]: { status: 'idle'|'testing'|'ok'|'fail', msg: '' } }
 
+      function maskApiKey(k) {
+        const s = String(k || '').trim();
+        if (!s) return '（伺服器內建／免填）';
+        if (s.length <= 8) return '••••' + s.slice(-2);
+        return s.slice(0, 4) + '••••' + s.slice(-4);
+      }
+
+      function ensureAiKeysPool() {
+        if (!Array.isArray(appConfig.aiKeys)) {
+          appConfig.aiKeys = [];
+          if (appConfig.aiApiKey || (appConfig.aiProvider === 'custom' && appConfig.aiBaseUrl)) {
+            const p = appConfig.aiProvider || 'gemini';
+            const m = (p === 'gemini' && appConfig.aiModel === 'gemini-2.5-flash') ? 'gemini-3.8-flash' : (appConfig.aiModel || AI_PROVIDER_DEFAULTS[p] || '');
+            appConfig.aiKeys.push({
+              id: uid('aikey'),
+              label: `${AI_PROV_NAMES[p] || p} #1`,
+              provider: p,
+              model: m,
+              apiKey: appConfig.aiApiKey || '',
+              baseUrl: appConfig.aiBaseUrl || '',
+              enabled: true
+            });
+            saveConfig();
+          }
+        }
+        // Auto-migrate deprecated gemini-2.5-flash inside pool
+        let migrated = false;
+        appConfig.aiKeys.forEach((k) => {
+          if (k.provider === 'gemini' && k.model === 'gemini-2.5-flash') {
+            k.model = 'gemini-3.8-flash';
+            migrated = true;
+          }
+          if (k.enabled === undefined) k.enabled = true;
+        });
+        if (migrated) saveConfig();
+
+        // Sync primary fields for backward compatibility
+        const firstActive = appConfig.aiKeys.find((k) => k.enabled !== false) || appConfig.aiKeys[0];
+        if (firstActive) {
+          appConfig.aiProvider = firstActive.provider;
+          appConfig.aiModel = firstActive.model;
+          appConfig.aiApiKey = firstActive.apiKey;
+          appConfig.aiBaseUrl = firstActive.baseUrl || '';
+        }
+        return appConfig.aiKeys;
+      }
+
+      function renderAiKeyPool() {
+        const listEl = document.getElementById('cfg-ai-key-list');
+        const countEl = document.getElementById('cfg-ai-key-count');
+        const keys = ensureAiKeysPool();
+        const enabledCount = keys.filter((k) => k.enabled !== false).length;
+        if (countEl) countEl.textContent = `共 ${keys.length} 組（啟用 ${enabledCount} 組）`;
+        if (!listEl) return;
+        if (keys.length === 0) {
+          listEl.innerHTML = `<div class="rounded-lg bg-[#f7f7f5] hairline px-3.5 py-3 text-xs text-zinc-500">尚未加入任何 API Key。可在上方選擇供應商（建議先加 <strong>Groq</strong>，再加 <strong>OpenRouter</strong> 或 <strong>Gemini</strong> 作為備援）後按「＋ 加入輪替清單」。</div>`;
+          return;
+        }
+        listEl.innerHTML = keys.map((k, idx) => {
+          const st = aiKeyTestStates[k.id] || { status: 'idle', msg: '' };
+          let badgeHtml = k.enabled === false
+            ? '<span class="px-1.5 py-0.5 rounded bg-zinc-100 text-zinc-400 text-[10px]">已停用</span>'
+            : '<span class="px-1.5 py-0.5 rounded bg-zinc-100 text-zinc-600 text-[10px]">待命</span>';
+          if (st.status === 'testing') {
+            badgeHtml = '<span class="px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 text-[10px] font-medium animate-pulse">🔄 測試中…</span>';
+          } else if (st.status === 'ok') {
+            badgeHtml = `<span class="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 text-[10px] font-medium font-mono-num">✓ ${escapeHtml(st.msg || '正常')}</span>`;
+          } else if (st.status === 'fail') {
+            badgeHtml = `<span class="px-1.5 py-0.5 rounded bg-rose-50 text-rose-700 text-[10px] font-medium max-w-[180px] truncate" title="${escapeHtml(st.msg || '失敗')}">✕ ${escapeHtml(st.msg || '失敗')}</span>`;
+          }
+          return `
+            <div class="rounded-lg p-3 hairline ${k.enabled === false ? 'bg-zinc-50 opacity-60' : 'bg-white'} flex flex-wrap items-center justify-between gap-2 text-xs">
+              <div class="flex items-center gap-2.5 min-w-0">
+                <span class="w-5 h-5 rounded-md bg-zinc-900 text-white text-[10px] font-mono-num flex items-center justify-center shrink-0">#${idx + 1}</span>
+                <div class="min-w-0">
+                  <div class="flex items-center gap-1.5 flex-wrap">
+                    <span class="font-semibold text-zinc-900">${escapeHtml(k.label || AI_PROV_NAMES[k.provider] || k.provider)}</span>
+                    <span class="text-[10px] px-1.5 py-0.5 rounded bg-[#f7f7f5] text-zinc-600">${escapeHtml(AI_PROV_NAMES[k.provider] || k.provider)}</span>
+                    ${badgeHtml}
+                  </div>
+                  <div class="text-[11px] font-mono-num text-zinc-400 truncate mt-0.5">${escapeHtml(k.model || '(預設模型)')} · ${escapeHtml(maskApiKey(k.apiKey))}${k.baseUrl ? ' · ' + escapeHtml(k.baseUrl) : ''}</div>
+                </div>
+              </div>
+              <div class="flex items-center gap-1 shrink-0">
+                <button type="button" data-aikey-act="test" data-aikey-id="${escapeHtml(k.id)}" class="h-7 px-2 rounded hairline bg-white hover:bg-zinc-50 text-[11px] text-zinc-700">單測</button>
+                <button type="button" data-aikey-act="up" data-aikey-id="${escapeHtml(k.id)}" ${idx === 0 ? 'disabled' : ''} class="h-7 w-7 rounded hairline bg-white hover:bg-zinc-50 text-[11px] text-zinc-700 disabled:opacity-30" title="提高優先順序">↑</button>
+                <button type="button" data-aikey-act="down" data-aikey-id="${escapeHtml(k.id)}" ${idx === keys.length - 1 ? 'disabled' : ''} class="h-7 w-7 rounded hairline bg-white hover:bg-zinc-50 text-[11px] text-zinc-700 disabled:opacity-30" title="降低優先順序">↓</button>
+                <button type="button" data-aikey-act="toggle" data-aikey-id="${escapeHtml(k.id)}" class="h-7 px-2 rounded hairline bg-white hover:bg-zinc-50 text-[11px] text-zinc-700">${k.enabled === false ? '啟用' : '停用'}</button>
+                <button type="button" data-aikey-act="del" data-aikey-id="${escapeHtml(k.id)}" class="h-7 px-2 rounded hairline bg-white hover:bg-rose-50 text-[11px] text-rose-700">刪除</button>
+              </div>
+            </div>
+          `;
+        }).join('');
+      }
+
+      function syncAiConfigUI() {
+        const keys = ensureAiKeysPool();
+        const enabledKeys = keys.filter((k) => k.enabled !== false);
+        const provider = (document.getElementById('cfg-ai-provider') && document.getElementById('cfg-ai-provider').value) || appConfig.aiProvider || 'groq';
         const provEl = document.getElementById('cfg-ai-provider');
         const modelEl = document.getElementById('cfg-ai-model');
-        const keyEl = document.getElementById('cfg-ai-key');
-        const baseEl = document.getElementById('cfg-ai-baseurl');
         const baseWrap = document.getElementById('cfg-ai-baseurl-wrap');
-        if (provEl) provEl.value = provider;
-        if (modelEl) {
-          modelEl.value = model;
-          modelEl.placeholder = AI_PROVIDER_DEFAULTS[provider] || '輸入模型名稱';
+        if (provEl && !provEl.dataset.initialized) {
+          provEl.value = appConfig.aiProvider || 'groq';
+          provEl.dataset.initialized = '1';
+          if (modelEl) {
+            modelEl.value = AI_PROVIDER_DEFAULTS[provEl.value] || '';
+            modelEl.placeholder = AI_PROVIDER_DEFAULTS[provEl.value] || '輸入模型名稱';
+          }
         }
-        if (keyEl) keyEl.value = key;
-        if (baseEl) baseEl.value = baseUrl;
-        if (baseWrap) baseWrap.classList.toggle('hidden', provider !== 'custom');
-        updateAiProviderGuide(provider);
+        const curProv = (provEl && provEl.value) || provider;
+        if (baseWrap) baseWrap.classList.toggle('hidden', curProv !== 'custom');
+        updateAiProviderGuide(curProv);
+        renderAiKeyPool();
 
-        const hasKey = Boolean(key) || Boolean(aiServerKeyStatus[provider]) || (provider === 'custom' && Boolean(baseUrl));
-        const provNames = {
-          groq: 'Groq',
-          openrouter: 'OpenRouter',
-          mistral: 'Mistral',
-          gemini: 'Google Gemini',
-          openai: 'OpenAI',
-          anthropic: 'Anthropic Claude',
-          custom: '自訂 OpenAI 相容'
-        };
-        const statusText = hasKey
-          ? `已連線設定：${provNames[provider] || provider}${model ? ` (${model})` : ''}`
-          : '尚未設定 AI Key（仍可使用離線／手動搬家）';
+        const serverHasAny = Object.values(aiServerKeyStatus).some(Boolean);
+        const hasKey = enabledKeys.length > 0 || serverHasAny;
+        const primary = enabledKeys[0];
+        const statusText = enabledKeys.length > 1
+          ? `已啟用 ${enabledKeys.length} 組 Key 輪流備援（主力：${primary.label || AI_PROV_NAMES[primary.provider] || primary.provider}）`
+          : (primary
+            ? `已連線設定：${primary.label || AI_PROV_NAMES[primary.provider] || primary.provider}${primary.model ? ` (${primary.model})` : ''}`
+            : (serverHasAny ? '已使用後台預設 Key' : '尚未設定 AI Key（仍可使用離線／手動搬家）'));
 
         const cfgBadge = document.getElementById('cfg-ai-status-badge');
         if (cfgBadge) {
-          cfgBadge.textContent = hasKey ? `已設定 · ${provNames[provider] || provider}` : '尚未設定';
+          cfgBadge.textContent = enabledKeys.length > 0 ? `已啟用 ${enabledKeys.length} 組輪替` : (serverHasAny ? '後台 Key 就緒' : '尚未設定');
           cfgBadge.className = `inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium ${hasKey ? 'bg-emerald-50 text-emerald-700' : 'bg-zinc-100 text-zinc-600'}`;
         }
         const migBadge = document.getElementById('migrate-ai-badge');
@@ -9357,6 +9469,7 @@
           migBadge.textContent = statusText;
           migBadge.className = `inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium ${hasKey ? 'bg-emerald-50 text-emerald-700' : 'bg-zinc-100 text-zinc-600'}`;
         }
+        if (typeof updateAiCopilotModelBadge === 'function') updateAiCopilotModelBadge();
       }
 
       fetch(apiUrl('/api/ai/status')).then((r) => r.json()).then((d) => {
@@ -9681,16 +9794,16 @@
         return items;
       }
 
-      async function callAiEndpoint({ systemPrompt, prompt, attachments = [], expectJson = true }) {
-        const provider = appConfig.aiProvider || 'gemini';
+      async function callAiSingleKey(keyEntry, { systemPrompt, prompt, attachments = [], expectJson = true }) {
+        const provider = (keyEntry && keyEntry.provider) || appConfig.aiProvider || 'gemini';
         const res = await fetch(apiUrl('/api/ai'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             provider,
-            apiKey: appConfig.aiApiKey || '',
-            model: appConfig.aiModel || AI_PROVIDER_DEFAULTS[provider] || '',
-            baseUrl: appConfig.aiBaseUrl || '',
+            apiKey: (keyEntry && keyEntry.apiKey) || '',
+            model: (keyEntry && keyEntry.model) || AI_PROVIDER_DEFAULTS[provider] || '',
+            baseUrl: (keyEntry && keyEntry.baseUrl) || '',
             systemPrompt,
             prompt,
             attachments,
@@ -9702,6 +9815,67 @@
           throw new Error(data.error || `AI 請求失敗 (${res.status})`);
         }
         return data;
+      }
+
+      async function callAiEndpoint({ systemPrompt, prompt, attachments = [], expectJson = true, onProgress = null }) {
+        const keys = ensureAiKeysPool().filter((k) => k.enabled !== false);
+        const candidates = keys.length > 0
+          ? keys
+          : [{
+              id: 'default',
+              label: AI_PROV_NAMES[appConfig.aiProvider || 'gemini'] || (appConfig.aiProvider || 'gemini'),
+              provider: appConfig.aiProvider || 'gemini',
+              model: appConfig.aiModel || AI_PROVIDER_DEFAULTS[appConfig.aiProvider || 'gemini'] || '',
+              apiKey: appConfig.aiApiKey || '',
+              baseUrl: appConfig.aiBaseUrl || ''
+            }];
+
+        const errors = [];
+        for (let i = 0; i < candidates.length; i++) {
+          const k = candidates[i];
+          const label = k.label || AI_PROV_NAMES[k.provider] || k.provider;
+          const tryMsg = candidates.length > 1
+            ? `正在嘗試第 ${i + 1}/${candidates.length} 組：${label}（${k.model || k.provider}）…`
+            : `正在連線：${label}（${k.model || k.provider}）…`;
+          if (typeof onProgress === 'function') {
+            try { onProgress({ index: i, total: candidates.length, key: k, phase: 'trying', message: tryMsg }); } catch (e) {}
+          }
+          if (k.id && k.id !== 'default') {
+            aiKeyTestStates[k.id] = { status: 'testing', msg: '' };
+            renderAiKeyPool();
+          }
+          const t0 = performance.now();
+          try {
+            const data = await callAiSingleKey(k, { systemPrompt, prompt, attachments, expectJson });
+            const sec = ((performance.now() - t0) / 1000).toFixed(1) + 's';
+            if (k.id && k.id !== 'default') {
+              aiKeyTestStates[k.id] = { status: 'ok', msg: sec };
+              renderAiKeyPool();
+            }
+            return {
+              ...data,
+              usedKeyId: k.id,
+              usedKeyLabel: label,
+              usedProvider: k.provider,
+              usedIndex: i + 1,
+              totalKeys: candidates.length
+            };
+          } catch (err) {
+            const errMsg = (err && err.message) || '連線失敗';
+            errors.push(`#${i + 1} ${label}：${errMsg}`);
+            if (k.id && k.id !== 'default') {
+              aiKeyTestStates[k.id] = { status: 'fail', msg: errMsg };
+              renderAiKeyPool();
+            }
+            const nextMsg = i + 1 < candidates.length
+              ? `第 ${i + 1} 組「${label}」失敗，自動切換第 ${i + 2}/${candidates.length} 組…`
+              : `第 ${i + 1} 組「${label}」失敗`;
+            if (typeof onProgress === 'function') {
+              try { onProgress({ index: i, total: candidates.length, key: k, phase: 'failed', error: errMsg, message: nextMsg }); } catch (e) {}
+            }
+          }
+        }
+        throw new Error(candidates.length > 1 ? `全部 ${candidates.length} 組 Key 皆失敗：\n${errors.join('\n')}` : errors[0]);
       }
 
       function setMigrateStatus(msg) {
@@ -10031,42 +10205,160 @@
           updateAiProviderGuide(p);
         });
       }
+      const setLiveAiTestBar = (msg, tone = 'amber') => {
+        const bar = document.getElementById('cfg-ai-live-test-bar');
+        if (!bar) return;
+        if (!msg) {
+          bar.classList.add('hidden');
+          return;
+        }
+        const toneCls = tone === 'emerald'
+          ? 'bg-emerald-50 border-emerald-200/80 text-emerald-800'
+          : (tone === 'rose' ? 'bg-rose-50 border-rose-200/80 text-rose-800' : 'bg-amber-50 border-amber-200/80 text-amber-900');
+        bar.className = `rounded-lg border px-3.5 py-2 text-xs font-mono-num ${toneCls}`;
+        bar.textContent = msg;
+      };
+
+      async function testSingleAiKeyEntry(k, idxLabel = '') {
+        const label = k.label || AI_PROV_NAMES[k.provider] || k.provider;
+        aiKeyTestStates[k.id] = { status: 'testing', msg: '' };
+        renderAiKeyPool();
+        setLiveAiTestBar(`🔄 正在測試${idxLabel}：${label}（${k.model || k.provider}）…`, 'amber');
+        const t0 = performance.now();
+        try {
+          const resp = await callAiSingleKey(k, {
+            systemPrompt: 'Reply with JSON {"status":"ok"} only.',
+            prompt: 'Ping',
+            expectJson: true
+          });
+          const sec = ((performance.now() - t0) / 1000).toFixed(1) + 's';
+          aiKeyTestStates[k.id] = { status: 'ok', msg: `${sec} (${resp.model || k.model})` };
+          renderAiKeyPool();
+          return { ok: true, sec, model: resp.model || k.model };
+        } catch (err) {
+          const msg = (err && err.message) || '連線失敗';
+          aiKeyTestStates[k.id] = { status: 'fail', msg };
+          renderAiKeyPool();
+          return { ok: false, error: msg };
+        }
+      }
+
       const btnSaveAiCfg = document.getElementById('btn-save-ai-cfg');
       if (btnSaveAiCfg) {
         btnSaveAiCfg.addEventListener('click', () => {
-          appConfig.aiProvider = (document.getElementById('cfg-ai-provider').value || 'gemini').trim();
-          appConfig.aiModel = (document.getElementById('cfg-ai-model').value || AI_PROVIDER_DEFAULTS[appConfig.aiProvider] || '').trim();
-          appConfig.aiApiKey = (document.getElementById('cfg-ai-key').value || '').trim();
-          appConfig.aiBaseUrl = (document.getElementById('cfg-ai-baseurl').value || '').trim();
+          const provider = (document.getElementById('cfg-ai-provider').value || 'groq').trim();
+          const model = (document.getElementById('cfg-ai-model').value || AI_PROVIDER_DEFAULTS[provider] || '').trim();
+          const apiKey = (document.getElementById('cfg-ai-key').value || '').trim();
+          const baseUrl = (document.getElementById('cfg-ai-baseurl').value || '').trim();
+          const rawLabel = (document.getElementById('cfg-ai-label') && document.getElementById('cfg-ai-label').value || '').trim();
+          if (!apiKey && provider !== 'custom') {
+            showToast('請先貼上 API Key 再加入輪替清單');
+            return;
+          }
+          if (provider === 'custom' && !baseUrl) {
+            showToast('自訂模式請填寫 API Base URL');
+            return;
+          }
+          const keys = ensureAiKeysPool();
+          const label = rawLabel || `${AI_PROV_NAMES[provider] || provider} #${keys.length + 1}`;
+          keys.push({
+            id: uid('aikey'),
+            label,
+            provider,
+            model,
+            apiKey,
+            baseUrl,
+            enabled: true
+          });
           saveConfig();
+          const keyEl = document.getElementById('cfg-ai-key');
+          const lblEl = document.getElementById('cfg-ai-label');
+          if (keyEl) keyEl.value = '';
+          if (lblEl) lblEl.value = '';
           syncAiConfigUI();
-          showToast('已儲存 AI 模型設定（僅存於本機瀏覽器）');
+          showToast(`已加入「${label}」至輪替清單（共 ${keys.length} 組）`);
         });
       }
+
+      const cfgAiKeyListEl = document.getElementById('cfg-ai-key-list');
+      if (cfgAiKeyListEl) {
+        cfgAiKeyListEl.addEventListener('click', async (ev) => {
+          const btn = ev.target.closest('[data-aikey-act]');
+          if (!btn) return;
+          const act = btn.dataset.aikeyAct;
+          const id = btn.dataset.aikeyId;
+          const keys = ensureAiKeysPool();
+          const idx = keys.findIndex((k) => k.id === id);
+          if (idx < 0) return;
+
+          if (act === 'up' && idx > 0) {
+            [keys[idx - 1], keys[idx]] = [keys[idx], keys[idx - 1]];
+            saveConfig();
+            syncAiConfigUI();
+          } else if (act === 'down' && idx < keys.length - 1) {
+            [keys[idx], keys[idx + 1]] = [keys[idx + 1], keys[idx]];
+            saveConfig();
+            syncAiConfigUI();
+          } else if (act === 'toggle') {
+            keys[idx].enabled = keys[idx].enabled === false ? true : false;
+            saveConfig();
+            syncAiConfigUI();
+          } else if (act === 'del') {
+            const removed = keys.splice(idx, 1)[0];
+            delete aiKeyTestStates[id];
+            if (keys.length === 0) {
+              appConfig.aiApiKey = '';
+              appConfig.aiBaseUrl = '';
+            }
+            saveConfig();
+            syncAiConfigUI();
+            showToast(`已移除「${removed.label || removed.provider}」`);
+          } else if (act === 'test') {
+            btn.disabled = true;
+            const res = await testSingleAiKeyEntry(keys[idx], `第 ${idx + 1} 組`);
+            if (res.ok) {
+              setLiveAiTestBar(`✓ 第 ${idx + 1} 組「${keys[idx].label || keys[idx].provider}」連線成功（${res.sec}）`, 'emerald');
+            } else {
+              setLiveAiTestBar(`✕ 第 ${idx + 1} 組「${keys[idx].label || keys[idx].provider}」失敗：${res.error}`, 'rose');
+            }
+            btn.disabled = false;
+          }
+        });
+      }
+
       const btnTestAi = document.getElementById('btn-test-ai');
       if (btnTestAi) {
         btnTestAi.addEventListener('click', async () => {
-          appConfig.aiProvider = (document.getElementById('cfg-ai-provider').value || 'gemini').trim();
-          appConfig.aiModel = (document.getElementById('cfg-ai-model').value || AI_PROVIDER_DEFAULTS[appConfig.aiProvider] || '').trim();
-          appConfig.aiApiKey = (document.getElementById('cfg-ai-key').value || '').trim();
-          appConfig.aiBaseUrl = (document.getElementById('cfg-ai-baseurl').value || '').trim();
-          saveConfig();
-          syncAiConfigUI();
-          btnTestAi.disabled = true;
-          btnTestAi.textContent = '測試中...';
-          try {
-            const resp = await callAiEndpoint({
-              systemPrompt: 'Reply with JSON {"status":"ok"} only.',
-              prompt: 'Ping',
-              expectJson: true
-            });
-            showToast(`AI 連線成功！使用模型：${resp.model}`);
-          } catch (err) {
-            showToast(`AI 連線失敗：${err.message}`);
-          } finally {
-            btnTestAi.disabled = false;
-            btnTestAi.textContent = '測試 AI 連線';
+          // If user typed a new key in the input box without clicking Add yet, auto-add it first
+          const pendingKey = (document.getElementById('cfg-ai-key') && document.getElementById('cfg-ai-key').value || '').trim();
+          if (pendingKey && btnSaveAiCfg) {
+            btnSaveAiCfg.click();
           }
+          const keys = ensureAiKeysPool().filter((k) => k.enabled !== false);
+          if (keys.length === 0) {
+            showToast('請先加入至少 1 組 API Key');
+            return;
+          }
+          btnTestAi.disabled = true;
+          btnTestAi.textContent = '輪流測試中...';
+          let okCount = 0;
+          let firstOk = null;
+          for (let i = 0; i < keys.length; i++) {
+            const res = await testSingleAiKeyEntry(keys[i], `第 ${i + 1}/${keys.length} 組`);
+            if (res.ok) {
+              okCount += 1;
+              if (!firstOk) firstOk = `${keys[i].label || keys[i].provider} (${res.sec})`;
+            }
+          }
+          if (okCount > 0) {
+            setLiveAiTestBar(`✓ 輪流測試完成：${okCount}/${keys.length} 組可用（首選可用：${firstOk}）`, 'emerald');
+            showToast(`測試完成：${okCount}/${keys.length} 組 Key 可用`);
+          } else {
+            setLiveAiTestBar(`✕ 全部 ${keys.length} 組 Key 皆連線失敗，請檢查各組失敗原因`, 'rose');
+            showToast(`全部 ${keys.length} 組 Key 皆測試失敗`);
+          }
+          btnTestAi.disabled = false;
+          btnTestAi.textContent = '🔄 輪流測試全部 Key';
         });
       }
 
@@ -10612,7 +10904,8 @@
               systemPrompt: '你是精準的繁體中文收據、發票與金融截圖辨識專家，只回傳合法 JSON。',
               prompt: buildExtractionPrompt('transactions'),
               attachments: [{ mimeType: img.mimeType, base64: img.base64 }],
-              expectJson: true
+              expectJson: true,
+              onProgress: (p) => { if (statusEl && p && p.message) statusEl.textContent = p.message; }
             });
             const parsed = extractJsonFromAiText(resp.text);
             const items = normalizeAiExtractedPayload(parsed, state);
@@ -11191,7 +11484,8 @@
                 systemPrompt: '你是精準的繁體中文財務收據、發票、月統計表、薪資條與帳單截圖辨識專家，只回傳合法 JSON。',
                 prompt: buildExtractionPrompt('transactions', userHint, fallbackDate),
                 attachments: stagedImgs.map((im) => ({ mimeType: im.mimeType, base64: im.base64 })),
-                expectJson: true
+                expectJson: true,
+                onProgress: (p) => { if (statusEl && p && p.message) statusEl.textContent = p.message; }
               });
               const parsed = extractJsonFromAiText(resp.text);
               const rawDefAcc = (document.getElementById('qpb-default-account') && document.getElementById('qpb-default-account').value) || '';
@@ -12211,11 +12505,17 @@
       function updateAiCopilotModelBadge() {
         const badge = document.getElementById('ai-copilot-model-badge');
         if (!badge) return;
-        const p = appConfig.aiProvider || 'gemini';
-        const m = appConfig.aiModel || AI_PROVIDER_DEFAULTS[p] || '';
-        const hasKey = Boolean(appConfig.aiApiKey) || Boolean(aiServerKeyStatus[p]) || (p === 'custom' && Boolean(appConfig.aiBaseUrl));
-        badge.textContent = hasKey ? `${p} · ${m || 'default'}` : '尚未設定 Key';
-        badge.className = `text-[10px] font-mono-num px-1.5 py-0.5 rounded truncate max-w-[155px] ${hasKey ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-800'}`;
+        const enabled = ensureAiKeysPool().filter((k) => k.enabled !== false);
+        const serverHasAny = Object.values(aiServerKeyStatus).some(Boolean);
+        const hasKey = enabled.length > 0 || serverHasAny;
+        if (enabled.length > 1) {
+          badge.textContent = `${enabled.length} 組 Key 輪替 · ${enabled[0].label || enabled[0].provider}`;
+        } else if (enabled.length === 1) {
+          badge.textContent = `${enabled[0].label || enabled[0].provider} · ${enabled[0].model || 'default'}`;
+        } else {
+          badge.textContent = serverHasAny ? '後台預設 Key' : '尚未設定 Key';
+        }
+        badge.className = `text-[10px] font-mono-num px-1.5 py-0.5 rounded truncate max-w-[165px] ${hasKey ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-800'}`;
       }
 
       function buildAiCopilotContext() {
@@ -12852,11 +13152,18 @@
             systemPrompt: buildAiCopilotSystemPrompt(),
             prompt,
             attachments: imgsToSend.map((im) => ({ mimeType: im.mimeType, base64: im.base64 })),
-            expectJson: true
+            expectJson: true,
+            onProgress: (p) => {
+              if (p && p.message && aiCopilotHistory[targetIdx]) {
+                aiCopilotHistory[targetIdx] = { role: 'assistant', text: p.message, actions: [] };
+                renderAiCopilotMessages();
+              }
+            }
           });
 
           const sec = ((performance.now() - t0) / 1000).toFixed(1);
           const upSec = resp.upstreamMs ? `（AI 伺服器 ${(resp.upstreamMs / 1000).toFixed(1)}s）` : '';
+          const keyTag = resp.usedKeyLabel ? `${resp.usedKeyLabel} · ` : '';
           let replyText = '';
           let actions = [];
           try {
@@ -12882,7 +13189,7 @@
             role: 'assistant',
             text: replyText,
             actions,
-            meta: `${resp.model || appConfig.aiModel || ''} · 總耗時 ${sec}s${upSec}`
+            meta: `${keyTag}${resp.model || appConfig.aiModel || ''} · 總耗時 ${sec}s${upSec}`
           };
           renderAiCopilotMessages();
         } catch (err) {
