@@ -364,7 +364,9 @@ async function callGemini({ apiKey, model, systemPrompt, prompt, attachments, ex
   const payload = {
     contents: [{ role: 'user', parts }],
     generationConfig: {
-      temperature: 0.1
+      temperature: 0.1,
+      maxOutputTokens: 2048,
+      thinkingConfig: { thinkingBudget: 0 }
     }
   };
   if (systemPrompt) {
@@ -382,12 +384,16 @@ async function callGemini({ apiKey, model, systemPrompt, prompt, attachments, ex
     const m = candidates[i];
     const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(m)}:generateContent?key=${encodeURIComponent(apiKey)}`;
     const maxAttempts = i === 0 ? 2 : 1;
+    let useThinkingCfg = true;
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
-      if (attempt > 0) await new Promise((r) => setTimeout(r, 600));
+      if (attempt > 0) await new Promise((r) => setTimeout(r, 500));
+      const reqBody = useThinkingCfg
+        ? payload
+        : { ...payload, generationConfig: { temperature: payload.generationConfig.temperature, maxOutputTokens: 2048, ...(expectJson ? { responseMimeType: 'application/json' } : {}) } };
       const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(reqBody)
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
@@ -399,6 +405,12 @@ async function callGemini({ apiKey, model, systemPrompt, prompt, attachments, ex
         continue;
       }
       const errMsg = (data && data.error && data.error.message) || `Gemini API 錯誤 (${res.status})`;
+      // If a model does not support thinkingConfig, retry immediately without it
+      if (res.status === 400 && useThinkingCfg && /thinking/i.test(errMsg)) {
+        useThinkingCfg = false;
+        attempt -= 1;
+        continue;
+      }
       if (i === 0 && !primaryErr) primaryErr = errMsg;
       lastErr = errMsg;
       // Do not retry/fallback on auth errors (401, 403)
@@ -452,7 +464,8 @@ async function callOpenAICompat({ apiKey, baseUrl, model, fallbackModels = [], s
     const payload = {
       model: m,
       messages,
-      temperature: 0.1
+      temperature: 0.1,
+      max_tokens: 2048
     };
     if (expectJson && (provider === 'openai' || (provider === 'groq' && attachments.length === 0))) {
       payload.response_format = { type: 'json_object' };
