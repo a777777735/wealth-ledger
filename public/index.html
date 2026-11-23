@@ -308,66 +308,117 @@
 
         <!-- TAB 1: OVERVIEW -->
         <section id="tab-overview" class="tab-panel hidden space-y-6">
-          <!-- 4 Clean Stat Cards (Numbers only, no pills or decorative icons) -->
-          <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-            <div class="bg-white rounded-xl p-5 hairline">
-              <div class="flex items-baseline justify-between gap-2">
-                <span class="text-xs font-medium text-zinc-500">總資產淨值</span>
-                <span class="text-[11px] font-mono-num text-zinc-400">TWD</span>
+          <!-- Row 1: Asset Hierarchy (Net Worth with Sub-items vs Separate Physical Investments) -->
+          <div class="grid grid-cols-1 lg:grid-cols-12 gap-4">
+            <!-- Parent Card: Net Worth = Cash + Stocks -->
+            <div class="lg:col-span-7 bg-white rounded-xl p-5 hairline flex flex-col justify-between gap-4">
+              <div>
+                <div class="flex items-baseline justify-between gap-2">
+                  <div class="flex items-center gap-2">
+                    <span class="text-xs font-semibold text-zinc-900">總資產淨值</span>
+                    <span class="text-[11px] px-1.5 py-0.5 rounded bg-zinc-100 text-zinc-500">現金＋股票合計</span>
+                  </div>
+                  <span class="text-[11px] font-mono-num text-zinc-400">TWD</span>
+                </div>
+                <div id="kpi-total-networth" class="mt-2 text-3xl font-semibold text-zinc-900 font-mono-num tracking-tight">NT$ 0</div>
+                <p id="kpi-fx-hint" class="mt-1 text-xs font-mono-num text-zinc-500">USD 33.02 · HKD 4.21 · CNY 4.95</p>
               </div>
-              <div id="kpi-total-networth" class="mt-2 text-2xl font-semibold text-zinc-900 font-mono-num tracking-tight">NT$ 0</div>
-              <p id="kpi-fx-hint" class="mt-2 text-xs font-mono-num text-zinc-500">USD 33.02 · HKD 4.21 · CNY 4.95</p>
+
+              <!-- Sub-items included in Net Worth (sum = 100%) -->
+              <div class="pt-3.5 hairline-t space-y-2.5">
+                <div class="flex items-center justify-between gap-3 text-xs pl-3 border-l-2 border-zinc-900">
+                  <div class="min-w-0">
+                    <div class="flex items-center gap-1.5">
+                      <span class="font-medium text-zinc-800">銀行與券商現金</span>
+                      <span id="kpi-cash-pct" class="font-mono-num text-[11px] text-zinc-500">0%</span>
+                    </div>
+                    <div id="kpi-cash-count" class="text-[11px] text-zinc-400 mt-0.5">0 個跨幣別帳戶</div>
+                  </div>
+                  <div id="kpi-total-cash" class="text-sm font-semibold text-zinc-900 font-mono-num shrink-0">NT$ 0</div>
+                </div>
+
+                <div class="flex items-center justify-between gap-3 text-xs pl-3 border-l-2 border-zinc-400">
+                  <div class="min-w-0">
+                    <div class="flex items-center gap-1.5">
+                      <span class="font-medium text-zinc-800">股票與黃金 ETF</span>
+                      <span id="kpi-stocks-pct" class="font-mono-num text-[11px] text-zinc-500">0%</span>
+                    </div>
+                    <div id="kpi-stocks-pnl" class="text-[11px] font-mono-num text-zinc-500 mt-0.5">未實現損益 --</div>
+                  </div>
+                  <div id="kpi-total-stocks" class="text-sm font-semibold text-zinc-900 font-mono-num shrink-0">NT$ 0</div>
+                </div>
+              </div>
             </div>
 
-            <div class="bg-white rounded-xl p-5 hairline">
-              <div class="flex items-baseline justify-between gap-2">
-                <span class="text-xs font-medium text-zinc-500">銀行與券商現金</span>
-                <span id="kpi-cash-pct" class="text-xs font-mono-num text-zinc-500">0%</span>
+            <!-- Separate Card: Physical & Project Investments (Excluded from Net Worth) -->
+            <div class="lg:col-span-5 bg-[#fafaf9] rounded-xl p-5 hairline flex flex-col justify-between gap-4">
+              <div>
+                <div class="flex items-baseline justify-between gap-2">
+                  <span class="text-xs font-semibold text-zinc-700">實體與專案投資</span>
+                  <span id="kpi-inv-pct" class="text-[11px] font-medium px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200/70">另計 · 不計入總淨值</span>
+                </div>
+                <div id="kpi-total-inv" class="mt-2 text-2xl font-semibold text-zinc-900 font-mono-num tracking-tight">NT$ 0</div>
+                <p class="mt-1 text-[11px] text-zinc-500">進行中預計投入本金（採保守現金落袋制，不重複加計於左側淨值）</p>
               </div>
-              <div id="kpi-total-cash" class="mt-2 text-2xl font-semibold text-zinc-900 font-mono-num tracking-tight">NT$ 0</div>
-              <p id="kpi-cash-count" class="mt-2 text-xs text-zinc-500">0 個跨幣別帳戶</p>
-            </div>
 
-            <div class="bg-white rounded-xl p-5 hairline">
-              <div class="flex items-baseline justify-between gap-2">
-                <span class="text-xs font-medium text-zinc-500">股票與黃金 ETF</span>
-                <span id="kpi-stocks-pct" class="text-xs font-mono-num text-zinc-500">0%</span>
+              <div class="pt-3.5 hairline-t space-y-2.5 text-xs">
+                <div class="flex items-baseline justify-between gap-2 pl-3 border-l-2 border-amber-400/80">
+                  <span class="text-zinc-600">預估持續年收益</span>
+                  <span id="kpi-inv-annual" class="font-mono-num font-medium text-zinc-800 text-right">--</span>
+                </div>
+                <div class="flex items-baseline justify-between gap-2 pl-3 border-l-2 border-zinc-300">
+                  <span class="text-zinc-600">累計已領分潤／回款</span>
+                  <span id="kpi-inv-returned" class="font-mono-num text-zinc-600 text-right">NT$ 0（已入現金帳）</span>
+                </div>
               </div>
-              <div id="kpi-total-stocks" class="mt-2 text-2xl font-semibold text-zinc-900 font-mono-num tracking-tight">NT$ 0</div>
-              <p id="kpi-stocks-pnl" class="mt-2 text-xs font-mono-num text-zinc-500">未實現損益 --</p>
-            </div>
-
-            <div class="bg-white rounded-xl p-5 hairline">
-              <div class="flex items-baseline justify-between gap-2">
-                <span class="text-xs font-medium text-zinc-500">實體與專案投資</span>
-                <span id="kpi-inv-pct" class="text-xs font-mono-num text-zinc-500">0%</span>
-              </div>
-              <div id="kpi-total-inv" class="mt-2 text-2xl font-semibold text-zinc-900 font-mono-num tracking-tight">NT$ 0</div>
-              <p id="kpi-inv-annual" class="mt-2 text-xs font-mono-num text-zinc-600">預估年收益 --</p>
             </div>
           </div>
 
-          <!-- Quiet Cashflow Strip -->
-          <div class="bg-white rounded-xl px-5 py-4 hairline flex flex-wrap items-center justify-between gap-4">
-            <div class="flex flex-wrap items-center gap-x-8 gap-y-3 text-xs">
-              <div>
-                <div class="text-zinc-500">固定收入（折合台幣）</div>
-                <div id="kpi-fixed-income" class="mt-0.5 text-sm font-medium text-zinc-900 font-mono-num">每月 NT$ 0 ｜ 每年 NT$ 0</div>
+          <!-- Row 2: Monthly Cashflow Hierarchy (Income Parent + Sub-items | Expense Parent + Deduplicated Sub-items) -->
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <!-- Monthly Income Parent -->
+            <div class="bg-white rounded-xl p-5 hairline space-y-3">
+              <div class="flex items-baseline justify-between gap-2">
+                <div class="flex items-center gap-2">
+                  <span class="text-xs font-semibold text-zinc-900">預估月總收入</span>
+                  <span class="text-[11px] text-zinc-400">固定收入＋投資分潤</span>
+                </div>
+                <button id="btn-go-income" type="button" class="btn-focus text-xs font-medium text-zinc-600 hover:text-zinc-900 transition-colors">管理收入 →</button>
               </div>
-              <div class="hidden sm:block h-7 w-px bg-zinc-900/[0.08]"></div>
-              <div>
-                <div class="text-zinc-500">預估月現金流（固定收入＋實體投資）</div>
-                <div id="kpi-combined-cashflow" class="mt-0.5 text-sm font-medium text-emerald-700 font-mono-num">NT$ 0 ～ NT$ 0 / 月</div>
-              </div>
-              <div class="hidden sm:block h-7 w-px bg-zinc-900/[0.08]"></div>
-              <div>
-                <div class="text-zinc-500">支出總覽（固定月均 / 本月隨機）</div>
-                <div id="kpi-expense-summary" class="mt-0.5 text-sm font-medium text-rose-700 font-mono-num">固定 NT$ 0 ｜ 本月隨機 NT$ 0</div>
+              <div id="kpi-combined-cashflow" class="text-xl font-semibold text-emerald-700 font-mono-num">NT$ 0 ～ NT$ 0 / 月</div>
+              <div class="pt-2.5 hairline-t space-y-1.5 text-xs">
+                <div class="flex items-baseline justify-between gap-2 pl-3 border-l-2 border-emerald-600/70">
+                  <span class="text-zinc-600">固定收入月均</span>
+                  <span id="kpi-fixed-income" class="font-mono-num text-zinc-800">NT$ 0 / 月（年化 NT$ 0）</span>
+                </div>
+                <div class="flex items-baseline justify-between gap-2 pl-3 border-l-2 border-emerald-300">
+                  <span class="text-zinc-600">實體投資月均收益</span>
+                  <span id="kpi-inv-monthly" class="font-mono-num text-zinc-700">NT$ 0 ～ NT$ 0 / 月</span>
+                </div>
               </div>
             </div>
-            <div class="flex items-center gap-4 text-xs">
-              <button id="btn-go-income" type="button" class="btn-focus font-medium text-zinc-700 hover:text-zinc-900 transition-colors duration-150">管理固定收入來源 →</button>
-              <button id="btn-go-expenses" type="button" class="btn-focus font-medium text-zinc-700 hover:text-zinc-900 transition-colors duration-150">支出紀錄 →</button>
+
+            <!-- Monthly Expense Parent (Deduplicated) -->
+            <div class="bg-white rounded-xl p-5 hairline space-y-3">
+              <div class="flex items-baseline justify-between gap-2">
+                <div class="flex items-center gap-2">
+                  <span class="text-xs font-semibold text-zinc-900">本月預估總支出</span>
+                  <span class="text-[11px] text-zinc-400">已排除重複計算</span>
+                </div>
+                <button id="btn-go-expenses" type="button" class="btn-focus text-xs font-medium text-zinc-600 hover:text-zinc-900 transition-colors">支出紀錄 →</button>
+              </div>
+              <div id="kpi-expense-summary" class="text-xl font-semibold text-rose-700 font-mono-num">NT$ 0</div>
+              <div class="pt-2.5 hairline-t space-y-1.5 text-xs">
+                <div class="flex items-baseline justify-between gap-2 pl-3 border-l-2 border-rose-500/70">
+                  <span class="text-zinc-600">固定支出（名目月均）</span>
+                  <span id="kpi-fixed-expense" class="font-mono-num text-zinc-800">NT$ 0</span>
+                </div>
+                <div class="flex items-baseline justify-between gap-2 pl-3 border-l-2 border-rose-200">
+                  <span class="text-zinc-600">本月隨機／單筆支出</span>
+                  <span id="kpi-random-expense" class="font-mono-num text-zinc-700">NT$ 0</span>
+                </div>
+              </div>
+              <div id="kpi-expense-foot" class="text-[11px] font-mono-num text-zinc-500 pt-1">本月實際已記帳 NT$ 0 ｜ 預估月淨結餘 --</div>
             </div>
           </div>
 
@@ -427,7 +478,7 @@
             <div class="flex items-baseline justify-between mb-4">
               <div>
                 <h2 class="text-sm font-semibold text-zinc-900">幣別曝險分佈</h2>
-                <p class="text-xs text-zinc-500 mt-0.5">合併計算現金、股票與實體投資折合台幣金額</p>
+                <p class="text-xs text-zinc-500 mt-0.5">合併計算現金與股票折合台幣金額（與總資產淨值一致，不含另計之實體投資）</p>
               </div>
               <span class="text-[11px] font-mono-num text-zinc-400">TWD / USD / HKD / CNY</span>
             </div>
@@ -1895,15 +1946,36 @@
         const fixedExpenseMonthlyTWD = fixedExpenseAnnualTWD / 12;
 
         const curYm = todayISO().slice(0, 7);
+        const fixedTitleSet = new Set(
+          (data.fixedExpenses || []).map((e) => String(e.title || e.name || '').trim()).filter(Boolean)
+        );
+        const isFixedExpenseEntry = (exp) => {
+          if (!exp) return false;
+          if (exp.fromFixed || exp.fixedExpenseId) return true;
+          const note = String(exp.note || '');
+          if (note.includes('固定支出扣款') || note.includes('固定支出歷史補登')) return true;
+          const title = String(exp.title || '').trim();
+          if (title && fixedTitleSet.has(title)) return true;
+          return false;
+        };
+
         let randomExpenseThisMonthTWD = 0;
+        let fixedExpensePaidThisMonthTWD = 0;
+        let pureRandomExpenseThisMonthTWD = 0;
         let randomExpenseTotalTWD = 0;
         (data.randomExpenses || []).forEach((exp) => {
           const twd = safeNum(exp.amount) * rateOf(exp.currency || 'TWD');
           randomExpenseTotalTWD += twd;
           if (String(exp.date || '').startsWith(curYm)) {
             randomExpenseThisMonthTWD += twd;
+            if (isFixedExpenseEntry(exp)) {
+              fixedExpensePaidThisMonthTWD += twd;
+            } else {
+              pureRandomExpenseThisMonthTWD += twd;
+            }
           }
         });
+        const estimatedMonthlyExpenseTWD = Math.max(fixedExpenseMonthlyTWD, fixedExpensePaidThisMonthTWD) + pureRandomExpenseThisMonthTWD;
 
         const netWorthTWD = cashTWD + stocksTWD;
         return {
@@ -1927,6 +1999,9 @@
           fixedExpenseMonthlyTWD,
           fixedExpenseAnnualTWD,
           randomExpenseThisMonthTWD,
+          fixedExpensePaidThisMonthTWD,
+          pureRandomExpenseThisMonthTWD,
+          estimatedMonthlyExpenseTWD,
           randomExpenseTotalTWD,
           netWorthTWD,
           cashByCurrency,
@@ -2622,20 +2697,49 @@
         const pnl = totals.stocksPnlTWD;
         const pnlEl = document.getElementById('kpi-stocks-pnl');
         pnlEl.textContent = `未實現損益 ${pnl >= 0 ? '+' : ''}${fmtTWD(pnl)}`;
-        pnlEl.className = 'mt-2 text-xs font-mono-num ' + (pnl >= 0 ? 'text-rose-700' : 'text-emerald-700');
+        pnlEl.className = 'text-[11px] font-mono-num mt-0.5 ' + (pnl >= 0 ? 'text-rose-700' : 'text-emerald-700');
 
         document.getElementById('kpi-total-inv').textContent = fmtTWD(totals.plannedInvestmentsTWD);
-        document.getElementById('kpi-inv-pct').textContent = '進行中 · 不計淨值';
+        document.getElementById('kpi-inv-pct').textContent = '另計 · 不計入總淨值';
         const oneTimeNote = totals.oneTimeExpectedMax > 0
-          ? ` · 一次性預估獲利 ${fmtCompactWan(totals.oneTimeExpectedMin)} ～ ${fmtCompactWan(totals.oneTimeExpectedMax)}`
+          ? `（另一次性 ${fmtCompactWan(totals.oneTimeExpectedMin)}～${fmtCompactWan(totals.oneTimeExpectedMax)}）`
           : '';
-        document.getElementById('kpi-inv-annual').textContent = `持續年收益 ${fmtCompactWan(totals.annualIncomeMin)} ～ ${fmtCompactWan(totals.annualIncomeMax)}${oneTimeNote}`;
+        document.getElementById('kpi-inv-annual').textContent = `${fmtCompactWan(totals.annualIncomeMin)} ～ ${fmtCompactWan(totals.annualIncomeMax)}${oneTimeNote}`;
+        const invRetEl = document.getElementById('kpi-inv-returned');
+        if (invRetEl) {
+          invRetEl.textContent = `${fmtTWD(totals.invReturnedAllTWD || 0)}（已入現金帳）`;
+        }
 
-        document.getElementById('kpi-fixed-income').textContent = `每月 ${fmtTWD(totals.fixedIncomeMonthlyTWD)} ｜ 每年 ${fmtCompactWan(totals.fixedIncomeAnnualTWD)}`;
-        const combMin = totals.fixedIncomeMonthlyTWD + totals.annualIncomeMin / 12;
-        const combMax = totals.fixedIncomeMonthlyTWD + totals.annualIncomeMax / 12;
+        const invMonthMin = totals.annualIncomeMin / 12;
+        const invMonthMax = totals.annualIncomeMax / 12;
+        const combMin = totals.fixedIncomeMonthlyTWD + invMonthMin;
+        const combMax = totals.fixedIncomeMonthlyTWD + invMonthMax;
         document.getElementById('kpi-combined-cashflow').textContent = `${fmtTWD(combMin)} ～ ${fmtTWD(combMax)} / 月`;
-        document.getElementById('kpi-expense-summary').textContent = `固定 ${fmtTWD(totals.fixedExpenseMonthlyTWD)} ｜ 本月隨機 ${fmtTWD(totals.randomExpenseThisMonthTWD)}`;
+        document.getElementById('kpi-fixed-income').textContent = `${fmtTWD(totals.fixedIncomeMonthlyTWD)} / 月（年化 ${fmtCompactWan(totals.fixedIncomeAnnualTWD)}）`;
+        const invMonthlyEl = document.getElementById('kpi-inv-monthly');
+        if (invMonthlyEl) {
+          invMonthlyEl.textContent = `${fmtTWD(invMonthMin)} ～ ${fmtTWD(invMonthMax)} / 月`;
+        }
+
+        const estExp = totals.estimatedMonthlyExpenseTWD;
+        const fixedPaid = totals.fixedExpensePaidThisMonthTWD || 0;
+        const pureRand = totals.pureRandomExpenseThisMonthTWD || 0;
+        const netSurplusMin = combMin - estExp;
+        document.getElementById('kpi-expense-summary').textContent = fmtTWD(estExp);
+        const fixedExpEl = document.getElementById('kpi-fixed-expense');
+        if (fixedExpEl) {
+          fixedExpEl.textContent = fixedPaid > 0
+            ? `${fmtTWD(totals.fixedExpenseMonthlyTWD)}（本月已扣 ${fmtTWD(fixedPaid)}）`
+            : fmtTWD(totals.fixedExpenseMonthlyTWD);
+        }
+        const randExpEl = document.getElementById('kpi-random-expense');
+        if (randExpEl) {
+          randExpEl.textContent = fmtTWD(pureRand);
+        }
+        const expFootEl = document.getElementById('kpi-expense-foot');
+        if (expFootEl) {
+          expFootEl.textContent = `本月實際已記帳 ${fmtTWD(totals.randomExpenseThisMonthTWD)} ｜ 預估月淨結餘（低標）${netSurplusMin >= 0 ? '+' : ''}${fmtTWD(netSurplusMin)}`;
+        }
 
         // Ranked Horizontal Bars for Allocation (Liquid Net Worth: Cash + Stocks)
         const allocItems = [
@@ -3418,28 +3522,31 @@
       // Expenses Rendering
       function renderExpenses(totals) {
         const rateOf = (cur) => (cur === 'TWD' ? 1 : safeNum(state.fx[cur], 1));
-        const netSurplusMin = (totals.fixedIncomeMonthlyTWD + totals.annualIncomeMin / 12) - totals.fixedExpenseMonthlyTWD - totals.randomExpenseThisMonthTWD;
+        const estExp = totals.estimatedMonthlyExpenseTWD;
+        const fixedPaid = totals.fixedExpensePaidThisMonthTWD || 0;
+        const pureRand = totals.pureRandomExpenseThisMonthTWD || 0;
+        const netSurplusMin = (totals.fixedIncomeMonthlyTWD + totals.annualIncomeMin / 12) - estExp;
 
         document.getElementById('expense-summary-cards').innerHTML = `
           <div class="p-5 rounded-xl bg-white hairline">
             <div class="text-xs text-zinc-500">固定支出月均</div>
             <div class="mt-1.5 text-xl font-semibold text-rose-700 font-mono-num">${fmtTWD(totals.fixedExpenseMonthlyTWD)}</div>
-            <div class="text-[11px] font-mono-num text-zinc-400 mt-1">年化約 ${fmtCompactWan(totals.fixedExpenseAnnualTWD)}</div>
+            <div class="text-[11px] font-mono-num text-zinc-400 mt-1">年化約 ${fmtCompactWan(totals.fixedExpenseAnnualTWD)}${fixedPaid > 0 ? ' · 本月已扣 ' + fmtTWD(fixedPaid) : ''}</div>
           </div>
           <div class="p-5 rounded-xl bg-white hairline">
-            <div class="text-xs text-zinc-500">本月隨機支出</div>
-            <div class="mt-1.5 text-xl font-semibold text-zinc-900 font-mono-num">${fmtTWD(totals.randomExpenseThisMonthTWD)}</div>
-            <div class="text-[11px] font-mono-num text-zinc-400 mt-1">累計 ${fmtTWD(totals.randomExpenseTotalTWD)}</div>
+            <div class="text-xs text-zinc-500">本月隨機／單筆支出</div>
+            <div class="mt-1.5 text-xl font-semibold text-zinc-900 font-mono-num">${fmtTWD(pureRand)}</div>
+            <div class="text-[11px] font-mono-num text-zinc-400 mt-1">本月已記帳合計 ${fmtTWD(totals.randomExpenseThisMonthTWD)}</div>
           </div>
           <div class="p-5 rounded-xl bg-white hairline">
-            <div class="text-xs text-zinc-500">本月總支出估算</div>
-            <div class="mt-1.5 text-xl font-semibold text-zinc-900 font-mono-num">${fmtTWD(totals.fixedExpenseMonthlyTWD + totals.randomExpenseThisMonthTWD)}</div>
-            <div class="text-[11px] text-zinc-400 mt-1">固定月均＋本月隨機</div>
+            <div class="text-xs text-zinc-500">本月總支出估算（去重複）</div>
+            <div class="mt-1.5 text-xl font-semibold text-zinc-900 font-mono-num">${fmtTWD(estExp)}</div>
+            <div class="text-[11px] text-zinc-400 mt-1">固定月均（或已扣）＋純隨機</div>
           </div>
           <div class="p-5 rounded-xl bg-white hairline">
             <div class="text-xs text-zinc-500">本月預估淨結餘（低標）</div>
             <div class="mt-1.5 text-xl font-semibold ${netSurplusMin >= 0 ? 'text-emerald-700' : 'text-rose-700'} font-mono-num">${netSurplusMin >= 0 ? '+' : ''}${fmtTWD(netSurplusMin)}</div>
-            <div class="text-[11px] text-zinc-400 mt-1">收入＋投資收益－總支出</div>
+            <div class="text-[11px] text-zinc-400 mt-1">收入＋投資收益－去重總支出</div>
           </div>
         `;
 
@@ -7112,6 +7219,7 @@
                 amount: r.amount,
                 account: acc,
                 deductStatus: statusVal,
+                fromFixed: true,
                 note: r.note || '固定支出歷史補登'
               });
               state.ledger.push({
@@ -8353,6 +8461,7 @@
                 amount: payAmt,
                 account: payAcc,
                 deductStatus: 'paid',
+                fromFixed: true,
                 note: payNote || '固定支出扣款'
               });
               state.ledger.push({
