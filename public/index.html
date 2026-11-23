@@ -15,13 +15,15 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&family=Noto+Sans+TC:wght@400;500;600&display=swap" rel="stylesheet" />
   <script src="https://cdn.tailwindcss.com/3.4.17"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/firebase@10.12.2/firebase-app-compat.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/firebase@10.12.2/firebase-auth-compat.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/firebase@10.12.2/firebase-firestore-compat.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" integrity="sha384-9nhczxUqK87bcKHh20fSQcTGD4qq5GhayNYSYWqwBkINBhOfQLg/P5HG5lF1urn4" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" integrity="sha384-vtjasyidUo0kW94K5MXDXntzOJpQgBKXmE7e2Ga4LG0skTTLeBi97eFAXsqewJjw" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script src="https://cdn.jsdelivr.net/npm/firebase@10.12.2/firebase-app-compat.js" integrity="sha384-AQ3POAMqIhwS81FrUH95ekxqBZHeP5tG2JfEL3+7GuTtfRLWnrRh32UxwzM+//A9" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script src="https://cdn.jsdelivr.net/npm/firebase@10.12.2/firebase-auth-compat.js" integrity="sha384-TnlRYaR4JYz/lpaGuaiU61PjNberSA4vjLjtF+oRC/IkohkJqnWxw5EmDSOt1vA1" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script src="https://cdn.jsdelivr.net/npm/firebase@10.12.2/firebase-firestore-compat.js" integrity="sha384-qn4Jh88HhJA8dplNQyGjOh9OGI4izVhrfj/qIFgaKcdgOE06pXqIKGlsCILZcLAC" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
   <style>
     :root {
+      color-scheme: light;
+      scrollbar-gutter: stable;
       --bg-canvas: #f7f7f5;
       --bg-surface: #ffffff;
       --bg-subtle: #f1f1ee;
@@ -31,10 +33,21 @@
       --ink-muted: #71717a;
       --accent-ink: #18181b;
     }
+    * {
+      scrollbar-width: thin;
+      scrollbar-color: rgba(24, 24, 27, 0.22) transparent;
+    }
     body {
       font-family: 'Inter', 'Noto Sans TC', system-ui, -apple-system, sans-serif;
       background-color: var(--bg-canvas);
       color: var(--ink-primary);
+    }
+    h1, h2, h3 {
+      text-wrap: balance;
+    }
+    :is(input, select, textarea):user-invalid {
+      border-color: #be123c;
+      box-shadow: 0 0 0 2px rgba(190, 18, 60, 0.12);
     }
     .font-mono-num {
       font-family: 'JetBrains Mono', 'Inter', monospace;
@@ -71,6 +84,7 @@
     .modal-backdrop {
       background-color: rgba(24, 24, 27, 0.42);
       backdrop-filter: blur(2px);
+      overscroll-behavior: contain;
     }
     .btn-focus:focus-visible {
       outline: none;
@@ -93,6 +107,14 @@
     .mobile-tab-btn.active {
       color: #18181b;
       font-weight: 600;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+      }
     }
   </style>
 </head>
@@ -3090,7 +3112,7 @@
         if (recPanel) {
           if (!rStats.hasLogs || rStats.totalInvested <= 0) {
             recPanel.classList.add('hidden');
-            recPanel.innerHTML = '';
+            recPanel.replaceChildren();
           } else {
             recPanel.classList.remove('hidden');
             const barHtml = rStats.hasExplicitSplit
@@ -3171,7 +3193,7 @@
         if (tagFilterBar) {
           if ((state.investments || []).length === 0) {
             tagFilterBar.classList.add('hidden');
-            tagFilterBar.innerHTML = '';
+            tagFilterBar.replaceChildren();
           } else {
             tagFilterBar.classList.remove('hidden');
             const makeBtn = (val, label) => {
@@ -3481,7 +3503,7 @@
           `;
         }).join('');
 
-        const receipts = [...(state.incomeReceipts || [])].sort((a, b) => String(b.date).localeCompare(String(a.date)));
+        const receipts = (state.incomeReceipts || []).toSorted((a, b) => String(b.date).localeCompare(String(a.date)));
         const rTbody = document.getElementById('income-receipts-tbody');
         if (rTbody) {
           if (receipts.length === 0) {
@@ -3695,7 +3717,7 @@
           pos[c] = { currency: c, qty: 0, costTWD: 0, avgRate: 0, realizedTWD: 0, unrealizedTWD: 0, feesTWD: 0 };
         });
 
-        const chronological = [...(trades || [])].sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
+        const chronological = (trades || []).toSorted((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
         const realizedByTradeId = {};
 
         chronological.forEach((t) => {
@@ -4206,7 +4228,7 @@
             if (points.length === 0) {
               periodTbody.innerHTML = '<tr><td colspan="8" class="py-5 text-center text-zinc-400 font-sans">尚無歷史資料</td></tr>';
             } else {
-              const rowsHtml = [...points].reverse().map((p) => {
+              const rowsHtml = points.toReversed().map((p) => {
                 const netCls = p.netCashflowTWD > 0 ? 'text-rose-700' : p.netCashflowTWD < 0 ? 'text-emerald-700' : 'text-zinc-500';
                 const netSign = p.netCashflowTWD > 0 ? '+' : '';
                 const rateTxt = p.savingsRate !== null ? `${p.savingsRate.toFixed(1)}%` : '—';
@@ -4469,7 +4491,7 @@
 
         const deltaEl = document.getElementById('welcome-delta');
         if (deltaEl) {
-          const snaps = [...(state.snapshots || [])].sort((a, b) => String(a.date).localeCompare(String(b.date)));
+          const snaps = (state.snapshots || []).toSorted((a, b) => String(a.date).localeCompare(String(b.date)));
           if (snaps.length >= 2) {
             const diff = safeNum(snaps[snaps.length - 1].totalTWD) - safeNum(snaps[snaps.length - 2].totalTWD);
             const sign = diff >= 0 ? '+' : '';
@@ -4484,7 +4506,7 @@
 
       function renderHistory() {
         renderTrendChartOnCanvas('chart-history-trend', true);
-        const sortedSnaps = [...(state.snapshots || [])].sort((a, b) => String(b.date).localeCompare(String(a.date)));
+        const sortedSnaps = (state.snapshots || []).toSorted((a, b) => String(b.date).localeCompare(String(a.date)));
         const snapsTbody = document.getElementById('snapshots-tbody');
         if (sortedSnaps.length === 0) {
           snapsTbody.innerHTML = '<tr><td colspan="7" class="py-6 text-center text-zinc-400 font-sans">尚無歷史快照</td></tr>';
@@ -4505,7 +4527,7 @@
           `).join('');
         }
 
-        const sortedLedger = [...(state.ledger || [])].sort((a, b) => String(b.date).localeCompare(String(a.date)));
+        const sortedLedger = (state.ledger || []).toSorted((a, b) => String(b.date).localeCompare(String(a.date)));
         const ledgerTbody = document.getElementById('ledger-tbody');
         if (sortedLedger.length === 0) {
           ledgerTbody.innerHTML = '<tr><td colspan="6" class="py-6 text-center text-zinc-400 font-sans">尚無收支流水紀錄</td></tr>';
@@ -4720,7 +4742,7 @@
             ? [...cMap.entries()].sort((x, y) => y[1] - x[1]).slice(0, 3).map(([k, v]) => ({ category: k, totalTWD: v }))
             : [];
         });
-        const annualRows = [...annualRowsAsc].reverse();
+        const annualRows = annualRowsAsc.toReversed();
 
         // Cross-Asset Comparison
         let stocksCostTWD = 0;
@@ -5886,7 +5908,7 @@
         if (customTagAddBtn) customTagAddBtn.addEventListener('click', addCustomTags);
         if (customTagInput) {
           customTagInput.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') {
+            if (e.key === 'Enter' && !e.isComposing && e.keyCode !== 229) {
               e.preventDefault();
               addCustomTags();
             }
@@ -6997,7 +7019,7 @@
 
         // Build deduplicated list: user's past random expenses first (most recent / frequent), then presets
         const historyMap = new Map();
-        [...(state.randomExpenses || [])].reverse().forEach((item) => {
+        (state.randomExpenses || []).toReversed().forEach((item) => {
           const key = String(item.title || '').trim();
           if (!key) return;
           if (!historyMap.has(key)) {
@@ -7304,7 +7326,7 @@
           const [sy, sm] = sYm.split('-').map(Number);
           const [ey, em] = eYm.split('-').map(Number);
           const defAmt = getCurrentDefaultAmt();
-          rowsContainer.innerHTML = '';
+          rowsContainer.replaceChildren();
           let y = sy, m = sm, count = 0;
           while ((y < ey || (y === ey && m <= em)) && count < 36) {
             addRow(`${y}-${pad2(m)}-${pad2(dayNum)}`, defAmt, '');
@@ -8100,7 +8122,7 @@
           const selDate = (expFromFilter && expFromFilter === expToFilter && expFromFilter.startsWith(ym)) ? expFromFilter : '';
           if (!selDate) {
             detailEl.classList.add('hidden');
-            detailEl.innerHTML = '';
+            detailEl.replaceChildren();
           } else {
             const incList = dayIncItems[selDate] || [];
             const expList = dayExpItems[selDate] || [];
@@ -8666,8 +8688,8 @@
               return `  ${i + 1}. [${s.market}] ${s.symbol} ${s.name || ''}｜${fmtNum(s.shares, 2)} 股｜均價 ${s.currency} ${fmtNum(s.avgCost, 2)} → 現價 ${s.currency} ${fmtNum(s.curPrice, 2)}｜市值 ${fmtTWD(s.valTWD)}（佔比 ${weight}%）｜未實現 ${sign}${fmtTWD(s.pnlTWD)} (${sign}${s.roiPct.toFixed(1)}%)`;
             }).join('\n');
 
-        const recentTrades = [...trades]
-          .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')))
+        const recentTrades = trades
+          .toSorted((a, b) => String(b.date || '').localeCompare(String(a.date || '')))
           .slice(0, 15);
         const tradesLines = recentTrades.length === 0
           ? '  （尚無歷史交易／配息紀錄）'
@@ -10535,7 +10557,7 @@
         const renderThumbs = () => {
           if (!thumbsEl) return;
           if (!stagedImgs.length) {
-            thumbsEl.innerHTML = '';
+            thumbsEl.replaceChildren();
             return;
           }
           thumbsEl.innerHTML = stagedImgs.map((im, i) => `
@@ -11006,7 +11028,7 @@
         if (pendingBox) {
           if (pendingExps.length === 0) {
             pendingBox.classList.add('hidden');
-            pendingBox.innerHTML = '';
+            pendingBox.replaceChildren();
           } else {
             pendingBox.classList.remove('hidden');
             pendingBox.innerHTML = `
