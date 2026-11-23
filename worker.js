@@ -30,6 +30,10 @@ export default {
       return withCors(handleAiStatus(env));
     }
 
+    if (url.pathname === '/api/ai/models') {
+      return withCors(await handleAiModels(request, env));
+    }
+
     if (url.pathname === '/api/ai') {
       return withCors(await handleAiProxy(request, env));
     }
@@ -568,3 +572,141 @@ async function callAnthropic({ apiKey, model, systemPrompt, prompt, attachments 
   if (!text) throw new Error('Claude 未回傳任何文字內容');
   return text;
 }
+
+async function handleAiModels(request, env) {
+  if (request.method === 'OPTIONS') return new Response(null, { status: 204 });
+  if (request.method !== 'POST') return jsonResp({ ok: false, error: '僅支援 POST 請求' }, 405);
+
+  let body;
+  try {
+    body = await request.json();
+  } catch (e) {
+    return jsonResp({ ok: false, error: '請求 JSON 格式錯誤' }, 400);
+  }
+
+  const provider = String(body.provider || 'groq').toLowerCase().trim();
+  const envKeyMap = {
+    groq: env && env.GROQ_API_KEY,
+    openrouter: env && env.OPENROUTER_API_KEY,
+    mistral: env && env.MISTRAL_API_KEY,
+    gemini: env && env.GEMINI_API_KEY,
+    openai: env && env.OPENAI_API_KEY,
+    anthropic: env && env.ANTHROPIC_API_KEY,
+    custom: env && env.CUSTOM_AI_API_KEY
+  };
+  const apiKey = String(body.apiKey || envKeyMap[provider] || '').trim();
+  const customBaseUrl = String(body.baseUrl || (env && env.CUSTOM_AI_BASE_URL) || '').trim();
+
+  try {
+    let models = [];
+
+    if (provider === 'openrouter') {
+      const headers = { 'Content-Type': 'application/json' };
+      if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`;
+      const res = await fetch('https://openrouter.ai/api/v1/models', { headers, signal: makeTimeoutSignal(10000) });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error((data && data.error && data.error.message) || `OpenRouter 錯誤 (${res.status})`);
+      const list = Array.isArray(data && data.data) ? data.data : [];
+      const freeModels = list
+        .filter((m) => m && m.id && (String(m.id).endsWith(':free') || (m.pricing && Number(m.pricing.prompt) === 0 && Number(m.pricing.completion) === 0)))
+        .map((m) => {
+          const isVision = JSON.stringify(m.architecture || '').toLowerCase().includes('image');
+          return {
+            id: String(m.id),
+            label: `${m.id}${isVision ? ' [圖+文]' : ''}`,
+            score: (m.id === 'openrouter/free' ? 100 : 0) + (isVision ? 20 : 0)
+          };
+        })
+        .sort((a, b) => b.score - a.score);
+      const hasRouter = freeModels.some((m) => m.id === 'openrouter/free');
+      models = [
+        ...(hasRouter ? [] : [{ id: 'openrouter/free', label: 'openrouter/free [官方自動免費路由]' }]),
+        ...freeModels.slice(0, 20).map(({ id, label }) => ({ id, label }))
+      ];
+    } else if (provider === 'gemini') {
+      if (!apiKey) return jsonResp({ ok: false, error: '查詢 Google Gemini 最新模型需要填入 API Key' }, 400);
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(apiKey)}`, {
+        signal: makeTimeoutSignal(10000)
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error((data && data.error && data.error.message) || `Gemini 錯誤 (${res.status})`);
+      const list = Array.isArray(data && data.models) ? data.models : [];
+      models = list
+        .filter((m) => m && m.name && Array.isArray(m.supportedGenerationMethods) && m.supportedGenerationMethods.includes('generateContent'))
+        .map((m) => String(m.name).replace(/^models\//, ''))
+        .filter((id) => /gemini/i.test(id) && !/(embedding|aqa|tts|audio|image-generation|veo|lyria|robotics)/i.test(id))
+        .map((id) => {
+          let score = 0;
+          if (/flash/i.test(id)) score += 30;
+          if (/3\./.test(id)) score += 25;
+          if (/latest/i.test(id)) score += 10;
+          if (/lite/i.test(id)) score -= 5;
+          if (/exp|preview/i.test(id)) score -= 3;
+          return { id, label: id, score };
+        })
+        .sort((a, b) => b.score - a.score || b.id.localeCompare(a.id))
+        .slice(0, 20)
+        .map(({ id, label }) => ({ id, label }));
+    } else if (provider === 'anthropic') {
+      if (!apiKey) return jsonResp({ ok: false, error: '查詢 Anthropic 最新模型需要填入 API Key' }, 400);
+      const res = await fetch('https://api.anthropic.com/v1/models', {
+        headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+        signal: makeTimeoutSignal(10000)
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error((data && data.error && data.error.message) || `Anthropic 錯誤 (${res.status})`);
+      const list = Array.isArray(data && data.data) ? data.data : [];
+      models = list.map((m) => ({ id: String(m.id), label: String(m.display_name ? `${m.id} (${m.display_name})` : m.id) })).slice(0, 20);
+    } else {
+      const presetBaseUrls = {
+        groq: 'https://api.groq.com/openai/v1',
+        mistral: 'https://api.mistral.ai/v1',
+        openai: 'https://api.openai.com/v1'
+      };
+      const baseUrl = provider === 'custom' ? customBaseUrl : presetBaseUrls[provider];
+      if (!baseUrl) return jsonResp({ ok: false, error: '請先填寫 API Base URL' }, 400);
+      if (!apiKey && provider !== 'custom') return jsonResp({ ok: false, error: `查詢 ${provider} 最新模型需要填入 API Key` }, 400);
+      const endpoint = baseUrl.replace(/\/+$/, '').replace(/\/chat\/completions$/, '') + '/models';
+      const headers = { 'Content-Type': 'application/json' };
+      if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`;
+      const res = await fetch(endpoint, { headers, signal: makeTimeoutSignal(10000) });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error((data && data.error && data.error.message) || `API 錯誤 (${res.status})`);
+      const list = Array.isArray(data && data.data) ? data.data : [];
+      models = list
+        .map((m) => String((m && m.id) || '').trim())
+        .filter((id) => id && !/(whisper|tts|orpheus|guard|embed|moderation|dall-e|sora|audio|realtime|transcribe|rerank)/i.test(id))
+        .map((id) => {
+          let score = 0;
+          if (provider === 'groq') {
+            if (/qwen.*3\.\d|vl|vision/i.test(id)) score += 40;
+            if (/gpt-oss-120b/i.test(id)) score += 30;
+            if (/gpt-oss-20b/i.test(id)) score += 20;
+          } else if (provider === 'mistral') {
+            if (/mistral-small-latest/i.test(id)) score += 40;
+            if (/pixtral/i.test(id)) score += 30;
+          } else if (provider === 'openai') {
+            if (/gpt-4o-mini|gpt-4\.1-mini|gpt-5-mini/i.test(id)) score += 40;
+            if (/gpt-4\.1|gpt-4o|gpt-5/i.test(id)) score += 20;
+          }
+          return { id, label: id, score };
+        })
+        .sort((a, b) => b.score - a.score || b.id.localeCompare(a.id))
+        .slice(0, 25)
+        .map(({ id, label }) => ({ id, label }));
+    }
+
+    if (models.length === 0) {
+      return jsonResp({ ok: false, error: '未取得任何可用聊天模型，請確認 API Key 或權限' }, 404);
+    }
+    return jsonResp({
+      ok: true,
+      provider,
+      recommended: models[0].id,
+      models
+    });
+  } catch (err) {
+    return jsonResp({ ok: false, error: (err && err.message) || '取得線上模型清單失敗' }, 502);
+  }
+}
+

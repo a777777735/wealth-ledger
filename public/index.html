@@ -1578,14 +1578,19 @@
                 <input id="cfg-ai-label" type="text" placeholder="例如：主力 Groq、備用 Gemini" class="w-full h-9 px-3 rounded-lg hairline bg-white text-xs" />
               </div>
               <div class="space-y-1.5">
-                <label for="cfg-ai-model" class="block text-xs font-medium text-zinc-700">模型名稱 (Model ID)</label>
-                <input id="cfg-ai-model" type="text" placeholder="qwen/qwen3.8-27b" class="w-full h-9 px-3 rounded-lg hairline bg-white text-xs font-mono-num" />
+                <div class="flex items-center justify-between gap-1">
+                  <label for="cfg-ai-model" class="block text-xs font-medium text-zinc-700">模型名稱 (Model ID)</label>
+                  <button id="btn-fetch-ai-models" type="button" class="text-[11px] font-medium text-emerald-700 hover:text-emerald-900 underline underline-offset-2">🔄 線上抓最新</button>
+                </div>
+                <input id="cfg-ai-model" list="cfg-ai-model-list" type="text" placeholder="qwen/qwen3.8-27b" class="w-full h-9 px-3 rounded-lg hairline bg-white text-xs font-mono-num" />
+                <datalist id="cfg-ai-model-list"></datalist>
               </div>
               <div class="space-y-1.5">
                 <label for="cfg-ai-key" class="block text-xs font-medium text-zinc-700">API Key（僅存本機）</label>
                 <input id="cfg-ai-key" type="password" autocomplete="off" placeholder="貼上你的 API Key" class="w-full h-9 px-3 rounded-lg hairline bg-white text-xs font-mono-num" />
               </div>
             </div>
+            <div id="cfg-ai-model-pills" class="hidden flex-wrap items-center gap-1.5 text-[11px]"></div>
             <div id="cfg-ai-baseurl-wrap" class="hidden space-y-1.5">
               <label for="cfg-ai-baseurl" class="block text-xs font-medium text-zinc-700">自訂 API Base URL（OpenAI 相容格式）</label>
               <input id="cfg-ai-baseurl" type="url" placeholder="https://openrouter.ai/api/v1 或 https://api.deepseek.com/v1" class="w-full h-9 px-3 rounded-lg hairline bg-white text-xs font-mono-num" />
@@ -9526,6 +9531,7 @@
                 </div>
               </div>
               <div class="flex items-center gap-1 shrink-0">
+                <button type="button" data-aikey-act="refresh-model" data-aikey-id="${escapeHtml(k.id)}" class="h-7 px-2 rounded hairline bg-white hover:bg-emerald-50 text-[11px] text-emerald-700" title="上網抓取此供應商最新可用模型">更新模型</button>
                 <button type="button" data-aikey-act="test" data-aikey-id="${escapeHtml(k.id)}" class="h-7 px-2 rounded hairline bg-white hover:bg-zinc-50 text-[11px] text-zinc-700">單測</button>
                 <button type="button" data-aikey-act="up" data-aikey-id="${escapeHtml(k.id)}" ${idx === 0 ? 'disabled' : ''} class="h-7 w-7 rounded hairline bg-white hover:bg-zinc-50 text-[11px] text-zinc-700 disabled:opacity-30" title="提高優先順序">↑</button>
                 <button type="button" data-aikey-act="down" data-aikey-id="${escapeHtml(k.id)}" ${idx === keys.length - 1 ? 'disabled' : ''} class="h-7 w-7 rounded hairline bg-white hover:bg-zinc-50 text-[11px] text-zinc-700 disabled:opacity-30" title="降低優先順序">↓</button>
@@ -10447,6 +10453,27 @@
             markAiKeysDirtyAndSync();
             syncAiConfigUI();
             showToast(`已移除「${removed.label || removed.provider}」`);
+          } else if (act === 'refresh-model') {
+            btn.disabled = true;
+            btn.textContent = '抓取中…';
+            try {
+              const data = await fetchLatestModelsForProvider(keys[idx].provider, keys[idx].apiKey, keys[idx].baseUrl);
+              if (data.recommended) {
+                const oldModel = keys[idx].model;
+                keys[idx].model = data.recommended;
+                keys[idx]._updatedAt = Date.now();
+                markAiKeysDirtyAndSync();
+                syncAiConfigUI();
+                setLiveAiTestBar(`✓ 已自動將「${keys[idx].label || keys[idx].provider}」模型從 ${oldModel || '無'} 更新為線上最新：${data.recommended}（共找到 ${data.models.length} 個可用模型）`, 'emerald');
+                showToast(`已更新為最新模型：${data.recommended}`);
+              }
+            } catch (err) {
+              setLiveAiTestBar(`✕ 抓取最新模型失敗：${err.message}`, 'rose');
+              showToast(`抓取最新模型失敗：${err.message}`);
+            } finally {
+              btn.disabled = false;
+              btn.textContent = '更新模型';
+            }
           } else if (act === 'test') {
             btn.disabled = true;
             const res = await testSingleAiKeyEntry(keys[idx], `第 ${idx + 1} 組`);
@@ -10457,6 +10484,72 @@
             }
             btn.disabled = false;
           }
+        });
+      }
+
+      async function fetchLatestModelsForProvider(provider, apiKey = '', baseUrl = '') {
+        const res = await fetch(apiUrl('/api/ai/models'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ provider, apiKey, baseUrl })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.ok) {
+          throw new Error(data.error || `取得線上模型清單失敗 (${res.status})`);
+        }
+        return data;
+      }
+
+      const btnFetchModels = document.getElementById('btn-fetch-ai-models');
+      if (btnFetchModels) {
+        btnFetchModels.addEventListener('click', async () => {
+          const provider = (document.getElementById('cfg-ai-provider') && document.getElementById('cfg-ai-provider').value) || 'groq';
+          const inputKey = (document.getElementById('cfg-ai-key') && document.getElementById('cfg-ai-key').value || '').trim();
+          const savedMatch = ensureAiKeysPool().find((k) => k.provider === provider && k.apiKey);
+          const apiKey = inputKey || (savedMatch ? savedMatch.apiKey : '');
+          const baseUrl = (document.getElementById('cfg-ai-baseurl') && document.getElementById('cfg-ai-baseurl').value || '').trim() || (savedMatch ? savedMatch.baseUrl : '');
+
+          btnFetchModels.disabled = true;
+          btnFetchModels.textContent = '抓取中…';
+          setLiveAiTestBar(`🔄 正在向 ${AI_PROV_NAMES[provider] || provider} 官網查詢最新可用模型清單…`, 'amber');
+          try {
+            const data = await fetchLatestModelsForProvider(provider, apiKey, baseUrl);
+            const listEl = document.getElementById('cfg-ai-model-list');
+            const modelEl = document.getElementById('cfg-ai-model');
+            const pillsEl = document.getElementById('cfg-ai-model-pills');
+            if (listEl) {
+              listEl.innerHTML = (data.models || []).map((m) => `<option value="${escapeHtml(m.id)}">${escapeHtml(m.label || m.id)}</option>`).join('');
+            }
+            if (modelEl && data.recommended) {
+              modelEl.value = data.recommended;
+            }
+            if (pillsEl) {
+              const top = (data.models || []).slice(0, 6);
+              pillsEl.innerHTML = `<span class="text-zinc-500">線上最新推薦（點一下套用）：</span>` +
+                top.map((m) => `<button type="button" data-pick-ai-model="${escapeHtml(m.id)}" class="px-2 py-0.5 rounded-md hairline bg-[#f7f7f5] hover:bg-zinc-900 hover:text-white font-mono-num text-[11px] text-zinc-800 transition-colors">${escapeHtml(m.id)}</button>`).join('');
+              pillsEl.classList.remove('hidden');
+              pillsEl.classList.add('flex');
+            }
+            setLiveAiTestBar(`✓ 已從 ${AI_PROV_NAMES[provider] || provider} 線上抓回 ${data.models.length} 個最新模型，已自動帶入首選：${data.recommended}`, 'emerald');
+            showToast(`已自動帶入最新模型：${data.recommended}`);
+          } catch (err) {
+            setLiveAiTestBar(`✕ 抓取最新模型失敗：${err.message}`, 'rose');
+            showToast(`抓取失敗：${err.message}`);
+          } finally {
+            btnFetchModels.disabled = false;
+            btnFetchModels.textContent = '🔄 線上抓最新';
+          }
+        });
+      }
+
+      const modelPillsEl = document.getElementById('cfg-ai-model-pills');
+      if (modelPillsEl) {
+        modelPillsEl.addEventListener('click', (ev) => {
+          const btn = ev.target.closest('[data-pick-ai-model]');
+          if (!btn) return;
+          const modelEl = document.getElementById('cfg-ai-model');
+          if (modelEl) modelEl.value = btn.dataset.pickAiModel;
+          showToast(`已選擇模型：${btn.dataset.pickAiModel}`);
         });
       }
 
