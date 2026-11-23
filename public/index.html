@@ -1530,8 +1530,8 @@
           <div class="bg-white rounded-xl p-6 hairline space-y-4">
             <div class="flex flex-wrap items-start justify-between gap-2">
               <div>
-                <h2 class="text-base font-semibold text-zinc-900">AI 模型設定（支援多供應商與自訂端點）</h2>
-                <p class="text-xs text-zinc-500 mt-0.5">供「AI 智慧搬家」（CSV/Excel 規則解析、截圖辨識、PDF 對帳單與文字記帳）使用；API Key 僅存於本機瀏覽器</p>
+                <h2 class="text-base font-semibold text-zinc-900">AI 模型設定（支援多供應商與免費極速方案）</h2>
+                <p class="text-xs text-zinc-500 mt-0.5">供「照片辨識記帳」與「AI 智慧搬家」（收據截圖、PDF 對帳單、文字記帳）使用；API Key 僅存於本機瀏覽器</p>
               </div>
               <span id="cfg-ai-status-badge" class="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-zinc-100 text-zinc-600">尚未設定</span>
             </div>
@@ -1539,15 +1539,18 @@
               <div class="space-y-1.5">
                 <label for="cfg-ai-provider" class="block text-xs font-medium text-zinc-700">AI 供應商</label>
                 <select id="cfg-ai-provider" class="w-full h-9 px-3 rounded-lg hairline bg-white text-xs font-medium text-zinc-800">
-                  <option value="gemini">Google Gemini（推薦：支援圖片＋PDF＋免費額度）</option>
-                  <option value="openai">OpenAI（GPT-4o mini / GPT-4.1）</option>
-                  <option value="anthropic">Anthropic Claude（支援圖片＋PDF）</option>
-                  <option value="custom">自訂 OpenAI 相容 API（OpenRouter / DeepSeek / Groq / Ollama）</option>
+                  <option value="groq">Groq（首推免費・極速 1~3 秒・支援圖片）</option>
+                  <option value="openrouter">OpenRouter（免費多模型・繁中收據強）</option>
+                  <option value="mistral">Mistral（免費實驗層・支援圖片）</option>
+                  <option value="gemini">Google Gemini（免費額度・支援圖片＋PDF・尖峰易忙）</option>
+                  <option value="openai">OpenAI（GPT-4o mini / GPT-4.1・付費穩定）</option>
+                  <option value="anthropic">Anthropic Claude（支援圖片＋PDF・付費）</option>
+                  <option value="custom">自訂 OpenAI 相容 API（DeepSeek / Ollama 等）</option>
                 </select>
               </div>
               <div class="space-y-1.5">
                 <label for="cfg-ai-model" class="block text-xs font-medium text-zinc-700">模型名稱 (Model ID)</label>
-                <input id="cfg-ai-model" type="text" placeholder="gemini-3.8-flash" class="w-full h-9 px-3 rounded-lg hairline bg-white text-xs font-mono-num" />
+                <input id="cfg-ai-model" type="text" placeholder="meta-llama/llama-4-scout-17b-16e-instruct" class="w-full h-9 px-3 rounded-lg hairline bg-white text-xs font-mono-num" />
               </div>
               <div class="space-y-1.5">
                 <label for="cfg-ai-key" class="block text-xs font-medium text-zinc-700">API Key（僅存本機，不寫入雲端帳本）</label>
@@ -1558,8 +1561,19 @@
               <label for="cfg-ai-baseurl" class="block text-xs font-medium text-zinc-700">自訂 API Base URL（OpenAI 相容格式）</label>
               <input id="cfg-ai-baseurl" type="url" placeholder="https://openrouter.ai/api/v1 或 https://api.deepseek.com/v1" class="w-full h-9 px-3 rounded-lg hairline bg-white text-xs font-mono-num" />
             </div>
+            <!-- Dynamic Provider Signup Link & Tips -->
+            <div id="cfg-ai-provider-guide" class="rounded-lg bg-[#f7f7f5] hairline px-3.5 py-2.5 flex flex-wrap items-center justify-between gap-2 text-xs">
+              <span id="cfg-ai-guide-text" class="text-zinc-600">Groq 免費額度高、速度最快（1～3 秒），支援收據照片辨識。</span>
+              <a id="cfg-ai-guide-link" href="https://console.groq.com/keys" target="_blank" rel="noopener noreferrer" class="font-medium text-zinc-900 underline underline-offset-2 hover:text-emerald-700 shrink-0">前往申請 API Key ↗</a>
+            </div>
             <div class="flex flex-wrap items-center justify-between gap-2 pt-1">
-              <span class="text-[11px] text-zinc-500">提示：未填 Key 也可在「AI 智慧搬家」使用免 Key 離線規則或複製 Prompt 貼給外部 AI。</span>
+              <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-zinc-500">
+                <span>免費申請直達：</span>
+                <a href="https://console.groq.com/keys" target="_blank" rel="noopener noreferrer" class="underline hover:text-zinc-900">Groq</a>
+                <a href="https://openrouter.ai/keys" target="_blank" rel="noopener noreferrer" class="underline hover:text-zinc-900">OpenRouter</a>
+                <a href="https://console.mistral.ai/api-keys" target="_blank" rel="noopener noreferrer" class="underline hover:text-zinc-900">Mistral</a>
+                <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" class="underline hover:text-zinc-900">Google AI Studio</a>
+              </div>
               <div class="flex items-center gap-2">
                 <button id="btn-save-ai-cfg" type="button" class="btn-focus h-8 px-3.5 rounded-lg bg-white hover:bg-zinc-50 text-zinc-800 hairline text-xs font-medium">儲存 AI 設定</button>
                 <button id="btn-test-ai" type="button" class="btn-focus h-8 px-3.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-medium">測試 AI 連線</button>
@@ -8725,12 +8739,59 @@
       // AI SETTINGS & UNIVERSAL MIGRATION WIZARD ENGINE
       // ============================================================
       const AI_PROVIDER_DEFAULTS = {
+        groq: 'meta-llama/llama-4-scout-17b-16e-instruct',
+        openrouter: 'qwen/qwen2.5-vl-72b-instruct:free',
+        mistral: 'mistral-small-latest',
         gemini: 'gemini-3.8-flash',
         openai: 'gpt-4o-mini',
         anthropic: 'claude-sonnet-4-20250514',
         custom: ''
       };
-      let aiServerKeyStatus = { gemini: false, openai: false, anthropic: false, custom: false };
+      const AI_PROVIDER_GUIDE = {
+        groq: {
+          name: 'Groq',
+          text: '首推免費方案：速度最快（1～3 秒），支援收據照片辨識，每日免費額度充裕。',
+          url: 'https://console.groq.com/keys',
+          linkText: '前往 Groq 免費申請 API Key ↗'
+        },
+        openrouter: {
+          name: 'OpenRouter',
+          text: '免費聚合多款視覺模型（預設 Qwen2.5-VL 免費版），繁體中文收據辨識準度高，遇忙自動切換備援模型。',
+          url: 'https://openrouter.ai/keys',
+          linkText: '前往 OpenRouter 免費申請 API Key ↗'
+        },
+        mistral: {
+          name: 'Mistral',
+          text: '免費實驗層（Experiment Plan）可用，穩定度佳，支援圖片辨識。',
+          url: 'https://console.mistral.ai/api-keys',
+          linkText: '前往 Mistral 申請 API Key ↗'
+        },
+        gemini: {
+          name: 'Google Gemini',
+          text: '支援圖片與 PDF 對帳單，但免費層尖峰容易 503 排隊；若常遇繁忙建議改用 Groq，或於 Google AI Studio 綁卡升級（每張收據約 NT$ 0.02）。',
+          url: 'https://aistudio.google.com/apikey',
+          linkText: '前往 Google AI Studio 申請 API Key ↗'
+        },
+        openai: {
+          name: 'OpenAI',
+          text: '付費方案，速度與穩定度高，支援圖片辨識（不支援直接上傳 PDF）。',
+          url: 'https://platform.openai.com/api-keys',
+          linkText: '前往 OpenAI 申請 API Key ↗'
+        },
+        anthropic: {
+          name: 'Anthropic Claude',
+          text: '付費方案，圖片與 PDF 對帳單解析能力極強。',
+          url: 'https://console.anthropic.com/settings/keys',
+          linkText: '前往 Anthropic 申請 API Key ↗'
+        },
+        custom: {
+          name: '自訂 OpenAI 相容',
+          text: '可接 DeepSeek、SiliconFlow、Ollama 等任何 OpenAI 相容端點，請填寫下方 Base URL 與 Model ID。',
+          url: '',
+          linkText: ''
+        }
+      };
+      let aiServerKeyStatus = { groq: false, openrouter: false, mistral: false, gemini: false, openai: false, anthropic: false, custom: false };
       let migrateTableWorkbook = null;
       let migrateTableHeaders = [];
       let migrateTableRows = [];
@@ -8739,6 +8800,22 @@
       let migratePdfFile = null;
       let migratePreviewItems = [];
       let migrateSkippedTransfers = 0;
+
+      function updateAiProviderGuide(provider) {
+        const info = AI_PROVIDER_GUIDE[provider] || AI_PROVIDER_GUIDE.groq;
+        const txtEl = document.getElementById('cfg-ai-guide-text');
+        const linkEl = document.getElementById('cfg-ai-guide-link');
+        if (txtEl) txtEl.textContent = info.text;
+        if (linkEl) {
+          if (info.url) {
+            linkEl.href = info.url;
+            linkEl.textContent = info.linkText;
+            linkEl.classList.remove('hidden');
+          } else {
+            linkEl.classList.add('hidden');
+          }
+        }
+      }
 
       function syncAiConfigUI() {
         const provider = appConfig.aiProvider || 'gemini';
@@ -8756,13 +8833,25 @@
         const baseEl = document.getElementById('cfg-ai-baseurl');
         const baseWrap = document.getElementById('cfg-ai-baseurl-wrap');
         if (provEl) provEl.value = provider;
-        if (modelEl) modelEl.value = model;
+        if (modelEl) {
+          modelEl.value = model;
+          modelEl.placeholder = AI_PROVIDER_DEFAULTS[provider] || '輸入模型名稱';
+        }
         if (keyEl) keyEl.value = key;
         if (baseEl) baseEl.value = baseUrl;
         if (baseWrap) baseWrap.classList.toggle('hidden', provider !== 'custom');
+        updateAiProviderGuide(provider);
 
         const hasKey = Boolean(key) || Boolean(aiServerKeyStatus[provider]) || (provider === 'custom' && Boolean(baseUrl));
-        const provNames = { gemini: 'Google Gemini', openai: 'OpenAI', anthropic: 'Anthropic Claude', custom: '自訂 OpenAI 相容' };
+        const provNames = {
+          groq: 'Groq',
+          openrouter: 'OpenRouter',
+          mistral: 'Mistral',
+          gemini: 'Google Gemini',
+          openai: 'OpenAI',
+          anthropic: 'Anthropic Claude',
+          custom: '自訂 OpenAI 相容'
+        };
         const statusText = hasKey
           ? `已連線設定：${provNames[provider] || provider}${model ? ` (${model})` : ''}`
           : '尚未設定 AI Key（仍可使用離線／手動搬家）';
@@ -9134,7 +9223,7 @@
             const img = new Image();
             img.onerror = () => reject(new Error('圖片格式無效'));
             img.onload = () => {
-              const maxDim = 1600;
+              const maxDim = 1280;
               let w = img.width;
               let h = img.height;
               if (w > maxDim || h > maxDim) {
@@ -9147,7 +9236,7 @@
               canvas.height = h;
               const ctx = canvas.getContext('2d');
               ctx.drawImage(img, 0, 0, w, h);
-              const dataUrl = canvas.toDataURL('image/jpeg', 0.82);
+              const dataUrl = canvas.toDataURL('image/jpeg', 0.78);
               resolve({ mimeType: 'image/jpeg', base64: dataUrl.split(',')[1], previewUrl: dataUrl, name: file.name });
             };
             img.src = reader.result;
@@ -9430,11 +9519,15 @@
       const cfgAiProvEl = document.getElementById('cfg-ai-provider');
       if (cfgAiProvEl) {
         cfgAiProvEl.addEventListener('change', (e) => {
-          const p = e.target.value || 'gemini';
+          const p = e.target.value || 'groq';
           const modelEl = document.getElementById('cfg-ai-model');
           const baseWrap = document.getElementById('cfg-ai-baseurl-wrap');
-          if (modelEl) modelEl.value = AI_PROVIDER_DEFAULTS[p] || '';
+          if (modelEl) {
+            modelEl.value = AI_PROVIDER_DEFAULTS[p] || '';
+            modelEl.placeholder = AI_PROVIDER_DEFAULTS[p] || '輸入模型名稱';
+          }
           if (baseWrap) baseWrap.classList.toggle('hidden', p !== 'custom');
+          updateAiProviderGuide(p);
         });
       }
       const btnSaveAiCfg = document.getElementById('btn-save-ai-cfg');

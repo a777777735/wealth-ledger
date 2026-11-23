@@ -225,6 +225,9 @@ function handleAiStatus(env) {
   return jsonResp({
     ok: true,
     hasServerKey: {
+      groq: Boolean(env && env.GROQ_API_KEY),
+      openrouter: Boolean(env && env.OPENROUTER_API_KEY),
+      mistral: Boolean(env && env.MISTRAL_API_KEY),
       gemini: Boolean(env && env.GEMINI_API_KEY),
       openai: Boolean(env && env.OPENAI_API_KEY),
       anthropic: Boolean(env && env.ANTHROPIC_API_KEY),
@@ -260,6 +263,9 @@ async function handleAiProxy(request, env) {
   }
 
   const envKeyMap = {
+    groq: env && env.GROQ_API_KEY,
+    openrouter: env && env.OPENROUTER_API_KEY,
+    mistral: env && env.MISTRAL_API_KEY,
     gemini: env && env.GEMINI_API_KEY,
     openai: env && env.OPENAI_API_KEY,
     anthropic: env && env.ANTHROPIC_API_KEY,
@@ -284,25 +290,54 @@ async function handleAiProxy(request, env) {
     } else if (provider === 'anthropic') {
       usedModel = String(body.model || 'claude-sonnet-4-20250514').trim();
       text = await callAnthropic({ apiKey, model: usedModel, systemPrompt, prompt, attachments });
-    } else if (provider === 'openai' || provider === 'custom') {
-      const baseUrl = provider === 'openai'
-        ? 'https://api.openai.com/v1'
-        : String(body.baseUrl || (env && env.CUSTOM_AI_BASE_URL) || '').trim();
+    } else if (['openai', 'groq', 'openrouter', 'mistral', 'custom'].includes(provider)) {
+      const presetBaseUrls = {
+        openai: 'https://api.openai.com/v1',
+        groq: 'https://api.groq.com/openai/v1',
+        openrouter: 'https://openrouter.ai/api/v1',
+        mistral: 'https://api.mistral.ai/v1'
+      };
+      const presetDefaults = {
+        openai: 'gpt-4o-mini',
+        groq: 'meta-llama/llama-4-scout-17b-16e-instruct',
+        openrouter: 'qwen/qwen2.5-vl-72b-instruct:free',
+        mistral: 'mistral-small-latest'
+      };
+      const presetFallbacks = {
+        groq: ['meta-llama/llama-4-maverick-17b-128e-instruct'],
+        openrouter: ['google/gemma-3-27b-it:free', 'meta-llama/llama-4-scout:free'],
+        mistral: ['pixtral-12b-2409']
+      };
+      const baseUrl = provider === 'custom'
+        ? String(body.baseUrl || (env && env.CUSTOM_AI_BASE_URL) || '').trim()
+        : presetBaseUrls[provider];
       if (!baseUrl) {
         return jsonResp({ ok: false, error: '自訂模式請填寫 API Base URL（例如 https://openrouter.ai/api/v1）' }, 400);
       }
       if (!/^https:\/\//i.test(baseUrl) && !/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?/i.test(baseUrl)) {
         return jsonResp({ ok: false, error: '自訂 Base URL 必須使用 https://（本機測試限 localhost）' }, 400);
       }
-      usedModel = String(body.model || (provider === 'openai' ? 'gpt-4o-mini' : '')).trim();
-      if (!usedModel) {
+      const primaryModel = String(body.model || presetDefaults[provider] || '').trim();
+      if (!primaryModel) {
         return jsonResp({ ok: false, error: '自訂模式請填寫模型名稱（Model ID）' }, 400);
       }
       const hasPdf = attachments.some((a) => String(a.mimeType || '').includes('pdf'));
       if (hasPdf) {
-        return jsonResp({ ok: false, error: 'OpenAI／自訂端點不支援直接上傳 PDF，請改選 Google Gemini 或 Anthropic Claude，或改用截圖／複製文字貼上' }, 400);
+        return jsonResp({ ok: false, error: '此供應商不支援直接上傳 PDF，請改選 Google Gemini 或 Anthropic Claude，或改用截圖／複製文字貼上' }, 400);
       }
-      text = await callOpenAICompat({ apiKey, baseUrl, model: usedModel, systemPrompt, prompt, attachments, expectJson, provider });
+      const oRes = await callOpenAICompat({
+        apiKey,
+        baseUrl,
+        model: primaryModel,
+        fallbackModels: presetFallbacks[provider] || [],
+        systemPrompt,
+        prompt,
+        attachments,
+        expectJson,
+        provider
+      });
+      text = oRes.text;
+      usedModel = oRes.model;
     } else {
       return jsonResp({ ok: false, error: `不支援的 AI 供應商：${provider}` }, 400);
     }
@@ -341,14 +376,14 @@ async function callGemini({ apiKey, model, systemPrompt, prompt, attachments, ex
 
   const candidates = [...new Set([model, 'gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-flash-latest'])];
   let primaryErr = '';
-  let lastErr = 'Gemini API 暫時繁忙，請稍後再試';
+  let lastErr = 'Gemini API 暫時繁忙，建議改用 Groq 或 OpenRouter 免費 Key';
 
   for (let i = 0; i < candidates.length; i++) {
     const m = candidates[i];
     const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(m)}:generateContent?key=${encodeURIComponent(apiKey)}`;
     const maxAttempts = i === 0 ? 2 : 1;
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
-      if (attempt > 0) await new Promise((r) => setTimeout(r, 900));
+      if (attempt > 0) await new Promise((r) => setTimeout(r, 600));
       const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -378,7 +413,7 @@ async function callGemini({ apiKey, model, systemPrompt, prompt, attachments, ex
   throw new Error(primaryErr || lastErr);
 }
 
-async function callOpenAICompat({ apiKey, baseUrl, model, systemPrompt, prompt, attachments, expectJson, provider }) {
+async function callOpenAICompat({ apiKey, baseUrl, model, fallbackModels = [], systemPrompt, prompt, attachments, expectJson, provider }) {
   const messages = [];
   if (systemPrompt) {
     messages.push({ role: 'system', content: systemPrompt });
@@ -399,33 +434,53 @@ async function callOpenAICompat({ apiKey, baseUrl, model, systemPrompt, prompt, 
     messages.push({ role: 'user', content: prompt });
   }
 
-  const payload = {
-    model,
-    messages,
-    temperature: 0.1
-  };
-  if (expectJson && provider === 'openai') {
-    payload.response_format = { type: 'json_object' };
-  }
-
   const cleanBase = baseUrl.replace(/\/+$/, '');
   const endpoint = cleanBase.endsWith('/chat/completions') ? cleanBase : `${cleanBase}/chat/completions`;
   const headers = { 'Content-Type': 'application/json' };
   if (apiKey) headers['Authorization'] = `Bearer ${apiKey}`;
-
-  const res = await fetch(endpoint, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(payload)
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    const msg = (data && data.error && data.error.message) || `API 錯誤 (${res.status})`;
-    throw new Error(msg);
+  if (provider === 'openrouter') {
+    headers['HTTP-Referer'] = 'https://wealth-ledger.pages.dev';
+    headers['X-Title'] = 'Wealth Ledger';
   }
-  const text = data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
-  if (!text) throw new Error('模型未回傳任何文字內容');
-  return String(text);
+
+  const candidates = [...new Set([model, ...fallbackModels].filter(Boolean))];
+  let primaryErr = '';
+  let lastErr = 'API 呼叫失敗';
+
+  for (let i = 0; i < candidates.length; i++) {
+    const m = candidates[i];
+    const payload = {
+      model: m,
+      messages,
+      temperature: 0.1
+    };
+    if (expectJson && (provider === 'openai' || (provider === 'groq' && attachments.length === 0))) {
+      payload.response_format = { type: 'json_object' };
+    }
+
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok) {
+      const text = data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
+      if (text) return { text: String(text), model: m };
+      lastErr = '模型未回傳任何文字內容';
+      continue;
+    }
+    const msg = (data && data.error && data.error.message) || `API 錯誤 (${res.status})`;
+    if (i === 0 && !primaryErr) primaryErr = msg;
+    lastErr = msg;
+    if (res.status === 401 || res.status === 403) {
+      throw new Error(msg);
+    }
+    if (res.status !== 429 && res.status !== 503 && res.status !== 404) {
+      throw new Error(msg);
+    }
+  }
+  throw new Error(primaryErr || lastErr);
 }
 
 async function callAnthropic({ apiKey, model, systemPrompt, prompt, attachments }) {
