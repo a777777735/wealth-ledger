@@ -9724,7 +9724,7 @@
             const img = new Image();
             img.onerror = () => reject(new Error('圖片格式無效'));
             img.onload = () => {
-              const maxDim = 1280;
+              const maxDim = 1024;
               let w = img.width;
               let h = img.height;
               if (w > maxDim || h > maxDim) {
@@ -9737,7 +9737,7 @@
               canvas.height = h;
               const ctx = canvas.getContext('2d');
               ctx.drawImage(img, 0, 0, w, h);
-              const dataUrl = canvas.toDataURL('image/jpeg', 0.78);
+              const dataUrl = canvas.toDataURL('image/jpeg', 0.72);
               resolve({ mimeType: 'image/jpeg', base64: dataUrl.split(',')[1], previewUrl: dataUrl, name: file.name });
             };
             img.src = reader.result;
@@ -12644,6 +12644,110 @@
         box.scrollTop = box.scrollHeight;
       }
 
+      function tryLocalFastCopilot(rawText) {
+        const t = String(rawText || '').trim();
+        if (!t || t.includes('\n') || t.length > 48) return null;
+
+        // 1. Instant Refresh / Backup / Navigation
+        if (/^(更新股價|更新匯率|刷新股價|刷新報價)/.test(t)) {
+          return { reply: '沒問題，立即為你更新最新股價與即時匯率。', actions: [{ type: 'refresh_quotes' }] };
+        }
+        if (/^(匯出備份|下載備份|備份資料)/.test(t)) {
+          return { reply: '已準備好匯出完整 JSON 備份檔。', actions: [{ type: 'export_backup' }] };
+        }
+        const navMap = [
+          [/^(去|切到|看|打開)(總覽|主頁|首頁)/, 'overview', '總覽'],
+          [/^(去|切到|看|打開)(股票|持股)/, 'stocks', '股票'],
+          [/^(去|切到|看|打開)(現金|銀行|帳戶)/, 'cash', '現金'],
+          [/^(去|切到|看|打開)(投資|實體)/, 'investments', '實體投資'],
+          [/^(去|切到|看|打開)(收入)/, 'income', '收入'],
+          [/^(去|切到|看|打開)(支出|記帳)/, 'expenses', '支出'],
+          [/^(去|切到|看|打開)(團帳|揪團|分帳)/, 'trips', '揪團分帳'],
+          [/^(去|切到|看|打開)(報表|健檢)/, 'reports', '財務報表'],
+          [/^(去|切到|看|打開)(歷史|趨勢|快照)/, 'history', '歷史趨勢'],
+          [/^(去|切到|看|打開)(搬家|匯入)/, 'migrate', 'AI 智慧搬家'],
+          [/^(去|切到|看|打開)(設定|備份)/, 'settings', '匯率與備份']
+        ];
+        for (const [re, tab, label] of navMap) {
+          if (re.test(t)) return { reply: `已為你切換至「${label}」頁面。`, actions: [{ type: 'navigate', tab }] };
+        }
+
+        // 2. Instant Financial Queries (0ms local computation)
+        if (/(本月|這個月).*(花了多少|總支出|花費|哪一類最多|消費)/.test(t)) {
+          const totals = computeTotals(state);
+          const curYm = todayISO().slice(0, 7);
+          const catMap = {};
+          (state.randomExpenses || []).forEach((e) => {
+            if (!String(e.date || '').startsWith(curYm)) return;
+            const r = e.currency === 'TWD' ? 1 : safeNum(state.fx && state.fx[e.currency], 1);
+            const c = e.category || '其他隨機支出';
+            catMap[c] = (catMap[c] || 0) + safeNum(e.amount) * r;
+          });
+          const topCats = Object.entries(catMap).toSorted((a, b) => b[1] - a[1]).slice(0, 3);
+          const topStr = topCats.length
+            ? topCats.map(([c, v], i) => `${i + 1}. ${c}：${fmtTWD(v)}`).join('\n')
+            : '（本月尚無單筆支出紀錄）';
+          return {
+            reply: `📊 本月（${curYm}）支出摘要：\n• 去重複預估總支出：${fmtTWD(totals.estimatedMonthlyExpenseTWD)}\n• 固定支出月均：${fmtTWD(totals.fixedExpenseMonthlyTWD)}（本月已扣 ${fmtTWD(totals.fixedExpensePaidThisMonthTWD)}）\n• 本月隨機／單筆：${fmtTWD(totals.pureRandomExpenseThisMonthTWD)}\n\n花費前三大類別：\n${topStr}`,
+            actions: []
+          };
+        }
+        if (/(總資產|總淨值|淨值多少|有多少錢|現金多少|股票多少)/.test(t) && !/(分析|建議|配置|風險)/.test(t)) {
+          const totals = computeTotals(state);
+          const nw = totals.netWorthTWD || 1;
+          return {
+            reply: `💰 目前即時資產摘要：\n• 總資產淨值：${fmtTWD(totals.netWorthTWD)}\n  ├ 銀行與券商現金：${fmtTWD(totals.cashTWD)}（${((totals.cashTWD / nw) * 100).toFixed(1)}%）\n  └ 股票與黃金 ETF：${fmtTWD(totals.stocksTWD)}（${((totals.stocksTWD / nw) * 100).toFixed(1)}%，未實現 ${totals.stocksPnlTWD >= 0 ? '+' : ''}${fmtTWD(totals.stocksPnlTWD)}）\n• 實體與專案投資（另計）：${fmtTWD(totals.plannedInvestmentsTWD)}`,
+            actions: []
+          };
+        }
+
+        // 3. Instant Budget Setting (e.g. "把餐飲美食本月預算設成 15000" / "餐飲預算 12000")
+        const budgetMatch = t.match(/(?:把)?([^\d\s]+?)(?:本月|每月)?預算(?:設為|設成|調為|改為|設)?\s*(\d+(?:\.\d+)?)\s*(?:元|塊|萬)?$/);
+        if (budgetMatch) {
+          let amt = Number(budgetMatch[2]);
+          if (t.endsWith('萬')) amt *= 10000;
+          const rawCat = budgetMatch[1].replace(/的$/, '');
+          const mapped = ALL_EXPENSE_CATEGORIES.find((c) => c.includes(rawCat)) || mapSingleCategoryHeuristic(rawCat);
+          if (amt > 0 && ALL_EXPENSE_CATEGORIES.includes(mapped)) {
+            return {
+              reply: `好的，已準備將「${mapped}」的每月預算上限設為 ${fmtTWD(amt)}。`,
+              actions: [{ type: 'set_budget', category: mapped, amount: Math.round(amt) }]
+            };
+          }
+        }
+
+        // 4. Instant Single Expense / Income (e.g. "午餐 150", "幫我記一筆今天午餐 150 元", "昨天加油 1200")
+        if (!/(分析|建議|轉帳|買進|賣出|股利|刪除|固定|團帳|、|，|,|和|與)/.test(t)) {
+          const singleMatch = t.match(/^(?:幫我)?(?:記一筆|新增|記帳|記)?(?:(支出|花費|消費|買了|買|收入|入帳))?\s*(?:(今天|昨天|前天))?\s*([^\d\s]+?)\s*(?:花了|花|共)?\s*(\d+(?:\.\d+)?)\s*(?:元|塊|TWD|NTD|USD|JPY|HKD|CNY)?$/i);
+          if (singleMatch) {
+            const kindWord = singleMatch[1] || '';
+            const dayWord = singleMatch[2] || '';
+            const title = singleMatch[3].replace(/^(一筆|個|份|杯)/, '').trim();
+            const amt = Number(singleMatch[4]);
+            if (title && Number.isFinite(amt) && amt > 0) {
+              let d = todayISO();
+              if (dayWord === '昨天') { const dt = new Date(); dt.setDate(dt.getDate() - 1); d = dt.toISOString().slice(0, 10); }
+              else if (dayWord === '前天') { const dt = new Date(); dt.setDate(dt.getDate() - 2); d = dt.toISOString().slice(0, 10); }
+              const curMatch = t.match(/\b(TWD|USD|JPY|HKD|CNY)\b/i);
+              const cur = curMatch ? curMatch[1].toUpperCase() : 'TWD';
+              const isInc = kindWord === '收入' || kindWord === '入帳';
+              if (isInc) {
+                return {
+                  reply: `已快速解析為一筆收入：${d}「${title}」${cur} ${amt.toLocaleString('zh-TW')}。`,
+                  actions: [{ type: 'add_income', date: d, name: title, category: '其他收入', currency: cur, amount: amt, depositNow: false, note: '' }]
+                };
+              }
+              const cat = mapSingleCategoryHeuristic(title);
+              return {
+                reply: `已快速解析為一筆支出：${d}「${title}」${cur} ${amt.toLocaleString('zh-TW')}（分類：${cat}）。`,
+                actions: [{ type: 'add_expense', date: d, title, category: cat, currency: cur, amount: amt, deductNow: false, note: '' }]
+              };
+            }
+          }
+        }
+        return null;
+      }
+
       async function sendAiCopilotMessage(overrideText = '') {
         if (aiCopilotBusy) return;
         const inputEl = document.getElementById('ai-copilot-input');
@@ -12662,6 +12766,33 @@
           text: text || '（附圖辨識與處理）',
           thumbs: imgsToSend.map((x) => x.previewUrl)
         });
+
+        // 0ms Local Fast-Path for simple commands & queries (no images attached)
+        if (imgsToSend.length === 0) {
+          const fast = tryLocalFastCopilot(text);
+          if (fast) {
+            const actions = (fast.actions || []).map((a) => ({ ...a, _status: 'pending' }));
+            const autoExec = Boolean(document.getElementById('ai-copilot-auto-exec') && document.getElementById('ai-copilot-auto-exec').checked);
+            if (autoExec && actions.length > 0) {
+              actions.forEach((a) => {
+                if (AI_COPILOT_SAFE_AUTO_TYPES.has(a.type)) {
+                  const res = executeAiCopilotAction(a);
+                  a._status = res.ok ? 'done' : 'error';
+                  a._err = res.ok ? '' : res.msg;
+                }
+              });
+            }
+            aiCopilotHistory.push({
+              role: 'assistant',
+              text: fast.reply,
+              actions,
+              meta: '⚡ 本機極速引擎 · 0.0s（免等待外部 API）'
+            });
+            renderAiCopilotMessages();
+            return;
+          }
+        }
+
         aiCopilotHistory.push({ role: 'assistant', text: '思考與分析中...', actions: [] });
         renderAiCopilotMessages();
 
@@ -12671,14 +12802,14 @@
 
         try {
           const recentTurns = aiCopilotHistory
-            .slice(-7, -1)
+            .slice(-5, -1)
             .map((m) => `${m.role === 'user' ? '使用者' : '助理'}：${m.text}`)
             .join('\n');
           const prompt = [
-            '【目前帳本即時摘要（JSON）】：',
+            '【帳本即時摘要】：',
             JSON.stringify(buildAiCopilotContext()),
-            recentTurns ? `\n【最近對話脈絡】：\n${recentTurns}` : '',
-            `\n【使用者最新指令】：\n${text || '請辨識附圖並產生對應記帳操作'}`
+            recentTurns ? `\n【最近對話】：\n${recentTurns}` : '',
+            `\n【使用者指令】：\n${text || '請辨識附圖並產生對應記帳操作'}`
           ].filter(Boolean).join('\n');
 
           const resp = await callAiEndpoint({
@@ -12689,6 +12820,7 @@
           });
 
           const sec = ((performance.now() - t0) / 1000).toFixed(1);
+          const upSec = resp.upstreamMs ? `（AI 伺服器 ${(resp.upstreamMs / 1000).toFixed(1)}s）` : '';
           let replyText = '';
           let actions = [];
           try {
@@ -12714,7 +12846,7 @@
             role: 'assistant',
             text: replyText,
             actions,
-            meta: `${resp.model || appConfig.aiModel || ''} · ${sec}s`
+            meta: `${resp.model || appConfig.aiModel || ''} · 總耗時 ${sec}s${upSec}`
           };
           renderAiCopilotMessages();
         } catch (err) {

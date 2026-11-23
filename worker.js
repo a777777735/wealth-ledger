@@ -278,6 +278,7 @@ async function handleAiProxy(request, env) {
   }
 
   try {
+    const tStart = Date.now();
     let text = '';
     let usedModel = '';
 
@@ -342,10 +343,17 @@ async function handleAiProxy(request, env) {
       return jsonResp({ ok: false, error: `不支援的 AI 供應商：${provider}` }, 400);
     }
 
-    return jsonResp({ ok: true, provider, model: usedModel, text });
+    return jsonResp({ ok: true, provider, model: usedModel, text, upstreamMs: Date.now() - tStart });
   } catch (err) {
     return jsonResp({ ok: false, error: err && err.message ? err.message : 'AI 呼叫失敗' }, 502);
   }
+}
+
+function makeTimeoutSignal(ms) {
+  if (typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function') {
+    return AbortSignal.timeout(ms);
+  }
+  return undefined;
 }
 
 async function callGemini({ apiKey, model, systemPrompt, prompt, attachments, expectJson }) {
@@ -376,25 +384,31 @@ async function callGemini({ apiKey, model, systemPrompt, prompt, attachments, ex
     payload.generationConfig.responseMimeType = 'application/json';
   }
 
-  const candidates = [...new Set([model, 'gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-flash-latest'])];
+  const candidates = [...new Set([model, 'gemini-flash-latest'])];
   let primaryErr = '';
-  let lastErr = 'Gemini API 暫時繁忙，建議改用 Groq 或 OpenRouter 免費 Key';
+  let lastErr = 'Gemini API 暫時繁忙，建議改用 Groq 免費高速 Key';
 
   for (let i = 0; i < candidates.length; i++) {
     const m = candidates[i];
     const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(m)}:generateContent?key=${encodeURIComponent(apiKey)}`;
-    const maxAttempts = i === 0 ? 2 : 1;
     let useThinkingCfg = true;
-    for (let attempt = 0; attempt < maxAttempts; attempt++) {
-      if (attempt > 0) await new Promise((r) => setTimeout(r, 500));
+    for (let attempt = 0; attempt < 2; attempt++) {
       const reqBody = useThinkingCfg
         ? payload
         : { ...payload, generationConfig: { temperature: payload.generationConfig.temperature, maxOutputTokens: 2048, ...(expectJson ? { responseMimeType: 'application/json' } : {}) } };
-      const res = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(reqBody)
-      });
+      let res;
+      try {
+        res = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(reqBody),
+          signal: makeTimeoutSignal(12000)
+        });
+      } catch (netErr) {
+        lastErr = 'Gemini 伺服器回應逾時（>12秒），建議改用 Groq 免費高速 Key';
+        if (i === 0 && !primaryErr) primaryErr = lastErr;
+        break;
+      }
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
         const cand = data && data.candidates && data.candidates[0];
@@ -402,24 +416,23 @@ async function callGemini({ apiKey, model, systemPrompt, prompt, attachments, ex
         const text = Array.isArray(outParts) ? outParts.map((p) => p.text || '').join('') : '';
         if (text) return { text, model: m };
         lastErr = 'Gemini 未回傳任何文字內容';
-        continue;
+        break;
       }
       const errMsg = (data && data.error && data.error.message) || `Gemini API 錯誤 (${res.status})`;
       // If a model does not support thinkingConfig, retry immediately without it
       if (res.status === 400 && useThinkingCfg && /thinking/i.test(errMsg)) {
         useThinkingCfg = false;
-        attempt -= 1;
         continue;
       }
       if (i === 0 && !primaryErr) primaryErr = errMsg;
       lastErr = errMsg;
-      // Do not retry/fallback on auth errors (401, 403)
       if (res.status === 401 || res.status === 403) {
         throw new Error(errMsg);
       }
       if (res.status !== 503 && res.status !== 429 && res.status !== 404) {
         throw new Error(errMsg);
       }
+      break;
     }
   }
   throw new Error(primaryErr || lastErr);
@@ -471,11 +484,19 @@ async function callOpenAICompat({ apiKey, baseUrl, model, fallbackModels = [], s
       payload.response_format = { type: 'json_object' };
     }
 
-    const res = await fetch(endpoint, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(payload)
-    });
+    let res;
+    try {
+      res = await fetch(endpoint, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(payload),
+        signal: makeTimeoutSignal(12000)
+      });
+    } catch (netErr) {
+      lastErr = `${provider} 回應逾時（>12秒）`;
+      if (i === 0 && !primaryErr) primaryErr = lastErr;
+      continue;
+    }
     const data = await res.json().catch(() => ({}));
     if (res.ok) {
       const text = data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
