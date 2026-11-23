@@ -10226,10 +10226,33 @@
           trip: `📷 拍收據批次匯入團帳（${trip ? trip.name : ''}）`
         };
 
-        const accountList = [...new Set(['現金（TWD）', ...(state.cash || []).map((c) => c.bank).filter(Boolean)])];
         const incomeCats = ['薪資收入', '三節／年終獎金', '績效／專案獎金', '加班費／津貼', '租金收入', '定存與債息', '副業與顧問', '其他收入'];
         const tripCats = ['餐飲', '交通', '住宿', '門票', '購物', '其他'];
         const curList = getAllCurrencies();
+        const defaultAccountOptionsHtml = (() => {
+          const byCur = new Map();
+          (state.cash || []).forEach((c) => {
+            const cur = c.currency || 'TWD';
+            if (!c.bank) return;
+            if (!byCur.has(cur)) byCur.set(cur, []);
+            if (!byCur.get(cur).some((x) => x.bank === c.bank)) byCur.get(cur).push(c);
+          });
+          let out = '<option value="">（依各筆幣別自動對應）</option>';
+          byCur.forEach((banks, cur) => {
+            out += `<optgroup label="${escapeHtml(cur)} 已有帳戶">` +
+              banks.map((b) => {
+                const balStr = safeNum(b.amount).toLocaleString('zh-TW', { maximumFractionDigits: 2 });
+                return `<option value="${escapeHtml(cur)}::${escapeHtml(b.bank)}">[${escapeHtml(cur)}] ${escapeHtml(b.bank)}（餘額 ${balStr}）</option>`;
+              }).join('') +
+              `<option value="${escapeHtml(cur)}::現金（${escapeHtml(cur)}）">[${escapeHtml(cur)}] 現金（${escapeHtml(cur)}）</option>` +
+              `<option value="${escapeHtml(cur)}::信用卡（${escapeHtml(cur)}）">[${escapeHtml(cur)}] 信用卡（${escapeHtml(cur)}）</option>` +
+              '</optgroup>';
+          });
+          if (byCur.size === 0) {
+            out += '<option value="TWD::現金（TWD）">[TWD] 現金（TWD）</option>';
+          }
+          return out;
+        })();
 
         const tripControlsHtml = isTrip ? `
           <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5 p-3 rounded-lg bg-[#f7f7f5] hairline text-xs">
@@ -10269,8 +10292,7 @@
               <label class="block text-[11px] font-medium text-zinc-600 mb-1">預設支付／入帳帳戶</label>
               <div class="flex gap-1">
                 <select id="qpb-default-account" class="flex-1 min-w-0 h-8 px-2 rounded-lg hairline bg-white text-xs">
-                  <option value="">（依辨識結果）</option>
-                  ${accountList.map((a) => `<option value="${escapeHtml(a)}">${escapeHtml(a)}</option>`).join('')}
+                  ${defaultAccountOptionsHtml}
                 </select>
                 <button id="btn-qpb-apply-account" type="button" class="h-8 px-2 rounded-lg bg-white hover:bg-zinc-100 hairline text-[11px] font-medium text-zinc-700 shrink-0">套用</button>
               </div>
@@ -10284,9 +10306,6 @@
               </select>
             </div>
           </div>
-          <datalist id="qpb-account-datalist">
-            ${accountList.map((a) => `<option value="${escapeHtml(a)}"></option>`).join('')}
-          </datalist>
         `;
 
         const html = `
@@ -10367,14 +10386,13 @@
             showToast(`已將 ${selected.length} 筆拍照收據匯入「${trip.name}」${status === 'pending' ? '（待總務核准）' : ''}`);
           } else {
             const balanceMode = (document.getElementById('qpb-balance-mode') && document.getElementById('qpb-balance-mode').value) || 'history_only';
-            const defaultAcc = (document.getElementById('qpb-default-account') && document.getElementById('qpb-default-account').value) || '';
             let cExp = 0, cInc = 0;
             if (!Array.isArray(state.randomExpenses)) state.randomExpenses = [];
             if (!Array.isArray(state.incomeReceipts)) state.incomeReceipts = [];
             selected.forEach((it) => {
               const cur = it.currency || 'TWD';
               const amt = safeNum(it.amount);
-              const acc = String(it.account || defaultAcc || '').trim();
+              const acc = String(it.account || defaultAccountForCurrency(cur)).trim();
               if (it.kind === 'income') {
                 state.incomeReceipts.push({
                   id: uid('irec'),
@@ -10423,6 +10441,24 @@
           }
         });
 
+        const defaultAccountForCurrency = (cur) => {
+          const c = cur || 'TWD';
+          const match = (state.cash || []).find((b) => b.currency === c && b.bank);
+          return match ? match.bank : `現金（${c}）`;
+        };
+        const isKnownAccountForCurrency = (cur, acc) => {
+          const c = cur || 'TWD';
+          if (!acc) return true;
+          if (acc === `現金（${c}）` || acc === `信用卡（${c}）` || acc === '信用卡') return true;
+          return (state.cash || []).some((b) => b.currency === c && b.bank === acc);
+        };
+        const parseDefaultAccVal = (raw) => {
+          const s = String(raw || '');
+          const idx = s.indexOf('::');
+          if (idx < 0) return { cur: '', acc: s };
+          return { cur: s.slice(0, idx), acc: s.slice(idx + 2) };
+        };
+
         const submitBtn = document.querySelector('#modal-form button[type="submit"]');
         if (submitBtn) submitBtn.textContent = '確認匯入已勾選項目';
 
@@ -10442,14 +10478,17 @@
           updateQpbSummary();
           body.innerHTML = batchItems.map((it, i) => {
             const isInc = it.kind === 'income' && !isTrip;
+            const cur = it.currency || 'TWD';
             const catOptions = isTrip
               ? tripCats.map((c) => `<option value="${escapeHtml(c)}" ${(tripCats.includes(it.category) ? it.category : mapTripCategoryHeuristic(it.category || it.title)) === c ? 'selected' : ''}>${escapeHtml(c)}</option>`).join('')
               : (isInc
                 ? [...new Set([...incomeCats, it.category || '其他收入'])].map((c) => `<option value="${escapeHtml(c)}" ${(it.category || '其他收入') === c ? 'selected' : ''}>${escapeHtml(c)}</option>`).join('')
                 : buildExpenseCategoryOptionsHtml(it.category || '其他隨機支出'));
-            const curOptions = [...new Set([...curList, it.currency || 'TWD'])].map((c) =>
-              `<option value="${escapeHtml(c)}" ${(it.currency || 'TWD') === c ? 'selected' : ''}>${escapeHtml(c)}</option>`
+            const curOptions = [...new Set([...curList, cur])].map((c) =>
+              `<option value="${escapeHtml(c)}" ${cur === c ? 'selected' : ''}>${escapeHtml(c)}</option>`
             ).join('');
+            const showCustomAcc = Boolean(it._customAcc || (it.account && !isKnownAccountForCurrency(cur, it.account)));
+            const accOptions = !isTrip ? buildAccountOptionsHtml(cur, showCustomAcc ? '__CUSTOM__' : (it.account || '')) : '';
             return `
               <div class="p-2.5 space-y-2 text-xs ${it.checked ? '' : 'opacity-45'}">
                 <div class="flex flex-wrap items-center gap-1.5">
@@ -10467,11 +10506,12 @@
                 </div>
                 <div class="grid grid-cols-12 gap-1.5 pl-5">
                   <input type="text" data-qpb-idx="${i}" data-qpb-field="title" value="${escapeHtml(it.title || '')}" placeholder="項目名稱" class="col-span-12 sm:col-span-4 h-7 px-2 rounded hairline bg-white text-xs font-medium text-zinc-900" />
-                  <select data-qpb-idx="${i}" data-qpb-field="currency" class="col-span-4 sm:col-span-2 h-7 px-1.5 rounded hairline bg-white text-xs font-mono-num">${curOptions}</select>
+                  <select data-qpb-idx="${i}" data-qpb-field="currency" class="col-span-4 sm:col-span-2 h-7 px-1.5 rounded hairline bg-white text-xs font-mono-num" title="幣別（連動帳戶）">${curOptions}</select>
                   <input type="number" step="0.01" min="0" data-qpb-idx="${i}" data-qpb-field="amount" value="${safeNum(it.amount)}" placeholder="金額" class="col-span-8 sm:col-span-2 h-7 px-2 rounded hairline bg-white text-xs font-mono-num font-semibold text-right" />
                   ${!isTrip ? `
-                    <input type="text" list="qpb-account-datalist" data-qpb-idx="${i}" data-qpb-field="account" value="${escapeHtml(it.account || '')}" placeholder="支付／入帳帳戶" class="col-span-6 sm:col-span-2 h-7 px-2 rounded hairline bg-white text-xs" />
-                    <input type="text" data-qpb-idx="${i}" data-qpb-field="note" value="${escapeHtml(it.note || '')}" placeholder="備註" class="col-span-6 sm:col-span-2 h-7 px-2 rounded hairline bg-white text-xs" />
+                    <select data-qpb-idx="${i}" data-qpb-field="accountSelect" class="col-span-7 sm:col-span-2 h-7 px-1.5 rounded hairline bg-white text-xs" title="依幣別選擇已有帳戶">${accOptions}</select>
+                    <input type="text" data-qpb-idx="${i}" data-qpb-field="note" value="${escapeHtml(it.note || '')}" placeholder="備註" class="col-span-5 sm:col-span-2 h-7 px-2 rounded hairline bg-white text-xs" />
+                    ${showCustomAcc ? `<input type="text" data-qpb-idx="${i}" data-qpb-field="accountCustom" value="${escapeHtml(it.account || '')}" placeholder="輸入自訂帳戶名稱（${escapeHtml(cur)}）" class="col-span-12 h-7 px-2 rounded hairline bg-white text-xs" />` : ''}
                   ` : `
                     <input type="text" data-qpb-idx="${i}" data-qpb-field="note" value="${escapeHtml(it.note || '')}" placeholder="備註" class="col-span-12 sm:col-span-4 h-7 px-2 rounded hairline bg-white text-xs" />
                   `}
@@ -10495,6 +10535,26 @@
               item.kind = ev.target.value;
               item.category = item.kind === 'income' ? '其他收入' : '其他隨機支出';
               renderQpbList();
+            } else if (field === 'currency') {
+              item.currency = ev.target.value || 'TWD';
+              if (!isTrip && !isKnownAccountForCurrency(item.currency, item.account)) {
+                item.account = defaultAccountForCurrency(item.currency);
+                item._customAcc = false;
+              }
+              renderQpbList();
+            } else if (field === 'accountSelect') {
+              if (ev.target.value === '__CUSTOM__') {
+                item._customAcc = true;
+                item.account = '';
+                renderQpbList();
+              } else {
+                item._customAcc = false;
+                item.account = ev.target.value;
+                renderQpbList();
+              }
+            } else if (field === 'accountCustom') {
+              item._customAcc = true;
+              item.account = ev.target.value;
             } else if (field === 'amount') {
               item.amount = safeNum(ev.target.value);
             } else {
@@ -10504,7 +10564,7 @@
           bodyEl.addEventListener('change', handleEdit);
           bodyEl.addEventListener('input', (ev) => {
             const field = ev.target.dataset.qpbField;
-            if (field === 'title' || field === 'amount' || field === 'account' || field === 'note') handleEdit(ev);
+            if (field === 'title' || field === 'amount' || field === 'accountCustom' || field === 'note') handleEdit(ev);
           });
         }
 
@@ -10520,26 +10580,42 @@
         const btnApplyAcc = document.getElementById('btn-qpb-apply-account');
         if (btnApplyAcc) {
           btnApplyAcc.addEventListener('click', () => {
-            const a = (document.getElementById('qpb-default-account') && document.getElementById('qpb-default-account').value) || '';
-            batchItems.forEach((it) => { it.account = a; });
-            renderQpbList();
-            showToast(a ? `已將帳戶「${a}」套用到全部項目` : '已清除全部項目的帳戶欄位');
+            const raw = (document.getElementById('qpb-default-account') && document.getElementById('qpb-default-account').value) || '';
+            const { cur, acc } = parseDefaultAccVal(raw);
+            if (!acc) {
+              batchItems.forEach((it) => {
+                it._customAcc = false;
+                it.account = defaultAccountForCurrency(it.currency || 'TWD');
+              });
+              renderQpbList();
+              showToast('已依各筆幣別自動對應現有帳戶');
+            } else {
+              batchItems.forEach((it) => {
+                if (cur) it.currency = cur;
+                it._customAcc = false;
+                it.account = acc;
+              });
+              renderQpbList();
+              showToast(`已將 ${cur ? `[${cur}] ` : ''}「${acc}」套用到全部項目`);
+            }
           });
         }
         const btnAddRow = document.getElementById('btn-qpb-add-row');
         if (btnAddRow) {
           btnAddRow.addEventListener('click', () => {
             const d = (document.getElementById('qpb-default-date') && document.getElementById('qpb-default-date').value) || todayISO();
-            const a = (document.getElementById('qpb-default-account') && document.getElementById('qpb-default-account').value) || '';
+            const raw = (document.getElementById('qpb-default-account') && document.getElementById('qpb-default-account').value) || '';
+            const { cur, acc } = parseDefaultAccVal(raw);
+            const rowCur = cur || 'TWD';
             batchItems.push({
               kind: context === 'income' ? 'income' : 'expense',
               date: d,
               time: '',
               category: isTrip ? '餐飲' : (context === 'income' ? '其他收入' : '餐飲美食'),
               title: '',
-              currency: 'TWD',
+              currency: rowCur,
               amount: 0,
-              account: a,
+              account: acc || defaultAccountForCurrency(rowCur),
               note: '',
               isDuplicate: false,
               checked: true
@@ -10627,7 +10703,8 @@
                 expectJson: true
               });
               const parsed = extractJsonFromAiText(resp.text);
-              const defaultAcc = (document.getElementById('qpb-default-account') && document.getElementById('qpb-default-account').value) || '';
+              const rawDefAcc = (document.getElementById('qpb-default-account') && document.getElementById('qpb-default-account').value) || '';
+              const defParsed = parseDefaultAccVal(rawDefAcc);
               let items = normalizeAiExtractedPayload(parsed, state).filter((x) => x.kind === 'expense' || x.kind === 'income');
               if (context === 'income') {
                 items = items.map((x) => ({ ...x, kind: 'income' }));
@@ -10639,8 +10716,14 @@
                   checked: isTrip ? true : x.checked
                 }));
               }
-              if (defaultAcc && !isTrip) {
-                items = items.map((x) => ({ ...x, account: x.account || defaultAcc }));
+              if (!isTrip) {
+                items = items.map((x) => {
+                  const rowCur = x.currency || 'TWD';
+                  const fallbackAcc = (defParsed.acc && (!defParsed.cur || defParsed.cur === rowCur))
+                    ? defParsed.acc
+                    : defaultAccountForCurrency(rowCur);
+                  return { ...x, account: x.account || fallbackAcc };
+                });
               }
               batchItems = items;
               renderQpbList();
