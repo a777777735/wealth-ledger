@@ -9106,10 +9106,19 @@
         const items = [];
         const obj = Array.isArray(rawObj) ? { expenses: rawObj } : (rawObj || {});
 
+        const normTime = (v) => {
+          const m = String(v || '').trim().match(/^(\d{1,2}):(\d{2})/);
+          if (!m) return '';
+          const hh = Math.min(23, Math.max(0, Number(m[1])));
+          const mm = Math.min(59, Math.max(0, Number(m[2])));
+          return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+        };
+
         (Array.isArray(obj.expenses) ? obj.expenses : []).forEach((e) => {
           const amount = Math.abs(parseFlexibleNumber(e.amount));
           if (!Number.isFinite(amount) || amount <= 0) return;
           const date = parseFlexibleDate(e.date) || todayISO();
+          const time = normTime(e.time);
           const title = String(e.title || e.name || e.category || '支出項目').trim();
           const rawCat = String(e.category || '').trim();
           const mapped = mapSingleCategoryHeuristic(rawCat);
@@ -9117,19 +9126,20 @@
           const currency = /^[A-Z]{3}$/.test(String(e.currency || 'TWD').toUpperCase()) ? String(e.currency || 'TWD').toUpperCase() : 'TWD';
           const dupKey = `${date}|${Math.round(amount)}|${title.toLowerCase()}`;
           const isDuplicate = expKeys.has(dupKey);
-          items.push({ kind: 'expense', date, category, title, amount: Number(amount.toFixed(2)), currency, account: String(e.account || '').trim(), note: String(e.note || '').trim(), isDuplicate, checked: !isDuplicate });
+          items.push({ kind: 'expense', date, time, category, title, amount: Number(amount.toFixed(2)), currency, account: String(e.account || '').trim(), note: String(e.note || '').trim(), isDuplicate, checked: !isDuplicate });
         });
 
         (Array.isArray(obj.incomes) ? obj.incomes : []).forEach((r) => {
           const amount = Math.abs(parseFlexibleNumber(r.amount ?? r.actualAmount));
           if (!Number.isFinite(amount) || amount <= 0) return;
           const date = parseFlexibleDate(r.date) || todayISO();
+          const time = normTime(r.time);
           const title = String(r.title || r.name || '收入項目').trim();
           const category = String(r.category || '薪資收入').trim();
           const currency = /^[A-Z]{3}$/.test(String(r.currency || 'TWD').toUpperCase()) ? String(r.currency || 'TWD').toUpperCase() : 'TWD';
           const dupKey = `${date}|${Math.round(amount)}|${title.toLowerCase()}`;
           const isDuplicate = incKeys.has(dupKey);
-          items.push({ kind: 'income', date, category, title, amount: Number(amount.toFixed(2)), currency, account: String(r.account || '').trim(), note: String(r.note || '').trim(), isDuplicate, checked: !isDuplicate });
+          items.push({ kind: 'income', date, time, category, title, amount: Number(amount.toFixed(2)), currency, account: String(r.account || '').trim(), note: String(r.note || '').trim(), isDuplicate, checked: !isDuplicate });
         });
 
         (Array.isArray(obj.stocks) ? obj.stocks : []).forEach((s) => {
@@ -9797,8 +9807,8 @@
         return [
           `今天日期為 ${todayISO()}。請${focusMap[targetType] || focusMap.auto}，並只回傳純 JSON 物件（不要其他解釋文字）：`,
           `{`,
-          `  "expenses": [{ "date": "YYYY-MM-DD", "category": "類別", "title": "品項", "amount": 數字, "currency": "TWD", "account": "帳戶", "note": "" }],`,
-          `  "incomes": [{ "date": "YYYY-MM-DD", "category": "薪資收入|獎金|分潤|其他收入", "title": "項目", "amount": 數字, "currency": "TWD", "account": "帳戶", "note": "" }],`,
+          `  "expenses": [{ "date": "YYYY-MM-DD", "time": "HH:MM（若圖片有顯示時間，無則空字串）", "category": "類別", "title": "品項", "amount": 數字, "currency": "TWD", "account": "帳戶", "note": "" }],`,
+          `  "incomes": [{ "date": "YYYY-MM-DD", "time": "HH:MM（無則空字串）", "category": "薪資收入|獎金|分潤|其他收入", "title": "項目", "amount": 數字, "currency": "TWD", "account": "帳戶", "note": "" }],`,
           `  "stocks": [{ "market": "TW|US|HK", "symbol": "代號", "name": "名稱", "shares": 股數, "avgCost": 均價, "currentPrice": 現價, "currency": "TWD|USD|HKD", "broker": "券商" }],`,
           `  "cash": [{ "bank": "銀行或券商名", "currency": "TWD|USD|JPY|HKD|CNY", "amount": 餘額, "note": "" }]`,
           `}`,
@@ -10186,8 +10196,20 @@
           trip: `📷 拍收據批次匯入團帳（${trip ? trip.name : ''}）`
         };
 
+        const accountList = [...new Set(['現金（TWD）', ...(state.cash || []).map((c) => c.bank).filter(Boolean)])];
+        const incomeCats = ['薪資收入', '三節／年終獎金', '績效／專案獎金', '加班費／津貼', '租金收入', '定存與債息', '副業與顧問', '其他收入'];
+        const tripCats = ['餐飲', '交通', '住宿', '門票', '購物', '其他'];
+        const curList = getAllCurrencies();
+
         const tripControlsHtml = isTrip ? `
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 p-3 rounded-lg bg-[#f7f7f5] hairline text-xs">
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5 p-3 rounded-lg bg-[#f7f7f5] hairline text-xs">
+            <div>
+              <label class="block text-[11px] font-medium text-zinc-600 mb-1">預設日期（可一鍵套用）</label>
+              <div class="flex gap-1">
+                <input id="qpb-default-date" type="date" value="${todayISO()}" class="flex-1 min-w-0 h-8 px-2 rounded-lg hairline bg-white text-xs font-mono-num" />
+                <button id="btn-qpb-apply-date" type="button" class="h-8 px-2 rounded-lg bg-white hover:bg-zinc-100 hairline text-[11px] font-medium text-zinc-700 shrink-0">套用全部</button>
+              </div>
+            </div>
             <div>
               <label class="block text-[11px] font-medium text-zinc-600 mb-1">付款來源</label>
               <select id="qpb-trip-payer" class="w-full h-8 px-2 rounded-lg hairline bg-white text-xs">
@@ -10205,10 +10227,36 @@
             </div>
           </div>
         ` : `
-          <label class="inline-flex items-center gap-2 text-xs text-zinc-700 cursor-pointer select-none">
-            <input id="qpb-history-only" type="checkbox" checked class="rounded border-zinc-300 text-zinc-900" />
-            <span>預設標記為已入帳／已扣款（僅記帳，不異動現有銀行餘額）</span>
-          </label>
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5 p-3 rounded-lg bg-[#f7f7f5] hairline text-xs">
+            <div>
+              <label class="block text-[11px] font-medium text-zinc-600 mb-1">預設日期（批次套用）</label>
+              <div class="flex gap-1">
+                <input id="qpb-default-date" type="date" value="${todayISO()}" class="flex-1 min-w-0 h-8 px-2 rounded-lg hairline bg-white text-xs font-mono-num" />
+                <button id="btn-qpb-apply-date" type="button" class="h-8 px-2 rounded-lg bg-white hover:bg-zinc-100 hairline text-[11px] font-medium text-zinc-700 shrink-0">套用</button>
+              </div>
+            </div>
+            <div>
+              <label class="block text-[11px] font-medium text-zinc-600 mb-1">預設支付／入帳帳戶</label>
+              <div class="flex gap-1">
+                <select id="qpb-default-account" class="flex-1 min-w-0 h-8 px-2 rounded-lg hairline bg-white text-xs">
+                  <option value="">（依辨識結果）</option>
+                  ${accountList.map((a) => `<option value="${escapeHtml(a)}">${escapeHtml(a)}</option>`).join('')}
+                </select>
+                <button id="btn-qpb-apply-account" type="button" class="h-8 px-2 rounded-lg bg-white hover:bg-zinc-100 hairline text-[11px] font-medium text-zinc-700 shrink-0">套用</button>
+              </div>
+            </div>
+            <div>
+              <label class="block text-[11px] font-medium text-zinc-600 mb-1">銀行餘額處理</label>
+              <select id="qpb-balance-mode" class="w-full h-8 px-2 rounded-lg hairline bg-white text-xs">
+                <option value="history_only" selected>已入帳／已扣款（僅記帳，不異動餘額）</option>
+                <option value="unpaid">標記為未扣款（待之後扣款）</option>
+                <option value="sync_bank">立即加減所選銀行帳戶餘額</option>
+              </select>
+            </div>
+          </div>
+          <datalist id="qpb-account-datalist">
+            ${accountList.map((a) => `<option value="${escapeHtml(a)}"></option>`).join('')}
+          </datalist>
         `;
 
         const html = `
@@ -10216,7 +10264,7 @@
             <div class="rounded-lg bg-[#f7f7f5] hairline p-3.5 flex flex-wrap items-center justify-between gap-2">
               <div class="space-y-0.5">
                 <div class="text-xs font-semibold text-zinc-900">一次可選 1～5 張發票、收據、餐廳帳單或網銀截圖</div>
-                <div id="qpb-status" class="text-[11px] text-zinc-500">選完照片後會自動呼叫 AI 辨識全部單筆與多筆明細</div>
+                <div id="qpb-status" class="text-[11px] text-zinc-500">選完照片後會自動呼叫 AI 辨識，辨識後可逐筆修改日期、時間、類別、金額與帳戶</div>
               </div>
               <label class="btn-focus inline-flex items-center h-8 px-3.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-medium cursor-pointer shrink-0">
                 <span>選擇／拍攝照片</span>
@@ -10226,16 +10274,26 @@
             <div id="qpb-thumbs" class="flex flex-wrap gap-1.5"></div>
             ${tripControlsHtml}
             <div id="qpb-list-wrap" class="hidden space-y-2">
-              <div id="qpb-list-summary" class="text-xs font-mono-num text-zinc-700 font-medium"></div>
-              <div class="max-h-64 overflow-y-auto rounded-lg hairline divide-y divide-zinc-900/[0.06] bg-white" id="qpb-list-body"></div>
+              <div class="flex items-center justify-between gap-2">
+                <div id="qpb-list-summary" class="text-xs font-mono-num text-zinc-700 font-medium"></div>
+                <button id="btn-qpb-add-row" type="button" class="text-xs font-medium text-zinc-700 hover:text-zinc-900">＋ 手動加一列</button>
+              </div>
+              <div class="max-h-80 overflow-y-auto rounded-lg hairline divide-y divide-zinc-900/[0.08] bg-white" id="qpb-list-body"></div>
             </div>
           </div>
         `;
 
+        const formatNoteWithTime = (note, time) => {
+          const t = String(time || '').trim();
+          const n = String(note || '').trim();
+          const base = n ? `${n}（AI拍照）` : 'AI 拍照辨識';
+          return t && !base.includes(t) ? `${t} · ${base}` : base;
+        };
+
         openFormModal(titleMap[context] || titleMap.personal, html, () => {
-          const selected = batchItems.filter((x) => x.checked);
+          const selected = batchItems.filter((x) => x.checked && safeNum(x.amount) > 0);
           if (selected.length === 0) {
-            showToast('尚未辨識或勾選任何項目');
+            showToast('尚未辨識或勾選任何有效金額項目');
             return;
           }
           if (isTrip) {
@@ -10246,14 +10304,16 @@
             if (!Array.isArray(trip.expenses)) trip.expenses = [];
             selected.forEach((it) => {
               const cur = it.currency || 'TWD';
+              const amt = safeNum(it.amount);
               trip.expenses.push({
                 id: uid('texp'),
                 date: it.date || todayISO(),
-                title: it.title || '拍照收據',
-                category: mapTripCategoryHeuristic(it.category || it.title),
+                time: it.time || '',
+                title: String(it.title || '拍照收據').trim(),
+                category: tripCats.includes(it.category) ? it.category : mapTripCategoryHeuristic(it.category || it.title),
                 currency: cur,
-                amount: it.amount,
-                amountBase: Math.round(it.amount * getTripRate(trip, cur)),
+                amount: amt,
+                amountBase: Math.round(amt * getTripRate(trip, cur)),
                 payerType: isPool ? 'pool' : 'member',
                 payerGroupId: isPool ? '' : payerVal,
                 payerMemberName: '',
@@ -10262,47 +10322,57 @@
                 customShares: {},
                 status,
                 reimbursedFromPool: false,
-                note: it.note ? `${it.note}（AI拍照）` : 'AI 拍照辨識'
+                note: formatNoteWithTime(it.note, it.time)
               });
             });
             persistTrip(trip, true);
             showToast(`已將 ${selected.length} 筆拍照收據匯入「${trip.name}」${status === 'pending' ? '（待總務核准）' : ''}`);
           } else {
-            const histOnly = document.getElementById('qpb-history-only') ? document.getElementById('qpb-history-only').checked : true;
+            const balanceMode = (document.getElementById('qpb-balance-mode') && document.getElementById('qpb-balance-mode').value) || 'history_only';
+            const defaultAcc = (document.getElementById('qpb-default-account') && document.getElementById('qpb-default-account').value) || '';
             let cExp = 0, cInc = 0;
             if (!Array.isArray(state.randomExpenses)) state.randomExpenses = [];
             if (!Array.isArray(state.incomeReceipts)) state.incomeReceipts = [];
             selected.forEach((it) => {
+              const cur = it.currency || 'TWD';
+              const amt = safeNum(it.amount);
+              const acc = String(it.account || defaultAcc || '').trim();
               if (it.kind === 'income') {
                 state.incomeReceipts.push({
                   id: uid('irec'),
                   date: it.date || todayISO(),
-                  name: it.title || '拍照辨識收入',
+                  time: it.time || '',
+                  name: String(it.title || '拍照辨識收入').trim(),
                   category: it.category || '其他收入',
-                  currency: it.currency || 'TWD',
+                  currency: cur,
                   expectedAmount: 0,
-                  actualAmount: it.amount,
-                  account: it.account || '',
-                  depositMode: histOnly ? 'already_in_bank' : 'new_deposit',
-                  note: it.note ? `${it.note}（AI拍照）` : 'AI 拍照辨識'
+                  actualAmount: amt,
+                  account: acc,
+                  depositMode: balanceMode === 'sync_bank' ? 'new_deposit' : 'already_in_bank',
+                  note: formatNoteWithTime(it.note, it.time)
                 });
-                if (!histOnly && it.account) {
-                  const bank = (state.cash || []).find((c) => c.bank === it.account && c.currency === (it.currency || 'TWD'));
-                  if (bank) bank.amount = Number((safeNum(bank.amount) + safeNum(it.amount)).toFixed(2));
+                if (balanceMode === 'sync_bank' && acc) {
+                  const bank = (state.cash || []).find((c) => c.bank === acc && c.currency === cur);
+                  if (bank) bank.amount = Number((safeNum(bank.amount) + amt).toFixed(2));
                 }
                 cInc += 1;
               } else {
                 state.randomExpenses.push({
                   id: uid('rexp'),
                   date: it.date || todayISO(),
+                  time: it.time || '',
                   category: ALL_EXPENSE_CATEGORIES.includes(it.category) ? it.category : '其他隨機支出',
-                  title: it.title || '拍照辨識支出',
-                  currency: it.currency || 'TWD',
-                  amount: it.amount,
-                  account: it.account || '',
-                  deductStatus: histOnly ? 'paid' : 'unpaid',
-                  note: it.note ? `${it.note}（AI拍照）` : 'AI 拍照辨識'
+                  title: String(it.title || '拍照辨識支出').trim(),
+                  currency: cur,
+                  amount: amt,
+                  account: acc,
+                  deductStatus: balanceMode === 'unpaid' ? 'unpaid' : 'paid',
+                  note: formatNoteWithTime(it.note, it.time)
                 });
+                if (balanceMode === 'sync_bank' && acc) {
+                  const bank = (state.cash || []).find((c) => c.bank === acc && c.currency === cur);
+                  if (bank) bank.amount = Number((safeNum(bank.amount) - amt).toFixed(2));
+                }
                 cExp += 1;
               }
             });
@@ -10318,45 +10388,125 @@
         const submitBtn = document.querySelector('#modal-form button[type="submit"]');
         if (submitBtn) submitBtn.textContent = '確認匯入已勾選項目';
 
+        const updateQpbSummary = () => {
+          const sumEl = document.getElementById('qpb-list-summary');
+          if (!sumEl) return;
+          const checkedCount = batchItems.filter((x) => x.checked).length;
+          sumEl.textContent = `共 ${batchItems.length} 筆明細（已勾選 ${checkedCount} 筆，可直接修改各欄位）`;
+        };
+
         const renderQpbList = () => {
           const wrap = document.getElementById('qpb-list-wrap');
-          const sumEl = document.getElementById('qpb-list-summary');
           const body = document.getElementById('qpb-list-body');
           if (!wrap || !body) return;
           if (batchItems.length === 0) { wrap.classList.add('hidden'); return; }
           wrap.classList.remove('hidden');
-          const checkedCount = batchItems.filter((x) => x.checked).length;
-          if (sumEl) sumEl.textContent = `共辨識出 ${batchItems.length} 筆（已勾選 ${checkedCount} 筆）`;
+          updateQpbSummary();
           body.innerHTML = batchItems.map((it, i) => {
             const isInc = it.kind === 'income' && !isTrip;
+            const catOptions = isTrip
+              ? tripCats.map((c) => `<option value="${escapeHtml(c)}" ${(tripCats.includes(it.category) ? it.category : mapTripCategoryHeuristic(it.category || it.title)) === c ? 'selected' : ''}>${escapeHtml(c)}</option>`).join('')
+              : (isInc
+                ? [...new Set([...incomeCats, it.category || '其他收入'])].map((c) => `<option value="${escapeHtml(c)}" ${(it.category || '其他收入') === c ? 'selected' : ''}>${escapeHtml(c)}</option>`).join('')
+                : buildExpenseCategoryOptionsHtml(it.category || '其他隨機支出'));
+            const curOptions = [...new Set([...curList, it.currency || 'TWD'])].map((c) =>
+              `<option value="${escapeHtml(c)}" ${(it.currency || 'TWD') === c ? 'selected' : ''}>${escapeHtml(c)}</option>`
+            ).join('');
             return `
-              <label class="flex items-center justify-between gap-2 p-2.5 text-xs hover:bg-[#f7f7f5] cursor-pointer ${it.checked ? '' : 'opacity-45'}">
-                <div class="flex items-center gap-2 min-w-0">
-                  <input type="checkbox" data-qpb-idx="${i}" ${it.checked ? 'checked' : ''} class="rounded border-zinc-300 text-zinc-900 shrink-0" />
-                  <div class="min-w-0">
-                    <div class="flex items-center gap-1.5 flex-wrap">
-                      <span class="px-1.5 py-0.5 rounded text-[10px] font-medium ${isInc ? 'bg-rose-50 text-rose-700' : 'bg-emerald-50 text-emerald-700'}">${isTrip ? mapTripCategoryHeuristic(it.category || it.title) : (isInc ? '收入' : it.category)}</span>
-                      <span class="font-medium text-zinc-900 truncate">${escapeHtml(it.title)}</span>
-                      ${it.isDuplicate && !isTrip ? '<span class="px-1 py-0.5 rounded bg-amber-100 text-amber-800 text-[10px]">疑似重複</span>' : ''}
-                    </div>
-                    <div class="text-[11px] font-mono-num text-zinc-400">${escapeHtml(it.date)}${it.account ? ` · ${escapeHtml(it.account)}` : ''}</div>
-                  </div>
+              <div class="p-2.5 space-y-2 text-xs ${it.checked ? '' : 'opacity-45'}">
+                <div class="flex flex-wrap items-center gap-1.5">
+                  <input type="checkbox" data-qpb-idx="${i}" data-qpb-field="checked" ${it.checked ? 'checked' : ''} class="rounded border-zinc-300 text-zinc-900 shrink-0" />
+                  ${!isTrip ? `
+                    <select data-qpb-idx="${i}" data-qpb-field="kind" class="h-7 px-1.5 rounded hairline bg-white text-[11px] font-medium ${isInc ? 'text-rose-700' : 'text-emerald-700'}">
+                      <option value="expense" ${!isInc ? 'selected' : ''}>支出</option>
+                      <option value="income" ${isInc ? 'selected' : ''}>收入</option>
+                    </select>
+                  ` : ''}
+                  <input type="date" data-qpb-idx="${i}" data-qpb-field="date" value="${escapeHtml(it.date || todayISO())}" class="h-7 px-1.5 rounded hairline bg-white text-[11px] font-mono-num" title="日期" />
+                  <input type="time" data-qpb-idx="${i}" data-qpb-field="time" value="${escapeHtml(it.time || '')}" class="h-7 px-1.5 rounded hairline bg-white text-[11px] font-mono-num" title="時間（選填）" />
+                  <select data-qpb-idx="${i}" data-qpb-field="category" class="h-7 px-1.5 rounded hairline bg-white text-[11px] max-w-[120px]">${catOptions}</select>
+                  ${it.isDuplicate && !isTrip ? '<span class="px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 text-[10px]">疑似重複</span>' : ''}
                 </div>
-                <span class="font-mono-num font-semibold shrink-0 ${isInc ? 'text-rose-700' : 'text-emerald-700'}">${escapeHtml(it.currency || 'TWD')} ${fmtNum(it.amount, (it.currency || 'TWD') === 'TWD' ? 0 : 2)}</span>
-              </label>
+                <div class="grid grid-cols-12 gap-1.5 pl-5">
+                  <input type="text" data-qpb-idx="${i}" data-qpb-field="title" value="${escapeHtml(it.title || '')}" placeholder="項目名稱" class="col-span-12 sm:col-span-4 h-7 px-2 rounded hairline bg-white text-xs font-medium text-zinc-900" />
+                  <select data-qpb-idx="${i}" data-qpb-field="currency" class="col-span-4 sm:col-span-2 h-7 px-1.5 rounded hairline bg-white text-xs font-mono-num">${curOptions}</select>
+                  <input type="number" step="0.01" min="0" data-qpb-idx="${i}" data-qpb-field="amount" value="${safeNum(it.amount)}" placeholder="金額" class="col-span-8 sm:col-span-2 h-7 px-2 rounded hairline bg-white text-xs font-mono-num font-semibold text-right" />
+                  ${!isTrip ? `
+                    <input type="text" list="qpb-account-datalist" data-qpb-idx="${i}" data-qpb-field="account" value="${escapeHtml(it.account || '')}" placeholder="支付／入帳帳戶" class="col-span-6 sm:col-span-2 h-7 px-2 rounded hairline bg-white text-xs" />
+                    <input type="text" data-qpb-idx="${i}" data-qpb-field="note" value="${escapeHtml(it.note || '')}" placeholder="備註" class="col-span-6 sm:col-span-2 h-7 px-2 rounded hairline bg-white text-xs" />
+                  ` : `
+                    <input type="text" data-qpb-idx="${i}" data-qpb-field="note" value="${escapeHtml(it.note || '')}" placeholder="備註" class="col-span-12 sm:col-span-4 h-7 px-2 rounded hairline bg-white text-xs" />
+                  `}
+                </div>
+              </div>
             `;
           }).join('');
         };
 
         const bodyEl = document.getElementById('qpb-list-body');
         if (bodyEl) {
-          bodyEl.addEventListener('change', (ev) => {
+          const handleEdit = (ev) => {
             const idx = ev.target.dataset.qpbIdx;
-            if (idx === undefined) return;
-            if (batchItems[Number(idx)]) {
-              batchItems[Number(idx)].checked = ev.target.checked;
+            const field = ev.target.dataset.qpbField;
+            if (idx === undefined || !field || !batchItems[Number(idx)]) return;
+            const item = batchItems[Number(idx)];
+            if (field === 'checked') {
+              item.checked = ev.target.checked;
               renderQpbList();
+            } else if (field === 'kind') {
+              item.kind = ev.target.value;
+              item.category = item.kind === 'income' ? '其他收入' : '其他隨機支出';
+              renderQpbList();
+            } else if (field === 'amount') {
+              item.amount = safeNum(ev.target.value);
+            } else {
+              item[field] = ev.target.value;
             }
+          };
+          bodyEl.addEventListener('change', handleEdit);
+          bodyEl.addEventListener('input', (ev) => {
+            const field = ev.target.dataset.qpbField;
+            if (field === 'title' || field === 'amount' || field === 'account' || field === 'note') handleEdit(ev);
+          });
+        }
+
+        const btnApplyDate = document.getElementById('btn-qpb-apply-date');
+        if (btnApplyDate) {
+          btnApplyDate.addEventListener('click', () => {
+            const d = (document.getElementById('qpb-default-date') && document.getElementById('qpb-default-date').value) || todayISO();
+            batchItems.forEach((it) => { it.date = d; });
+            renderQpbList();
+            showToast(`已將日期 ${d} 套用到全部項目`);
+          });
+        }
+        const btnApplyAcc = document.getElementById('btn-qpb-apply-account');
+        if (btnApplyAcc) {
+          btnApplyAcc.addEventListener('click', () => {
+            const a = (document.getElementById('qpb-default-account') && document.getElementById('qpb-default-account').value) || '';
+            batchItems.forEach((it) => { it.account = a; });
+            renderQpbList();
+            showToast(a ? `已將帳戶「${a}」套用到全部項目` : '已清除全部項目的帳戶欄位');
+          });
+        }
+        const btnAddRow = document.getElementById('btn-qpb-add-row');
+        if (btnAddRow) {
+          btnAddRow.addEventListener('click', () => {
+            const d = (document.getElementById('qpb-default-date') && document.getElementById('qpb-default-date').value) || todayISO();
+            const a = (document.getElementById('qpb-default-account') && document.getElementById('qpb-default-account').value) || '';
+            batchItems.push({
+              kind: context === 'income' ? 'income' : 'expense',
+              date: d,
+              time: '',
+              category: isTrip ? '餐飲' : (context === 'income' ? '其他收入' : '餐飲美食'),
+              title: '',
+              currency: 'TWD',
+              amount: 0,
+              account: a,
+              note: '',
+              isDuplicate: false,
+              checked: true
+            });
+            renderQpbList();
           });
         }
 
@@ -10380,15 +10530,24 @@
                 expectJson: true
               });
               const parsed = extractJsonFromAiText(resp.text);
+              const defaultAcc = (document.getElementById('qpb-default-account') && document.getElementById('qpb-default-account').value) || '';
               let items = normalizeAiExtractedPayload(parsed, state).filter((x) => x.kind === 'expense' || x.kind === 'income');
               if (context === 'income') {
                 items = items.map((x) => ({ ...x, kind: 'income' }));
               } else if (context === 'expense' || isTrip) {
-                items = items.map((x) => ({ ...x, kind: 'expense', checked: isTrip ? true : x.checked }));
+                items = items.map((x) => ({
+                  ...x,
+                  kind: 'expense',
+                  category: isTrip ? mapTripCategoryHeuristic(x.category || x.title) : x.category,
+                  checked: isTrip ? true : x.checked
+                }));
+              }
+              if (defaultAcc && !isTrip) {
+                items = items.map((x) => ({ ...x, account: x.account || defaultAcc }));
               }
               batchItems = items;
               renderQpbList();
-              if (statusEl) statusEl.textContent = items.length > 0 ? `✓ AI 辨識完成！共擷取 ${items.length} 筆，請確認勾選後按下方匯入` : '未能從照片中辨識出任何交易明細';
+              if (statusEl) statusEl.textContent = items.length > 0 ? `✓ AI 辨識完成！共擷取 ${items.length} 筆，可逐筆編輯日期、時間、類別、金額與帳戶` : '未能從照片中辨識出任何交易明細';
             } catch (err) {
               if (statusEl) statusEl.textContent = `辨識失敗：${err.message}`;
               showToast(`照片辨識失敗：${err.message}`);
