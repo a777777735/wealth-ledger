@@ -1318,6 +1318,7 @@
                       <span>選擇圖片</span>
                       <input id="migrate-img-input" type="file" accept="image/*" multiple class="hidden" />
                     </label>
+                    <button id="btn-migrate-img-paste" type="button" class="btn-focus h-8 px-3 rounded-lg bg-white hover:bg-zinc-50 hairline text-zinc-800 text-xs font-medium" title="直接貼上剪貼簿截圖">📋 貼上截圖</button>
                     <button id="btn-migrate-img-run" type="button" class="btn-focus h-8 px-3.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-medium">AI 辨識截圖</button>
                   </div>
                 </div>
@@ -1360,9 +1361,15 @@
                 </select>
               </div>
               <textarea id="migrate-text-input" rows="5" placeholder="例如：&#10;2026-03-01 午餐 180 玉山&#10;2026-03-05 薪資入帳 85000 中信&#10;或貼上信用卡網銀複製的多行明細、或貼上外部 AI 回傳的 JSON..." class="w-full p-3 rounded-xl hairline bg-[#f7f7f5]/60 focus:bg-white text-xs font-mono-num text-zinc-800 leading-relaxed"></textarea>
-              <div class="flex flex-wrap items-center justify-end gap-2">
-                <button id="btn-migrate-text-json" type="button" class="btn-focus h-8 px-3 rounded-lg bg-white hover:bg-zinc-50 hairline text-xs font-medium text-zinc-700">直接解析 JSON（免 Key）</button>
-                <button id="btn-migrate-text-ai" type="button" class="btn-focus h-8 px-3.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-medium">AI 智慧解析文字</button>
+              <div class="flex flex-wrap items-center justify-between gap-2">
+                <div class="flex flex-wrap items-center gap-1.5">
+                  <button id="btn-migrate-text-paste" type="button" class="btn-focus h-8 px-3 rounded-lg bg-white hover:bg-zinc-50 hairline text-xs font-medium text-zinc-700">📋 貼上剪貼簿文字</button>
+                  <button id="btn-migrate-text-voice" type="button" class="btn-focus h-8 px-3 rounded-lg bg-white hover:bg-zinc-50 hairline text-xs font-medium text-zinc-700">🎙️ 語音口述記帳</button>
+                </div>
+                <div class="flex flex-wrap items-center gap-2">
+                  <button id="btn-migrate-text-json" type="button" class="btn-focus h-8 px-3 rounded-lg bg-white hover:bg-zinc-50 hairline text-xs font-medium text-zinc-700">直接解析 JSON（免 Key）</button>
+                  <button id="btn-migrate-text-ai" type="button" class="btn-focus h-8 px-3.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-medium">AI 智慧解析文字</button>
+                </div>
               </div>
             </div>
 
@@ -1908,12 +1915,14 @@
       <!-- Composer -->
       <div class="p-3 hairline-t bg-white space-y-2 shrink-0">
         <div id="ai-copilot-thumbs" class="flex flex-wrap items-center gap-1.5 empty:hidden"></div>
-        <div class="flex items-end gap-2">
-          <label title="附加收據／截圖（最多 3 張）" class="btn-focus h-9 w-9 rounded-lg hairline bg-[#f7f7f5] hover:bg-zinc-100 flex items-center justify-center cursor-pointer shrink-0 text-zinc-700">
+        <div class="flex items-end gap-1.5">
+          <label title="附加收據／截圖（最多 5 張，多圖自動平行加速辨識）" class="btn-focus h-9 w-9 rounded-lg hairline bg-[#f7f7f5] hover:bg-zinc-100 flex items-center justify-center cursor-pointer shrink-0 text-zinc-700">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
             <input id="ai-copilot-file" type="file" accept="image/*" multiple class="hidden" />
           </label>
-          <textarea id="ai-copilot-input" rows="1" placeholder="告訴 AI 要記帳、轉帳、查詢或分析什麼..." class="flex-1 min-w-0 max-h-28 px-3 py-2 rounded-lg hairline bg-white text-xs text-zinc-900 resize-none"></textarea>
+          <button id="btn-ai-copilot-paste" type="button" title="一鍵貼上剪貼簿截圖或刷卡簡訊" class="btn-focus h-9 w-9 rounded-lg hairline bg-[#f7f7f5] hover:bg-zinc-100 flex items-center justify-center shrink-0 text-zinc-700 text-xs">📋</button>
+          <button id="btn-ai-copilot-voice" type="button" title="語音開口記帳（再點一下停止）" class="btn-focus h-9 w-9 rounded-lg hairline bg-[#f7f7f5] hover:bg-zinc-100 flex items-center justify-center shrink-0 text-zinc-700 text-xs">🎙️</button>
+          <textarea id="ai-copilot-input" rows="1" placeholder="開口說、貼截圖或輸入記帳指令..." class="flex-1 min-w-0 max-h-28 px-3 py-2 rounded-lg hairline bg-white text-xs text-zinc-900 resize-none"></textarea>
           <button id="btn-ai-copilot-send" type="button" class="btn-focus h-9 px-3.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-medium shrink-0">送出</button>
         </div>
       </div>
@@ -9519,6 +9528,44 @@
         return appConfig.aiKeys;
       }
 
+      const aiKeyCooldownMap = {}; // { [keyId]: { until: timestampMs, reason: string } }
+
+      function isAiKeyVisionCapable(k) {
+        if (!k) return true;
+        const p = String(k.provider || '').toLowerCase();
+        const m = String(k.model || '').toLowerCase();
+        // Known text-only models
+        if (/gpt-oss|llama-3\.3-70b|llama-3\.1-8b|mistral-small|deepseek-r1|deepseek-chat|qwen-2\.5-72b-instruct$|gemma-7b/i.test(m) && !/vl|vision|pixtral|scout|maverick|qwen3\.8|gemini|gpt-4o|claude-3|claude-sonnet|claude-opus/i.test(m)) {
+          return false;
+        }
+        if (p === 'gemini' || p === 'anthropic' || p === 'cloudflare') return true;
+        return true;
+      }
+
+      function getAiKeyCooldownRemainingSec(id) {
+        const entry = id && aiKeyCooldownMap[id];
+        if (!entry || !entry.until) return 0;
+        const rem = Math.ceil((entry.until - Date.now()) / 1000);
+        if (rem <= 0) {
+          delete aiKeyCooldownMap[id];
+          return 0;
+        }
+        return rem;
+      }
+
+      function markAiKeyCooldown(id, errMsg) {
+        if (!id || id === 'default') return;
+        const s = String(errMsg || '');
+        // Cooldown duration: 180s for rate limit / high demand / quota, 120s for timeout / 5xx, 300s for invalid model
+        let sec = 120;
+        if (/high demand|rate limit|429|quota|too many|busy|overloaded/i.test(s)) sec = 180;
+        else if (/does not exist|unavailable for free|invalid|401|403|404/i.test(s)) sec = 300;
+        aiKeyCooldownMap[id] = {
+          until: Date.now() + sec * 1000,
+          reason: s.slice(0, 80)
+        };
+      }
+
       function renderAiKeyPool() {
         const listEl = document.getElementById('cfg-ai-key-list');
         const countEl = document.getElementById('cfg-ai-key-count');
@@ -9532,11 +9579,18 @@
         }
         listEl.innerHTML = keys.map((k, idx) => {
           const st = aiKeyTestStates[k.id] || { status: 'idle', msg: '' };
+          const cdSec = getAiKeyCooldownRemainingSec(k.id);
+          const hasVision = isAiKeyVisionCapable(k);
+          const visionBadge = hasVision
+            ? '<span class="px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 text-[10px]" title="支援照片／收據／截圖辨識">📷 支援圖片</span>'
+            : '<span class="px-1.5 py-0.5 rounded bg-zinc-100 text-zinc-500 text-[10px]" title="純文字模型（傳圖片時會自動優先跳過）">📝 純文字</span>';
           let badgeHtml = k.enabled === false
             ? '<span class="px-1.5 py-0.5 rounded bg-zinc-100 text-zinc-400 text-[10px]">已停用</span>'
             : '<span class="px-1.5 py-0.5 rounded bg-zinc-100 text-zinc-600 text-[10px]">待命</span>';
           if (st.status === 'testing') {
             badgeHtml = '<span class="px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 text-[10px] font-medium animate-pulse">🔄 測試中…</span>';
+          } else if (cdSec > 0) {
+            badgeHtml = `<span class="px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 text-[10px] font-medium font-mono-num" title="近期發生過高負載或錯誤，冷卻期間將自動跳過以加速回應">⏳ 冷卻跳過 (${cdSec}s)</span>`;
           } else if (st.status === 'ok') {
             badgeHtml = `<span class="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 text-[10px] font-medium font-mono-num">✓ ${escapeHtml(st.msg || '正常')}</span>`;
           } else if (st.status === 'fail') {
@@ -9550,12 +9604,14 @@
                   <div class="flex items-center gap-1.5 flex-wrap">
                     <span class="font-semibold text-zinc-900">${escapeHtml(k.label || AI_PROV_NAMES[k.provider] || k.provider)}</span>
                     <span class="text-[10px] px-1.5 py-0.5 rounded bg-[#f7f7f5] text-zinc-600">${escapeHtml(AI_PROV_NAMES[k.provider] || k.provider)}</span>
+                    ${visionBadge}
                     ${badgeHtml}
                   </div>
                   <div class="text-[11px] font-mono-num text-zinc-400 truncate mt-0.5">${escapeHtml(k.model || '(預設模型)')} · ${escapeHtml(maskApiKey(k.apiKey))}${k.baseUrl ? ' · ' + escapeHtml(k.baseUrl) : ''}</div>
                 </div>
               </div>
               <div class="flex items-center gap-1 shrink-0">
+                ${cdSec > 0 ? `<button type="button" data-aikey-act="clear-cd" data-aikey-id="${escapeHtml(k.id)}" class="h-7 px-2 rounded hairline bg-amber-50 hover:bg-amber-100 text-[11px] text-amber-800" title="立即解除冷卻重新啟用">解除冷卻</button>` : ''}
                 <button type="button" data-aikey-act="refresh-model" data-aikey-id="${escapeHtml(k.id)}" class="h-7 px-2 rounded hairline bg-white hover:bg-emerald-50 text-[11px] text-emerald-700" title="上網抓取此供應商最新可用模型">更新模型</button>
                 <button type="button" data-aikey-act="test" data-aikey-id="${escapeHtml(k.id)}" class="h-7 px-2 rounded hairline bg-white hover:bg-zinc-50 text-[11px] text-zinc-700">單測</button>
                 <button type="button" data-aikey-act="up" data-aikey-id="${escapeHtml(k.id)}" ${idx === 0 ? 'disabled' : ''} class="h-7 w-7 rounded hairline bg-white hover:bg-zinc-50 text-[11px] text-zinc-700 disabled:opacity-30" title="提高優先順序">↑</button>
@@ -10119,7 +10175,7 @@
           apiKey: '',
           baseUrl: ''
         };
-        let candidates = keys.length > 0
+        let rawCandidates = keys.length > 0
           ? keys.slice()
           : (appConfig.aiApiKey
               ? [{
@@ -10140,16 +10196,37 @@
                       apiKey: '',
                       baseUrl: appConfig.aiBaseUrl || ''
                     }]));
-        if (cfApproved && !candidates.some((c) => c.provider === 'cloudflare')) {
-          candidates.push(cfFallback);
+        if (cfApproved && !rawCandidates.some((c) => c.provider === 'cloudflare')) {
+          rawCandidates.push(cfFallback);
         }
+
+        // Smart routing:
+        // 1. If request has image attachments, prioritize vision-capable keys over text-only models
+        // 2. Deprioritize keys currently in cooldown (circuit breaker) so we don't waste 40s retrying overloaded models
+        const hasImages = Array.isArray(attachments) && attachments.some((a) => String(a && a.mimeType || '').startsWith('image/'));
+        const scored = rawCandidates.map((k, origIdx) => {
+          const cdSec = getAiKeyCooldownRemainingSec(k.id);
+          const visionOk = !hasImages || isAiKeyVisionCapable(k);
+          // Tier 0: healthy + vision-capable
+          // Tier 1: cooling down + vision-capable (fallback if all healthy fail)
+          // Tier 2: text-only (last resort when images attached)
+          const tier = !visionOk ? 2 : (cdSec > 0 ? 1 : 0);
+          return { k, origIdx, tier, cdSec };
+        });
+        scored.sort((a, b) => (a.tier - b.tier) || (a.origIdx - b.origIdx));
+        // If there is at least one tier-0 key, skip tier-1 (cooling down) and tier-2 (non-vision) unless tier-0 all fail
+        const candidates = scored.map((s) => s.k);
+        const skippedCooldownLabels = scored.filter((s) => s.tier === 1).map((s) => s.k.label || s.k.provider);
 
         const errors = [];
         for (let i = 0; i < candidates.length; i++) {
           const k = candidates[i];
           const label = k.label || AI_PROV_NAMES[k.provider] || k.provider;
+          const skipHint = (i === 0 && skippedCooldownLabels.length > 0)
+            ? `（已自動跳過冷卻中：${skippedCooldownLabels.slice(0, 2).join('、')}）`
+            : '';
           const tryMsg = candidates.length > 1
-            ? `正在嘗試第 ${i + 1}/${candidates.length} 組：${label}（${k.model || k.provider}）…`
+            ? `正在嘗試第 ${i + 1}/${candidates.length} 組：${label}（${k.model || k.provider}）${skipHint}…`
             : `正在連線：${label}（${k.model || k.provider}）…`;
           if (typeof onProgress === 'function') {
             try { onProgress({ index: i, total: candidates.length, key: k, phase: 'trying', message: tryMsg }); } catch (e) {}
@@ -10163,6 +10240,7 @@
             const data = await callAiSingleKey(k, { systemPrompt, prompt, attachments, expectJson });
             const sec = ((performance.now() - t0) / 1000).toFixed(1) + 's';
             if (k.id && k.id !== 'default') {
+              delete aiKeyCooldownMap[k.id];
               aiKeyTestStates[k.id] = { status: 'ok', msg: sec };
               renderAiKeyPool();
             }
@@ -10178,11 +10256,12 @@
             const errMsg = (err && err.message) || '連線失敗';
             errors.push(`#${i + 1} ${label}：${errMsg}`);
             if (k.id && k.id !== 'default') {
+              markAiKeyCooldown(k.id, errMsg);
               aiKeyTestStates[k.id] = { status: 'fail', msg: errMsg };
               renderAiKeyPool();
             }
             const nextMsg = i + 1 < candidates.length
-              ? `第 ${i + 1} 組「${label}」失敗，自動切換第 ${i + 2}/${candidates.length} 組…`
+              ? `第 ${i + 1} 組「${label}」失敗（已暫入冷卻），自動切換第 ${i + 2}/${candidates.length} 組…`
               : `第 ${i + 1} 組「${label}」失敗`;
             if (typeof onProgress === 'function') {
               try { onProgress({ index: i, total: candidates.length, key: k, phase: 'failed', error: errMsg, message: nextMsg }); } catch (e) {}
@@ -10774,7 +10853,12 @@
           const idx = keys.findIndex((k) => k.id === id);
           if (idx < 0) return;
 
-          if (act === 'up' && idx > 0) {
+          if (act === 'clear-cd') {
+            delete aiKeyCooldownMap[id];
+            aiKeyTestStates[id] = { status: 'idle', msg: '' };
+            renderAiKeyPool();
+            showToast(`已解除「${keys[idx].label || keys[idx].provider}」冷卻狀態`);
+          } else if (act === 'up' && idx > 0) {
             [keys[idx - 1], keys[idx]] = [keys[idx], keys[idx - 1]];
             markAiKeysDirtyAndSync();
             syncAiConfigUI();
@@ -11152,8 +11236,123 @@
         });
       }
 
+      function buildUserHabitContext() {
+        const freq = new Map();
+        (state.randomExpenses || []).forEach((e) => {
+          const title = String(e.title || '').trim();
+          if (!title || title.length > 24) return;
+          const key = title.toLowerCase();
+          const cur = freq.get(key) || { title, count: 0, category: e.category || '其他隨機支出', account: e.account || '', currency: e.currency || 'TWD' };
+          cur.count += 1;
+          if (e.category) cur.category = e.category;
+          if (e.account) cur.account = e.account;
+          if (e.currency) cur.currency = e.currency;
+          freq.set(key, cur);
+        });
+        const top = [...freq.values()]
+          .toSorted((a, b) => b.count - a.count)
+          .slice(0, 18)
+          .map((x) => `${x.title}→${x.category}${x.account ? `(${x.account}/${x.currency})` : `(${x.currency})`}`);
+        return top;
+      }
+
+      async function callAiImagesInParallelBatches({ imgs, batchSize = 2, runSingleBatch }) {
+        if (!Array.isArray(imgs) || imgs.length <= batchSize) {
+          return [await runSingleBatch(imgs || [], 0, 1)];
+        }
+        const chunks = [];
+        for (let i = 0; i < imgs.length; i += batchSize) {
+          chunks.push(imgs.slice(i, i + batchSize));
+        }
+        return Promise.all(chunks.map((chunk, idx) => runSingleBatch(chunk, idx, chunks.length)));
+      }
+
+      let activeSpeechRec = null;
+      let activeSpeechBtn = null;
+
+      function toggleVoiceDictation(btnEl, targetInputEl, onDoneText = null) {
+        const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SR) {
+          showToast('此瀏覽器不支援語音輸入，請改用鍵盤上的麥克風按鈕');
+          return;
+        }
+        if (activeSpeechRec) {
+          try { activeSpeechRec.stop(); } catch (e) {}
+          activeSpeechRec = null;
+          if (activeSpeechBtn) {
+            activeSpeechBtn.classList.remove('bg-rose-600', 'text-white', 'animate-pulse');
+          }
+          activeSpeechBtn = null;
+          return;
+        }
+        const rec = new SR();
+        rec.lang = 'zh-TW';
+        rec.interimResults = false;
+        rec.maxAlternatives = 1;
+        activeSpeechRec = rec;
+        activeSpeechBtn = btnEl;
+        if (btnEl) btnEl.classList.add('bg-rose-600', 'text-white', 'animate-pulse');
+        showToast('🎙️ 請開始說話（例如：「今天午餐 150 元刷國泰」）…');
+
+        rec.onresult = (ev) => {
+          const transcript = (ev.results && ev.results[0] && ev.results[0][0] && ev.results[0][0].transcript) || '';
+          if (transcript && targetInputEl) {
+            const cur = String(targetInputEl.value || '').trim();
+            targetInputEl.value = cur ? `${cur} ${transcript.trim()}` : transcript.trim();
+            targetInputEl.dispatchEvent(new Event('input', { bubbles: true }));
+            if (typeof onDoneText === 'function') onDoneText(transcript.trim());
+          }
+        };
+        rec.onerror = (ev) => {
+          showToast(`語音辨識中斷：${ev.error || '請確認麥克風權限'}`);
+        };
+        rec.onend = () => {
+          if (activeSpeechBtn) {
+            activeSpeechBtn.classList.remove('bg-rose-600', 'text-white', 'animate-pulse');
+          }
+          activeSpeechRec = null;
+          activeSpeechBtn = null;
+        };
+        try {
+          rec.start();
+        } catch (err) {
+          showToast(`無法啟動麥克風：${err.message || err}`);
+          if (btnEl) btnEl.classList.remove('bg-rose-600', 'text-white', 'animate-pulse');
+          activeSpeechRec = null;
+          activeSpeechBtn = null;
+        }
+      }
+
+      async function readClipboardImagesOrText() {
+        const out = { files: [], text: '' };
+        if (navigator.clipboard && typeof navigator.clipboard.read === 'function') {
+          try {
+            const items = await navigator.clipboard.read();
+            for (const item of items) {
+              for (const type of item.types) {
+                if (type.startsWith('image/')) {
+                  const blob = await item.getType(type);
+                  const ext = type.split('/')[1] || 'png';
+                  out.files.push(new File([blob], `clipboard_${Date.now()}.${ext}`, { type }));
+                } else if (type === 'text/plain' && !out.text) {
+                  const blob = await item.getType(type);
+                  out.text = (await blob.text()).trim();
+                }
+              }
+            }
+          } catch (e) {}
+        }
+        if (!out.files.length && !out.text && navigator.clipboard && typeof navigator.clipboard.readText === 'function') {
+          try {
+            out.text = (await navigator.clipboard.readText()).trim();
+          } catch (e) {}
+        }
+        return out;
+      }
+
       function buildExtractionPrompt(targetType, userHint = '', fallbackDate = '') {
         const accounts = [...new Set((state.cash || []).map((c) => c.bank).filter(Boolean))];
+        const habits = buildUserHabitContext();
         const focusMap = {
           auto: '自動判斷內容中所有出現的支出、收入、股票/ETF 持股與銀行現金帳戶餘額',
           transactions: '僅擷取支出與收入交易明細（忽略轉帳、繳卡費、前期應繳總額；若圖片為某月多項統計表，請將各統計類別／項目拆成獨立多筆）',
@@ -11172,6 +11371,8 @@
           `}`,
           `支出 category 必須從以下 15 類擇一：${ALL_EXPENSE_CATEGORIES.join('、')}。`,
           accounts.length ? `使用者現有帳戶參考：${accounts.join('、')}。` : '',
+          habits.length ? `使用者歷史習慣記憶（遇到相同或相似店家／品項時請優先套用對應分類、帳戶與幣別）：${habits.join('；')}。` : '',
+          `若圖片顯示 ¥ / RMB / 淘寶 / 拼多多 / 京東，currency 請填 CNY；若為 NT$ / 台幣 請填 TWD。`,
           `若圖片沒有顯示明確日期，請優先依「使用者補充說明」指定之年份／月份／日期填入（若只指定某月如 2026年10月，可填該月最後一日或 01 日）；若仍無日期則預設填 ${fbDate}。`,
           hint ? `【使用者補充說明（請務必優先遵守）】：\n${hint}` : '',
           `若某類別沒有資料請回傳空陣列 []；金額一律用正數。`
@@ -11179,6 +11380,16 @@
       }
 
       // Image upload & AI recognition
+      const renderMigrateImgThumbs = () => {
+        const thumbs = document.getElementById('migrate-img-thumbs');
+        if (!thumbs) return;
+        thumbs.innerHTML = migrateImages.map((img) => `
+          <div class="relative w-20 h-20 rounded-lg overflow-hidden hairline bg-white">
+            <img src="${img.previewUrl}" alt="${escapeHtml(img.name)}" class="w-full h-full object-cover" />
+          </div>
+        `).join('');
+      };
+
       const migImgInput = document.getElementById('migrate-img-input');
       if (migImgInput) {
         migImgInput.addEventListener('change', async (e) => {
@@ -11187,14 +11398,7 @@
           setMigrateStatus(`正在壓縮 ${files.length} 張圖片...`);
           try {
             migrateImages = await Promise.all(files.map((f) => compressImageToBase64(f)));
-            const thumbs = document.getElementById('migrate-img-thumbs');
-            if (thumbs) {
-              thumbs.innerHTML = migrateImages.map((img) => `
-                <div class="relative w-20 h-20 rounded-lg overflow-hidden hairline bg-white">
-                  <img src="${img.previewUrl}" alt="${escapeHtml(img.name)}" class="w-full h-full object-cover" />
-                </div>
-              `).join('');
-            }
+            renderMigrateImgThumbs();
             showToast(`已準備 ${migrateImages.length} 張圖片，請點「AI 辨識截圖」`);
           } catch (err) {
             showToast(err.message);
@@ -11204,23 +11408,90 @@
         });
       }
 
+      const btnMigImgPaste = document.getElementById('btn-migrate-img-paste');
+      if (btnMigImgPaste) {
+        btnMigImgPaste.addEventListener('click', async () => {
+          const clip = await readClipboardImagesOrText();
+          if (!clip.files.length) {
+            showToast('剪貼簿中沒有偵測到圖片（可先截圖複製後再點此按鈕）');
+            return;
+          }
+          setMigrateStatus(`正在壓縮剪貼簿的 ${clip.files.length} 張截圖...`);
+          try {
+            const imgs = await Promise.all(clip.files.map((f) => compressImageToBase64(f)));
+            migrateImages = [...migrateImages, ...imgs].slice(0, 5);
+            renderMigrateImgThumbs();
+            showToast(`已從剪貼簿貼上 ${imgs.length} 張截圖（共 ${migrateImages.length} 張）`);
+          } catch (err) {
+            showToast(`貼上圖片失敗：${err.message}`);
+          } finally {
+            setMigrateStatus('');
+          }
+        });
+      }
+
+      const btnMigTextPaste = document.getElementById('btn-migrate-text-paste');
+      if (btnMigTextPaste) {
+        btnMigTextPaste.addEventListener('click', async () => {
+          const clip = await readClipboardImagesOrText();
+          const inp = document.getElementById('migrate-text-input');
+          if (!clip.text || !inp) {
+            showToast('剪貼簿中沒有文字內容');
+            return;
+          }
+          inp.value = inp.value ? `${inp.value}\n${clip.text}` : clip.text;
+          showToast('已貼上剪貼簿文字！');
+        });
+      }
+
+      const btnMigTextVoice = document.getElementById('btn-migrate-text-voice');
+      if (btnMigTextVoice) {
+        btnMigTextVoice.addEventListener('click', () => {
+          toggleVoiceDictation(btnMigTextVoice, document.getElementById('migrate-text-input'));
+        });
+      }
+
       const btnImgRun = document.getElementById('btn-migrate-img-run');
       if (btnImgRun) {
         btnImgRun.addEventListener('click', async () => {
           if (!migrateImages.length) { showToast('請先選擇至少 1 張截圖或照片'); return; }
           const target = (document.getElementById('migrate-img-target') && document.getElementById('migrate-img-target').value) || 'auto';
           const userHint = (document.getElementById('migrate-img-hint') && document.getElementById('migrate-img-hint').value) || '';
-          setMigrateStatus(`AI 正在辨識 ${migrateImages.length} 張截圖...`);
+          setMigrateStatus(`AI 正在平行辨識 ${migrateImages.length} 張截圖...`);
           btnImgRun.disabled = true;
           try {
-            const resp = await callAiEndpoint({
-              systemPrompt: '你是精準的繁體中文財務單據與金融 App 截圖辨識專家，只回傳合法 JSON。',
-              prompt: buildExtractionPrompt(target, userHint),
-              attachments: migrateImages.map((x) => ({ mimeType: x.mimeType, base64: x.base64 })),
-              expectJson: true
+            const batchResults = await callAiImagesInParallelBatches({
+              imgs: migrateImages,
+              batchSize: 2,
+              runSingleBatch: (chunk, idx, total) => callAiEndpoint({
+                systemPrompt: '你是精準的繁體中文財務單據與金融 App 截圖辨識專家，只回傳合法 JSON。',
+                prompt: buildExtractionPrompt(target, userHint),
+                attachments: chunk.map((x) => ({ mimeType: x.mimeType, base64: x.base64 })),
+                expectJson: true,
+                onProgress: (p) => {
+                  if (p && p.message) setMigrateStatus(total > 1 ? `[批次 ${idx + 1}/${total}] ${p.message}` : p.message);
+                }
+              })
             });
-            const parsed = extractJsonFromAiText(resp.text);
-            migratePreviewItems = normalizeAiExtractedPayload(parsed, state);
+            const mergedItems = [];
+            const seenBatchKeys = new Set();
+            batchResults.forEach((resp) => {
+              try {
+                const parsed = extractJsonFromAiText(resp.text);
+                const list = normalizeAiExtractedPayload(parsed, state);
+                list.forEach((it) => {
+                  const bKey = `${it.kind}|${it.date || ''}|${Math.round(safeNum(it.amount))}|${String(it.title || it.symbol || it.bank || '').toLowerCase()}`;
+                  if (seenBatchKeys.has(bKey)) {
+                    it.isDuplicate = true;
+                    it.checked = false;
+                  } else {
+                    seenBatchKeys.add(bKey);
+                  }
+                  mergedItems.push(it);
+                });
+              } catch (e) {}
+            });
+            migratePreviewItems = mergedItems;
             migrateSkippedTransfers = 0;
             renderMigratePreview();
             showToast(`截圖辨識完成！共擷取 ${migratePreviewItems.length} 筆項目`);
@@ -11442,12 +11713,15 @@
           <div class="rounded-lg bg-[#f7f7f5] hairline px-3 py-2 flex flex-wrap items-center justify-between gap-2">
             <div class="min-w-0">
               <div class="text-xs font-medium text-zinc-800">📷 ${escapeHtml(labelText || '拍照／選圖 AI 自動填單')}</div>
-              <div id="modal-photo-ai-status" class="text-[11px] text-zinc-500">支援拍發票、收據、帳單或轉帳截圖，自動填入下方欄位</div>
+              <div id="modal-photo-ai-status" class="text-[11px] text-zinc-500">支援拍發票、收據、帳單或貼上截圖，自動填入下方欄位</div>
             </div>
-            <label class="btn-focus inline-flex items-center h-7 px-3 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white text-[11px] font-medium cursor-pointer shrink-0">
-              <span>拍照／選圖</span>
-              <input id="modal-photo-ai-input" type="file" accept="image/*" class="hidden" />
-            </label>
+            <div class="flex items-center gap-1.5 shrink-0">
+              <button id="btn-modal-photo-paste" type="button" class="btn-focus h-7 px-2.5 rounded-lg bg-white hover:bg-zinc-50 hairline text-zinc-800 text-[11px] font-medium" title="直接貼上剪貼簿截圖">📋 貼上截圖</button>
+              <label class="btn-focus inline-flex items-center h-7 px-3 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white text-[11px] font-medium cursor-pointer">
+                <span>拍照／選圖</span>
+                <input id="modal-photo-ai-input" type="file" accept="image/*" class="hidden" />
+              </label>
+            </div>
           </div>
         `;
       }
@@ -11465,6 +11739,7 @@
 
       function attachPhotoAutofill(mode) {
         const input = document.getElementById('modal-photo-ai-input');
+        const pasteBtn = document.getElementById('btn-modal-photo-paste');
         const statusEl = document.getElementById('modal-photo-ai-status');
         if (!input) return;
         let lastImg = null;
@@ -11511,6 +11786,16 @@
             setVal('date', target.date);
             setVal('currency', target.currency || 'TWD');
             setVal('note', target.note || '');
+            if (target.account) {
+              const accSel = form.querySelector('[name="accountSelect"]');
+              if (accSel) {
+                const matchedAcc = [...accSel.options].find((o) => o.value === target.account || (o.value && target.account.includes(o.value)));
+                if (matchedAcc) {
+                  accSel.value = matchedAcc.value;
+                  accSel.dispatchEvent(new Event('change', { bubbles: true }));
+                }
+              }
+            }
 
             if (mode === 'income') {
               setVal('name', target.title);
@@ -11533,9 +11818,10 @@
               setVal('category', mapTripCategoryHeuristic(target.category || target.title));
             }
 
+            const dupHint = target.isDuplicate ? ' ⚠️（注意：帳本已有相似日期與金額紀錄）' : '';
             const extraHint = items.length > 1 ? `（共偵測到 ${items.length} 筆，已帶入第 1 筆；若要全部匯入請改用「📷 拍照批次記帳」）` : '';
-            if (statusEl) statusEl.textContent = `✓ AI 已自動填入：${target.title} (${target.currency || 'TWD'} ${target.amount})${extraHint}`;
-            showToast(`AI 辨識完成！已自動填入「${target.title}」`);
+            if (statusEl) statusEl.textContent = `✓ AI 已自動填入：${target.title} (${target.currency || 'TWD'} ${target.amount})${dupHint}${extraHint}`;
+            showToast(`AI 辨識完成！已自動填入「${target.title}」${dupHint}`);
           } catch (err) {
             if (statusEl) {
               statusEl.innerHTML = `<span class="text-rose-700">辨識失敗：${escapeHtml(err.message)}</span> <button type="button" id="btn-modal-photo-retry" class="ml-1.5 px-2 py-0.5 rounded bg-zinc-900 text-white text-[10px] font-medium hover:bg-zinc-800">🔄 重送辨識</button>`;
@@ -11548,6 +11834,24 @@
           statusEl.addEventListener('click', (ev) => {
             if (ev.target && ev.target.id === 'btn-modal-photo-retry' && lastImg) {
               runAutofillWithImg(lastImg);
+            }
+          });
+        }
+
+        if (pasteBtn) {
+          pasteBtn.addEventListener('click', async () => {
+            const clip = await readClipboardImagesOrText();
+            if (!clip.files.length) {
+              showToast('剪貼簿中沒有偵測到圖片（可先截圖複製後再點此按鈕）');
+              return;
+            }
+            if (statusEl) statusEl.textContent = '正在壓縮剪貼簿截圖並呼叫 AI 辨識...';
+            try {
+              lastImg = await compressImageToBase64(clip.files[0]);
+              await runAutofillWithImg(lastImg);
+            } catch (err) {
+              if (statusEl) statusEl.textContent = `讀取截圖失敗：${err.message}`;
+              showToast(`讀取截圖失敗：${err.message}`);
             }
           });
         }
@@ -11673,11 +11977,13 @@
                   <div class="text-xs font-semibold text-zinc-900">一次可選 1～5 張發票、收據、月統計圖或帳單截圖（可搭配文字說明）</div>
                   <div id="qpb-status" class="text-[11px] text-zinc-500">選好照片後可補充日期／月份／帳戶說明，再點「開始 AI 辨識」</div>
                 </div>
-                <div class="flex items-center gap-1.5 shrink-0">
+                <div class="flex flex-wrap items-center gap-1.5 shrink-0">
                   <label class="btn-focus inline-flex items-center h-8 px-3 rounded-lg bg-white hover:bg-zinc-50 hairline text-zinc-800 text-xs font-medium cursor-pointer">
                     <span>選擇／拍攝照片</span>
                     <input id="qpb-file-input" type="file" accept="image/*" multiple class="hidden" />
                   </label>
+                  <button id="btn-qpb-paste-img" type="button" class="btn-focus h-8 px-2.5 rounded-lg bg-white hover:bg-zinc-50 hairline text-zinc-800 text-xs font-medium" title="貼上剪貼簿截圖或文字">📋 貼上</button>
+                  <button id="btn-qpb-voice" type="button" class="btn-focus h-8 px-2.5 rounded-lg bg-white hover:bg-zinc-50 hairline text-zinc-800 text-xs font-medium" title="語音口述補充說明">🎙️ 語音</button>
                   <button id="btn-qpb-run-ai" type="button" class="btn-focus h-8 px-3.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-medium">開始 AI 辨識</button>
                 </div>
               </div>
@@ -12037,6 +12343,39 @@
           });
         }
 
+        const btnQpbPaste = document.getElementById('btn-qpb-paste-img');
+        if (btnQpbPaste) {
+          btnQpbPaste.addEventListener('click', async () => {
+            const clip = await readClipboardImagesOrText();
+            if (clip.files.length > 0) {
+              if (statusEl) statusEl.textContent = `正在壓縮剪貼簿的 ${clip.files.length} 張截圖...`;
+              try {
+                const newImgs = await Promise.all(clip.files.map((f) => compressImageToBase64(f)));
+                stagedImgs = [...stagedImgs, ...newImgs].slice(0, 5);
+                renderThumbs();
+                if (statusEl) statusEl.textContent = `✓ 已從剪貼簿貼上 ${newImgs.length} 張截圖（共 ${stagedImgs.length} 張）`;
+              } catch (err) {
+                showToast(`貼上圖片失敗：${err.message}`);
+              }
+            } else if (clip.text) {
+              const hintEl = document.getElementById('qpb-user-hint');
+              if (hintEl) {
+                hintEl.value = hintEl.value ? `${hintEl.value}\n${clip.text}` : clip.text;
+                showToast('已貼上剪貼簿文字至補充說明！');
+              }
+            } else {
+              showToast('剪貼簿中沒有偵測到圖片或文字');
+            }
+          });
+        }
+
+        const btnQpbVoice = document.getElementById('btn-qpb-voice');
+        if (btnQpbVoice) {
+          btnQpbVoice.addEventListener('click', () => {
+            toggleVoiceDictation(btnQpbVoice, document.getElementById('qpb-user-hint'));
+          });
+        }
+
         if (btnRunAi) {
           btnRunAi.addEventListener('click', async () => {
             const userHint = ((document.getElementById('qpb-user-hint') && document.getElementById('qpb-user-hint').value) || '').trim();
@@ -12049,21 +12388,45 @@
             btnRunAi.textContent = '辨識中...';
             if (statusEl) {
               statusEl.textContent = stagedImgs.length
-                ? `正在透過 AI 辨識 ${stagedImgs.length} 張照片${userHint ? '（含補充文字說明）' : ''}...`
+                ? `正在透過 AI 平行辨識 ${stagedImgs.length} 張照片${userHint ? '（含補充文字說明）' : ''}...`
                 : '正在透過 AI 解析文字明細...';
             }
             try {
-              const resp = await callAiEndpoint({
-                systemPrompt: '你是精準的繁體中文財務收據、發票、月統計表、薪資條與帳單截圖辨識專家，只回傳合法 JSON。',
-                prompt: buildExtractionPrompt('transactions', userHint, fallbackDate),
-                attachments: stagedImgs.map((im) => ({ mimeType: im.mimeType, base64: im.base64 })),
-                expectJson: true,
-                onProgress: (p) => { if (statusEl && p && p.message) statusEl.textContent = p.message; }
+              const batchResults = await callAiImagesInParallelBatches({
+                imgs: stagedImgs,
+                batchSize: 2,
+                runSingleBatch: (chunk, idx, total) => callAiEndpoint({
+                  systemPrompt: '你是精準的繁體中文財務收據、發票、月統計表、薪資條與帳單截圖辨識專家，只回傳合法 JSON。',
+                  prompt: buildExtractionPrompt('transactions', userHint, fallbackDate),
+                  attachments: chunk.map((im) => ({ mimeType: im.mimeType, base64: im.base64 })),
+                  expectJson: true,
+                  onProgress: (p) => {
+                    if (statusEl && p && p.message) {
+                      statusEl.textContent = total > 1 ? `[批次 ${idx + 1}/${total}] ${p.message}` : p.message;
+                    }
+                  }
+                })
               });
-              const parsed = extractJsonFromAiText(resp.text);
               const rawDefAcc = (document.getElementById('qpb-default-account') && document.getElementById('qpb-default-account').value) || '';
               const defParsed = parseDefaultAccVal(rawDefAcc);
-              let items = normalizeAiExtractedPayload(parsed, state).filter((x) => x.kind === 'expense' || x.kind === 'income');
+              let items = [];
+              const seenBatchKeys = new Set();
+              batchResults.forEach((resp) => {
+                try {
+                  const parsed = extractJsonFromAiText(resp.text);
+                  const part = normalizeAiExtractedPayload(parsed, state).filter((x) => x.kind === 'expense' || x.kind === 'income');
+                  part.forEach((it) => {
+                    const bKey = `${it.kind}|${it.date || ''}|${Math.round(safeNum(it.amount))}|${String(it.title || '').toLowerCase()}`;
+                    if (seenBatchKeys.has(bKey)) {
+                      it.isDuplicate = true;
+                      it.checked = false;
+                    } else {
+                      seenBatchKeys.add(bKey);
+                    }
+                    items.push(it);
+                  });
+                } catch (e) {}
+              });
               if (context === 'income') {
                 items = items.map((x) => ({ ...x, kind: 'income' }));
               } else if (context === 'expense' || isTrip) {
@@ -12071,7 +12434,7 @@
                   ...x,
                   kind: 'expense',
                   category: isTrip ? mapTripCategoryHeuristic(x.category || x.title) : x.category,
-                  checked: isTrip ? true : x.checked
+                  checked: isTrip ? !x.isDuplicate : x.checked
                 }));
               }
               if (!isTrip) {
@@ -13150,6 +13513,7 @@
           stocks: (state.stocks || []).map((s) => ({ market: s.market, symbol: s.symbol, name: s.name, shares: s.shares, avgCost: s.avgCost, currentPrice: s.currentPrice, currency: s.currency })),
           recentExpenses: recentExp,
           recentIncomes: recentInc,
+          userHabits: buildUserHabitContext(),
           trips: (state.groupTrips || []).map((t) => ({ id: t.id, name: t.name, currency: t.currency, groups: (t.groups || []).map((g) => g.name) }))
         };
       }
@@ -13174,6 +13538,7 @@
           '12. {"type":"navigate","tab":"overview|stocks|cash|investments|income|expenses|trips|reports|history|migrate|settings"}',
           '13. {"type":"refresh_quotes"} 或 {"type":"export_backup"}',
           `支出 category 必須從以下 15 類擇一：${ALL_EXPENSE_CATEGORIES.join('、')}。`,
+          '請優先參考帳本即時摘要中的 userHabits（使用者歷史習慣：店家→分類/帳戶/幣別）來填入最符合使用者習慣的 category、account 與 currency。',
           '如果圖片或文字包含多筆明細，請在 actions 陣列放入多筆對應的 action。金額一律用正數。'
         ].join('\n');
       }
@@ -13215,6 +13580,33 @@
         return 'TWD';
       }
 
+      function isCopilotActionDuplicate(act, seenBatchKeys = null) {
+        if (!act || (act.type !== 'add_expense' && act.type !== 'add_income')) return false;
+        const date = parseFlexibleDate(act.date) || todayISO();
+        const amt = Math.round(Math.abs(parseFlexibleNumber(act.amount)));
+        if (!Number.isFinite(amt) || amt <= 0) return false;
+        const rawTitle = String(act.title || act.name || '').trim().toLowerCase();
+        const bKey = `${act.type}|${date}|${amt}|${rawTitle}`;
+        if (seenBatchKeys) {
+          if (seenBatchKeys.has(bKey)) return true;
+          seenBatchKeys.add(bKey);
+        }
+        if (act.type === 'add_expense') {
+          return (state.randomExpenses || []).some((e) => {
+            if (normalizeDateStr(e.date) !== date) return false;
+            if (Math.round(safeNum(e.amount)) !== amt) return false;
+            const et = String(e.title || '').trim().toLowerCase();
+            return !rawTitle || !et || et === rawTitle || et.includes(rawTitle) || rawTitle.includes(et);
+          });
+        }
+        return (state.incomeReceipts || []).some((r) => {
+          if (normalizeDateStr(r.date) !== date) return false;
+          if (Math.round(safeNum(r.actualAmount)) !== amt) return false;
+          const rt = String(r.name || '').trim().toLowerCase();
+          return !rawTitle || !rt || rt === rawTitle || rt.includes(rawTitle) || rawTitle.includes(rt);
+        });
+      }
+
       function executeAiCopilotAction(act) {
         if (!act || !act.type) return { ok: false, msg: '無效的操作指令' };
         const t = act.type;
@@ -13231,8 +13623,9 @@
           const cat = ALL_EXPENSE_CATEGORIES.includes(act.category) ? act.category : mapSingleCategoryHeuristic(act.category || act.title || '');
           if (!Array.isArray(state.randomExpenses)) state.randomExpenses = [];
           const timePrefix = act.time ? `${act.time} · ` : '';
+          const newId = uid('rexp');
           state.randomExpenses.push({
-            id: uid('rexp'),
+            id: newId,
             date: parseFlexibleDate(act.date) || todayISO(),
             time: act.time || '',
             category: ALL_EXPENSE_CATEGORIES.includes(cat) ? cat : '其他隨機支出',
@@ -13247,9 +13640,11 @@
             const bank = (state.cash || []).find((c) => c.bank === acc && c.currency === cur);
             if (bank) bank.amount = Number((safeNum(bank.amount) - amt).toFixed(2));
           }
+          act._createdId = newId;
+          act._createdKind = 'expense';
           saveState();
           renderAll();
-          return { ok: true, msg: '已新增支出' };
+          return { ok: true, msg: '已新增支出', createdId: newId };
         }
 
         if (t === 'add_income') {
@@ -13257,8 +13652,9 @@
           if (!Number.isFinite(amt) || amt <= 0) return { ok: false, msg: '金額須大於 0' };
           const acc = String(act.account || defaultAcc(cur)).trim();
           if (!Array.isArray(state.incomeReceipts)) state.incomeReceipts = [];
+          const newId = uid('irec');
           state.incomeReceipts.push({
-            id: uid('irec'),
+            id: newId,
             date: parseFlexibleDate(act.date) || todayISO(),
             name: String(act.name || act.title || 'AI 記帳收入').trim(),
             category: String(act.category || '其他收入').trim(),
@@ -13273,9 +13669,11 @@
             const bank = (state.cash || []).find((c) => c.bank === acc && c.currency === cur);
             if (bank) bank.amount = Number((safeNum(bank.amount) + amt).toFixed(2));
           }
+          act._createdId = newId;
+          act._createdKind = 'income';
           saveState();
           renderAll();
-          return { ok: true, msg: '已新增收入' };
+          return { ok: true, msg: '已新增收入', createdId: newId };
         }
 
         if (t === 'add_fixed_expense') {
@@ -13516,7 +13914,7 @@
           box.innerHTML = `
             <div class="bg-white rounded-xl p-4 hairline space-y-3 text-xs text-zinc-700">
               <div class="font-semibold text-zinc-900">👋 你好！我是你的 AI 財務總管</div>
-              <p class="leading-relaxed text-zinc-600">你可以直接用自然語言或附發票／截圖叫我幫你：<strong>記收支、固定帳單、帳戶轉帳、改現金餘額、股票買賣配息、設預算、團帳記帳、查帳分析、切頁或備份</strong>。</p>
+              <p class="leading-relaxed text-zinc-600">你可以直接用自然語言、<strong>🎙️ 語音開口說</strong>、<strong>📋 貼上截圖／簡訊</strong>或附多張照片叫我幫你：<strong>記收支、固定帳單、帳戶轉帳、改現金餘額、股票買賣配息、設預算、團帳記帳、查帳分析</strong>。</p>
               <div class="space-y-1.5 pt-1">
                 <div class="text-[11px] text-zinc-400">點一下快速試試：</div>
                 <div class="flex flex-wrap gap-1.5">
@@ -13551,17 +13949,25 @@
               </div>
               ${actions.map((a, aIdx) => {
                 const isDanger = a.type === 'delete_expense' || a.type === 'delete_income';
-                const canEditPrefill = (a.type === 'add_expense' || a.type === 'add_income') && a._status === 'pending';
+                const canEditPrefill = (a.type === 'add_expense' || a.type === 'add_income') && (a._status === 'pending' || (a._status === 'done' && a._createdId));
                 const editBtnHtml = canEditPrefill
-                  ? `<button type="button" data-copilot-edit="${mIdx}:${aIdx}" class="px-2 py-1 rounded-md text-[11px] font-medium shrink-0 bg-white hover:bg-zinc-100 hairline text-zinc-700" title="帶入完整表單微調後儲存">✎ 帶入編輯</button>`
+                  ? `<button type="button" data-copilot-edit="${mIdx}:${aIdx}" class="px-2 py-1 rounded-md text-[11px] font-medium shrink-0 bg-white hover:bg-zinc-100 hairline text-zinc-700" title="${a._status === 'done' ? '開啟剛新增的這筆紀錄進行修改' : '帶入完整表單微調後儲存'}">${a._status === 'done' ? '✎ 修改' : '✎ 帶入編輯'}</button>`
+                  : '';
+                const undoBtnHtml = (a._status === 'done' && a._createdId)
+                  ? `<button type="button" data-copilot-undo="${mIdx}:${aIdx}" class="px-2 py-1 rounded-md text-[11px] font-medium shrink-0 bg-white hover:bg-rose-50 hairline text-rose-700" title="撤銷並刪除剛新增的這筆紀錄">↩️ 撤銷</button>`
+                  : '';
+                const dupBadge = (a._isDuplicate && a._status === 'pending')
+                  ? '<span class="px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 text-[10px] font-medium shrink-0" title="帳本中已有相同日期與金額的紀錄，已暫停自動寫入">⚠️ 疑似已記過</span>'
                   : '';
                 const statusBadge = a._status === 'done'
-                  ? '<span class="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 text-[10px] font-medium shrink-0">已新增 ✓</span>'
-                  : (a._status === 'error'
-                    ? `<span class="px-1.5 py-0.5 rounded bg-rose-50 text-rose-700 text-[10px] font-medium shrink-0">失敗：${escapeHtml(a._err || '')}</span>`
-                    : `<div class="flex items-center gap-1 shrink-0">${editBtnHtml}<button type="button" data-copilot-run="${mIdx}:${aIdx}" class="px-2.5 py-1 rounded-md text-[11px] font-medium shrink-0 ${isDanger ? 'bg-rose-700 hover:bg-rose-800 text-white' : 'bg-zinc-900 hover:bg-zinc-800 text-white'}">${isDanger ? '確認刪除' : '確認執行'}</button></div>`);
+                  ? `<div class="flex items-center gap-1 shrink-0"><span class="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 text-[10px] font-medium">已新增 ✓</span>${editBtnHtml}${undoBtnHtml}</div>`
+                  : (a._status === 'undone'
+                    ? `<div class="flex items-center gap-1 shrink-0"><span class="px-1.5 py-0.5 rounded bg-zinc-100 text-zinc-500 text-[10px] font-medium">已撤銷</span><button type="button" data-copilot-run="${mIdx}:${aIdx}" class="px-2 py-0.5 rounded-md text-[10px] font-medium bg-zinc-900 text-white">重新寫入</button></div>`
+                    : (a._status === 'error'
+                      ? `<span class="px-1.5 py-0.5 rounded bg-rose-50 text-rose-700 text-[10px] font-medium shrink-0">失敗：${escapeHtml(a._err || '')}</span>`
+                      : `<div class="flex items-center gap-1 shrink-0">${dupBadge}${editBtnHtml}<button type="button" data-copilot-run="${mIdx}:${aIdx}" class="px-2.5 py-1 rounded-md text-[11px] font-medium shrink-0 ${isDanger ? 'bg-rose-700 hover:bg-rose-800 text-white' : 'bg-zinc-900 hover:bg-zinc-800 text-white'}">${isDanger ? '確認刪除' : (a._isDuplicate ? '仍要新增' : '確認執行')}</button></div>`));
                 return `
-                  <div class="p-2 rounded-lg bg-[#f7f7f5] hairline flex items-center justify-between gap-2 text-[11px]">
+                  <div class="p-2 rounded-lg bg-[#f7f7f5] hairline flex flex-wrap items-center justify-between gap-2 text-[11px]">
                     <span class="text-zinc-800 leading-snug">${escapeHtml(describeAiAction(a))}</span>
                     ${statusBadge}
                   </div>
@@ -13770,23 +14176,6 @@
             `\n【使用者指令】：\n${text || defaultImgInstruction}`
           ].filter(Boolean).join('\n');
 
-          const resp = await callAiEndpoint({
-            systemPrompt: buildAiCopilotSystemPrompt(),
-            prompt,
-            attachments: imgsToSend.map((im) => ({ mimeType: im.mimeType, base64: im.base64 })),
-            expectJson: true,
-            onProgress: (p) => {
-              if (p && p.message && aiCopilotHistory[targetIdx]) {
-                aiCopilotHistory[targetIdx] = { role: 'assistant', text: p.message, actions: [] };
-                renderAiCopilotMessages();
-              }
-            }
-          });
-
-          const sec = ((performance.now() - t0) / 1000).toFixed(1);
-          const upSec = resp.upstreamMs ? `（AI 伺服器 ${(resp.upstreamMs / 1000).toFixed(1)}s）` : '';
-          const keyTag = resp.usedKeyLabel ? `${resp.usedKeyLabel} · ` : '';
-
           const normalizeCopilotAiResponse = (rawText) => {
             const rawStr = String(rawText || '').trim();
             if (!rawStr) return { reply: '（AI 未回傳任何內容，請點擊重新發送或切換其他模型）', actions: [] };
@@ -13906,14 +14295,52 @@
             };
           };
 
-          const normalized = normalizeCopilotAiResponse(resp.text);
-          const replyText = normalized.reply;
-          const actions = normalized.actions;
+          // Parallel multi-image recognition when >2 images attached
+          const batchResponses = await callAiImagesInParallelBatches({
+            imgs: imgsToSend,
+            batchSize: 2,
+            runSingleBatch: (chunk, idx, total) => callAiEndpoint({
+              systemPrompt: buildAiCopilotSystemPrompt(),
+              prompt,
+              attachments: chunk.map((im) => ({ mimeType: im.mimeType, base64: im.base64 })),
+              expectJson: true,
+              onProgress: (p) => {
+                if (p && p.message && aiCopilotHistory[targetIdx]) {
+                  const prefix = total > 1 ? `[平行批次 ${idx + 1}/${total}] ` : '';
+                  aiCopilotHistory[targetIdx] = { role: 'assistant', text: `${prefix}${p.message}`, actions: [] };
+                  renderAiCopilotMessages();
+                }
+              }
+            })
+          });
+
+          const resp = batchResponses[0];
+          const sec = ((performance.now() - t0) / 1000).toFixed(1);
+          const upSec = resp && resp.upstreamMs ? `（AI 伺服器 ${(resp.upstreamMs / 1000).toFixed(1)}s${batchResponses.length > 1 ? ` · ${batchResponses.length} 批平行` : ''}）` : '';
+          const keyTag = resp && resp.usedKeyLabel ? `${resp.usedKeyLabel} · ` : '';
+
+          const replies = [];
+          const actions = [];
+          const seenBatchKeys = new Set();
+          batchResponses.forEach((r) => {
+            const norm = normalizeCopilotAiResponse(r.text);
+            if (norm.reply) replies.push(norm.reply);
+            norm.actions.forEach((a) => {
+              const isDup = isCopilotActionDuplicate(a, seenBatchKeys);
+              actions.push({ ...a, _isDuplicate: isDup });
+            });
+          });
+          const replyText = replies.join('\n\n') || '已完成分析';
 
           const autoExec = Boolean(document.getElementById('ai-copilot-auto-exec') && document.getElementById('ai-copilot-auto-exec').checked);
           let autoDoneCount = 0;
+          let dupSkippedCount = 0;
           if (autoExec && actions.length > 0) {
             actions.forEach((a) => {
+              if (a._isDuplicate) {
+                dupSkippedCount += 1;
+                return;
+              }
               if (AI_COPILOT_SAFE_AUTO_TYPES.has(a.type)) {
                 const res = executeAiCopilotAction(a);
                 a._status = res.ok ? 'done' : 'error';
@@ -13921,8 +14348,9 @@
                 if (res.ok) autoDoneCount += 1;
               }
             });
-            if (autoDoneCount > 0) {
-              showToast(`AI 已自動新增 ${autoDoneCount} 筆紀錄！`);
+            if (autoDoneCount > 0 || dupSkippedCount > 0) {
+              const dupNote = dupSkippedCount > 0 ? `（另有 ${dupSkippedCount} 筆疑似重複已暫停，可手動確認）` : '';
+              showToast(`AI 已自動新增 ${autoDoneCount} 筆紀錄！${dupNote}`);
             }
           }
 
@@ -13931,7 +14359,7 @@
             text: replyText,
             actions,
             ...(imgsToSend.length > 0 && actions.length === 0 ? { _retryPayload: { text, imgs: imgsToSend }, _noActionImg: true } : {}),
-            meta: `${keyTag}${resp.model || appConfig.aiModel || ''} · 總耗時 ${sec}s${upSec}`
+            meta: `${keyTag}${(resp && resp.model) || appConfig.aiModel || ''} · 總耗時 ${sec}s${upSec}`
           };
           renderAiCopilotMessages();
         } catch (err) {
@@ -13965,6 +14393,17 @@
         drawer.classList.add('hidden');
         drawer.classList.remove('flex');
       }
+
+      const renderCopilotStagedThumbs = () => {
+        const thumbsEl = document.getElementById('ai-copilot-thumbs');
+        if (!thumbsEl) return;
+        if (!aiCopilotStagedImgs.length) {
+          thumbsEl.replaceChildren();
+          return;
+        }
+        thumbsEl.innerHTML = aiCopilotStagedImgs.map((im) => `<img src="${im.previewUrl}" class="w-11 h-11 object-cover rounded-md hairline" />`).join('') +
+          `<button type="button" id="btn-copilot-rm-imgs" class="text-[11px] text-zinc-500 underline ml-1">清除圖片</button>`;
+      };
 
       const btnCopilotFab = document.getElementById('btn-ai-copilot-fab');
       if (btnCopilotFab) btnCopilotFab.addEventListener('click', openAiCopilotDrawer);
@@ -14001,20 +14440,63 @@
             sendAiCopilotMessage();
           }
         });
+        copilotInputEl.addEventListener('paste', async (e) => {
+          const items = (e.clipboardData && e.clipboardData.items) ? [...e.clipboardData.items] : [];
+          const imgFiles = items.filter((it) => it.type && it.type.startsWith('image/')).map((it) => it.getAsFile()).filter(Boolean);
+          if (imgFiles.length > 0) {
+            e.preventDefault();
+            try {
+              const imgs = await Promise.all(imgFiles.map((f) => compressImageToBase64(f)));
+              aiCopilotStagedImgs = [...aiCopilotStagedImgs, ...imgs].slice(0, 5);
+              renderCopilotStagedThumbs();
+              showToast(`已貼上 ${imgs.length} 張截圖`);
+            } catch (err) {
+              showToast(`貼上圖片失敗：${err.message}`);
+            }
+          }
+        });
       }
+
+      const btnCopilotPaste = document.getElementById('btn-ai-copilot-paste');
+      if (btnCopilotPaste) {
+        btnCopilotPaste.addEventListener('click', async () => {
+          const clip = await readClipboardImagesOrText();
+          if (clip.files.length > 0) {
+            try {
+              const imgs = await Promise.all(clip.files.map((f) => compressImageToBase64(f)));
+              aiCopilotStagedImgs = [...aiCopilotStagedImgs, ...imgs].slice(0, 5);
+              renderCopilotStagedThumbs();
+              showToast(`已從剪貼簿貼上 ${imgs.length} 張截圖！點「送出」即可辨識`);
+            } catch (err) {
+              showToast(`貼上截圖失敗：${err.message}`);
+            }
+          } else if (clip.text) {
+            if (copilotInputEl) {
+              copilotInputEl.value = copilotInputEl.value ? `${copilotInputEl.value}\n${clip.text}` : clip.text;
+              showToast('已貼上剪貼簿文字！');
+            }
+          } else {
+            showToast('剪貼簿中沒有偵測到截圖或文字');
+          }
+        });
+      }
+
+      const btnCopilotVoice = document.getElementById('btn-ai-copilot-voice');
+      if (btnCopilotVoice) {
+        btnCopilotVoice.addEventListener('click', () => {
+          toggleVoiceDictation(btnCopilotVoice, copilotInputEl);
+        });
+      }
+
       const copilotFileEl = document.getElementById('ai-copilot-file');
       if (copilotFileEl) {
         copilotFileEl.addEventListener('change', async (ev) => {
-          const files = [...(ev.target.files || [])].slice(0, 3);
+          const files = [...(ev.target.files || [])].slice(0, 5);
           if (!files.length) return;
           try {
             const imgs = await Promise.all(files.map((f) => compressImageToBase64(f)));
-            aiCopilotStagedImgs = [...aiCopilotStagedImgs, ...imgs].slice(0, 3);
-            const thumbsEl = document.getElementById('ai-copilot-thumbs');
-            if (thumbsEl) {
-              thumbsEl.innerHTML = aiCopilotStagedImgs.map((im) => `<img src="${im.previewUrl}" class="w-11 h-11 object-cover rounded-md hairline" />`).join('') +
-                `<button type="button" id="btn-copilot-rm-imgs" class="text-[11px] text-zinc-500 underline ml-1">清除圖片</button>`;
-            }
+            aiCopilotStagedImgs = [...aiCopilotStagedImgs, ...imgs].slice(0, 5);
+            renderCopilotStagedThumbs();
           } catch (err) {
             showToast(err.message);
           } finally {
@@ -14039,12 +14521,48 @@
             sendAiCopilotMessage(quick.dataset.copilotQuick);
             return;
           }
+          const undoOne = ev.target.closest('[data-copilot-undo]');
+          if (undoOne) {
+            const [mIdx, aIdx] = undoOne.dataset.copilotUndo.split(':').map(Number);
+            const act = aiCopilotHistory[mIdx] && aiCopilotHistory[mIdx].actions && aiCopilotHistory[mIdx].actions[aIdx];
+            if (!act || !act._createdId) return;
+            const cid = act._createdId;
+            if (act.type === 'add_expense') {
+              state.randomExpenses = (state.randomExpenses || []).filter((x) => x.id !== cid);
+              markDeletedId(state, cid);
+            } else if (act.type === 'add_income') {
+              state.incomeReceipts = (state.incomeReceipts || []).filter((x) => x.id !== cid);
+              markDeletedId(state, cid);
+            }
+            act._status = 'undone';
+            delete act._createdId;
+            saveState();
+            renderAll();
+            renderAiCopilotMessages();
+            showToast('↩️ 已撤銷並刪除該筆紀錄');
+            return;
+          }
           const editOne = ev.target.closest('[data-copilot-edit]');
           if (editOne) {
             const [mIdx, aIdx] = editOne.dataset.copilotEdit.split(':').map(Number);
             const act = aiCopilotHistory[mIdx] && aiCopilotHistory[mIdx].actions && aiCopilotHistory[mIdx].actions[aIdx];
             if (!act) return;
             closeAiCopilotDrawer();
+            if (act._status === 'done' && act._createdId) {
+              if (act.type === 'add_expense') {
+                const existing = (state.randomExpenses || []).find((x) => x.id === act._createdId);
+                if (existing) {
+                  openRandomExpenseModal(existing);
+                  return;
+                }
+              } else if (act.type === 'add_income') {
+                const existing = (state.incomeReceipts || []).find((x) => x.id === act._createdId);
+                if (existing) {
+                  openIncomeReceiptModal(null, existing);
+                  return;
+                }
+              }
+            }
             if (act.type === 'add_expense') {
               const cat = ALL_EXPENSE_CATEGORIES.includes(act.category) ? act.category : mapSingleCategoryHeuristic(act.category || act.title || '');
               openRandomExpenseModal({
@@ -14058,7 +14576,6 @@
                 deductStatus: act.deductNow ? 'unpaid' : 'paid',
                 note: String(act.note || 'AI 助理帶入').trim()
               });
-              // Ensure openRandomExpenseModal saves as a NEW record (not edit of empty id)
               const modalTitleEl = document.getElementById('modal-title');
               if (modalTitleEl) modalTitleEl.textContent = '新增隨機支出（AI 預填）';
             } else if (act.type === 'add_income') {
