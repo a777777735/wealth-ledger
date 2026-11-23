@@ -301,12 +301,12 @@ async function handleAiProxy(request, env) {
       const presetDefaults = {
         openai: 'gpt-4o-mini',
         groq: 'qwen/qwen3.8-27b',
-        openrouter: 'qwen/qwen2.5-vl-72b-instruct:free',
+        openrouter: 'openrouter/free',
         mistral: 'mistral-small-latest'
       };
       const presetFallbacks = {
         groq: attachments.length > 0 ? [] : ['openai/gpt-oss-120b', 'openai/gpt-oss-20b'],
-        openrouter: ['google/gemma-3-27b-it:free', 'qwen/qwen3.8-27b'],
+        openrouter: ['nvidia/nemotron-3.5-super-vl:free'],
         mistral: ['pixtral-12b-2409']
       };
       const baseUrl = provider === 'custom'
@@ -321,6 +321,9 @@ async function handleAiProxy(request, env) {
       let primaryModel = String(body.model || presetDefaults[provider] || '').trim();
       if (provider === 'groq' && /llama-4-(scout|maverick)/i.test(primaryModel)) {
         primaryModel = 'qwen/qwen3.8-27b';
+      }
+      if (provider === 'openrouter' && /qwen2\.5-vl-72b-instruct:free/i.test(primaryModel)) {
+        primaryModel = 'openrouter/free';
       }
       if (!primaryModel) {
         return jsonResp({ ok: false, error: '自訂模式請填寫模型名稱（Model ID）' }, 400);

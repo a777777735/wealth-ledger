@@ -9346,7 +9346,7 @@
       // ============================================================
       const AI_PROVIDER_DEFAULTS = {
         groq: 'qwen/qwen3.8-27b',
-        openrouter: 'qwen/qwen2.5-vl-72b-instruct:free',
+        openrouter: 'openrouter/free',
         mistral: 'mistral-small-latest',
         gemini: 'gemini-3.8-flash',
         openai: 'gpt-4o-mini',
@@ -9468,6 +9468,10 @@
           }
           if (k.provider === 'groq' && /llama-4-(scout|maverick)/i.test(String(k.model || ''))) {
             k.model = 'qwen/qwen3.8-27b';
+            migrated = true;
+          }
+          if (k.provider === 'openrouter' && /qwen2\.5-vl-72b-instruct:free/i.test(String(k.model || ''))) {
+            k.model = 'openrouter/free';
             migrated = true;
           }
           if (k.enabled === undefined) k.enabled = true;
