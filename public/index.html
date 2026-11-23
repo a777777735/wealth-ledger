@@ -10602,12 +10602,12 @@
         const input = document.getElementById('modal-photo-ai-input');
         const statusEl = document.getElementById('modal-photo-ai-status');
         if (!input) return;
-        input.addEventListener('change', async (e) => {
-          const file = e.target.files && e.target.files[0];
-          if (!file) return;
-          if (statusEl) statusEl.textContent = '正在壓縮圖片並呼叫 AI 辨識...';
+        let lastImg = null;
+
+        const runAutofillWithImg = async (img) => {
+          if (!img) return;
+          if (statusEl) statusEl.textContent = '正在呼叫 AI 辨識圖片...';
           try {
-            const img = await compressImageToBase64(file);
             const resp = await callAiEndpoint({
               systemPrompt: '你是精準的繁體中文收據、發票與金融截圖辨識專家，只回傳合法 JSON。',
               prompt: buildExtractionPrompt('transactions'),
@@ -10627,7 +10627,9 @@
             }
 
             if (!target) {
-              if (statusEl) statusEl.textContent = '未能從圖片辨識出金額或明細，請確認圖片清晰度';
+              if (statusEl) {
+                statusEl.innerHTML = `<span>未能從圖片辨識出金額或明細</span> <button type="button" id="btn-modal-photo-retry" class="ml-1.5 px-2 py-0.5 rounded bg-zinc-900 text-white text-[10px] font-medium hover:bg-zinc-800">🔄 重送辨識</button>`;
+              }
               showToast('未能辨識出收支項目');
               return;
             }
@@ -10669,8 +10671,31 @@
             if (statusEl) statusEl.textContent = `✓ AI 已自動填入：${target.title} (${target.currency || 'TWD'} ${target.amount})${extraHint}`;
             showToast(`AI 辨識完成！已自動填入「${target.title}」`);
           } catch (err) {
-            if (statusEl) statusEl.textContent = `辨識失敗：${err.message}`;
+            if (statusEl) {
+              statusEl.innerHTML = `<span class="text-rose-700">辨識失敗：${escapeHtml(err.message)}</span> <button type="button" id="btn-modal-photo-retry" class="ml-1.5 px-2 py-0.5 rounded bg-zinc-900 text-white text-[10px] font-medium hover:bg-zinc-800">🔄 重送辨識</button>`;
+            }
             showToast(`照片辨識失敗：${err.message}`);
+          }
+        };
+
+        if (statusEl) {
+          statusEl.addEventListener('click', (ev) => {
+            if (ev.target && ev.target.id === 'btn-modal-photo-retry' && lastImg) {
+              runAutofillWithImg(lastImg);
+            }
+          });
+        }
+
+        input.addEventListener('change', async (e) => {
+          const file = e.target.files && e.target.files[0];
+          if (!file) return;
+          if (statusEl) statusEl.textContent = '正在壓縮圖片並呼叫 AI 辨識...';
+          try {
+            lastImg = await compressImageToBase64(file);
+            await runAutofillWithImg(lastImg);
+          } catch (err) {
+            if (statusEl) statusEl.textContent = `讀取圖片失敗：${err.message}`;
+            showToast(`讀取圖片失敗：${err.message}`);
           } finally {
             input.value = '';
           }
@@ -11196,9 +11221,9 @@
               if (statusEl) statusEl.textContent = items.length > 0 ? `✓ AI 辨識完成！共擷取 ${items.length} 筆，可逐筆微調或修改補充說明後重新辨識` : '未能辨識出任何交易明細，可補充說明後重試';
               btnRunAi.textContent = '重新 AI 辨識';
             } catch (err) {
-              if (statusEl) statusEl.textContent = `辨識失敗：${err.message}`;
+              if (statusEl) statusEl.textContent = `辨識失敗：${err.message}（可點右側按鈕直接重送）`;
               showToast(`AI 辨識失敗：${err.message}`);
-              btnRunAi.textContent = '開始 AI 辨識';
+              btnRunAi.textContent = '🔄 重新發送';
             } finally {
               btnRunAi.disabled = false;
             }
@@ -12631,11 +12656,17 @@
               }).join('')}
             </div>
           ` : '';
+          const retryHtml = msg._retryPayload ? `
+            <div class="mt-2 pt-2 hairline-t flex items-center justify-end gap-2">
+              <button type="button" data-copilot-retry="${mIdx}" class="btn-focus h-7 px-3 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white text-[11px] font-medium">🔄 重新發送</button>
+            </div>
+          ` : '';
           return `
             <div class="flex justify-start">
               <div class="max-w-[92%] rounded-2xl rounded-bl-sm bg-white hairline px-3.5 py-2.5 text-xs text-zinc-800 leading-relaxed">
                 <div class="whitespace-pre-wrap">${escapeHtml(msg.text)}</div>
                 ${actionsHtml}
+                ${retryHtml}
                 ${msg.meta ? `<div class="mt-1.5 text-[10px] font-mono-num text-zinc-400">${escapeHtml(msg.meta)}</div>` : ''}
               </div>
             </div>
@@ -12748,52 +12779,57 @@
         return null;
       }
 
-      async function sendAiCopilotMessage(overrideText = '') {
+      async function sendAiCopilotMessage(overrideText = '', retryOpts = null) {
         if (aiCopilotBusy) return;
         const inputEl = document.getElementById('ai-copilot-input');
         const sendBtn = document.getElementById('btn-ai-copilot-send');
-        const text = String(overrideText || (inputEl && inputEl.value) || '').trim();
-        if (!text && aiCopilotStagedImgs.length === 0) return;
+        const isRetry = Boolean(retryOpts && Number.isInteger(retryOpts.replaceIdx));
+        const text = String(isRetry ? (retryOpts.text || '') : (overrideText || (inputEl && inputEl.value) || '')).trim();
+        const imgsToSend = isRetry ? [...(retryOpts.imgs || [])] : [...aiCopilotStagedImgs];
+        if (!text && imgsToSend.length === 0) return;
 
-        const imgsToSend = [...aiCopilotStagedImgs];
-        aiCopilotStagedImgs = [];
-        const thumbsEl = document.getElementById('ai-copilot-thumbs');
-        if (thumbsEl) thumbsEl.replaceChildren();
-        if (inputEl && !overrideText) inputEl.value = '';
+        if (!isRetry) {
+          aiCopilotStagedImgs = [];
+          const thumbsEl = document.getElementById('ai-copilot-thumbs');
+          if (thumbsEl) thumbsEl.replaceChildren();
+          if (inputEl && !overrideText) inputEl.value = '';
 
-        aiCopilotHistory.push({
-          role: 'user',
-          text: text || '（附圖辨識與處理）',
-          thumbs: imgsToSend.map((x) => x.previewUrl)
-        });
+          aiCopilotHistory.push({
+            role: 'user',
+            text: text || '（附圖辨識與處理）',
+            thumbs: imgsToSend.map((x) => x.previewUrl)
+          });
 
-        // 0ms Local Fast-Path for simple commands & queries (no images attached)
-        if (imgsToSend.length === 0) {
-          const fast = tryLocalFastCopilot(text);
-          if (fast) {
-            const actions = (fast.actions || []).map((a) => ({ ...a, _status: 'pending' }));
-            const autoExec = Boolean(document.getElementById('ai-copilot-auto-exec') && document.getElementById('ai-copilot-auto-exec').checked);
-            if (autoExec && actions.length > 0) {
-              actions.forEach((a) => {
-                if (AI_COPILOT_SAFE_AUTO_TYPES.has(a.type)) {
-                  const res = executeAiCopilotAction(a);
-                  a._status = res.ok ? 'done' : 'error';
-                  a._err = res.ok ? '' : res.msg;
-                }
+          // 0ms Local Fast-Path for simple commands & queries (no images attached)
+          if (imgsToSend.length === 0) {
+            const fast = tryLocalFastCopilot(text);
+            if (fast) {
+              const actions = (fast.actions || []).map((a) => ({ ...a, _status: 'pending' }));
+              const autoExec = Boolean(document.getElementById('ai-copilot-auto-exec') && document.getElementById('ai-copilot-auto-exec').checked);
+              if (autoExec && actions.length > 0) {
+                actions.forEach((a) => {
+                  if (AI_COPILOT_SAFE_AUTO_TYPES.has(a.type)) {
+                    const res = executeAiCopilotAction(a);
+                    a._status = res.ok ? 'done' : 'error';
+                    a._err = res.ok ? '' : res.msg;
+                  }
+                });
+              }
+              aiCopilotHistory.push({
+                role: 'assistant',
+                text: fast.reply,
+                actions,
+                meta: '⚡ 本機極速引擎 · 0.0s（免等待外部 API）'
               });
+              renderAiCopilotMessages();
+              return;
             }
-            aiCopilotHistory.push({
-              role: 'assistant',
-              text: fast.reply,
-              actions,
-              meta: '⚡ 本機極速引擎 · 0.0s（免等待外部 API）'
-            });
-            renderAiCopilotMessages();
-            return;
           }
+          aiCopilotHistory.push({ role: 'assistant', text: '思考與分析中...', actions: [] });
+        } else {
+          aiCopilotHistory[retryOpts.replaceIdx] = { role: 'assistant', text: '正在重新發送給 AI...', actions: [] };
         }
-
-        aiCopilotHistory.push({ role: 'assistant', text: '思考與分析中...', actions: [] });
+        const targetIdx = isRetry ? retryOpts.replaceIdx : (aiCopilotHistory.length - 1);
         renderAiCopilotMessages();
 
         aiCopilotBusy = true;
@@ -12802,7 +12838,7 @@
 
         try {
           const recentTurns = aiCopilotHistory
-            .slice(-5, -1)
+            .slice(Math.max(0, targetIdx - 5), targetIdx)
             .map((m) => `${m.role === 'user' ? '使用者' : '助理'}：${m.text}`)
             .join('\n');
           const prompt = [
@@ -12842,7 +12878,7 @@
             });
           }
 
-          aiCopilotHistory[aiCopilotHistory.length - 1] = {
+          aiCopilotHistory[targetIdx] = {
             role: 'assistant',
             text: replyText,
             actions,
@@ -12850,10 +12886,11 @@
           };
           renderAiCopilotMessages();
         } catch (err) {
-          aiCopilotHistory[aiCopilotHistory.length - 1] = {
+          aiCopilotHistory[targetIdx] = {
             role: 'assistant',
-            text: `連線失敗：${err.message}\n\n提示：若覺得速度慢或常遇繁忙，建議點上方「換模型」切換成 Groq 免費高速模型（約 1～2 秒回覆）。`,
-            actions: []
+            text: `連線失敗：${err.message}\n\n提示：可直接點下方「🔄 重新發送」（保留原文字與附圖），或點上方「換模型」切換 Groq 免費高速模型。`,
+            actions: [],
+            _retryPayload: { text, imgs: imgsToSend }
           };
           renderAiCopilotMessages();
         } finally {
@@ -12962,6 +12999,15 @@
             act._err = res.ok ? '' : res.msg;
             renderAiCopilotMessages();
             showToast(res.msg);
+            return;
+          }
+          const retryBtn = ev.target.closest('[data-copilot-retry]');
+          if (retryBtn) {
+            const mIdx = Number(retryBtn.dataset.copilotRetry);
+            const msg = aiCopilotHistory[mIdx];
+            if (msg && msg._retryPayload) {
+              sendAiCopilotMessage('', { replaceIdx: mIdx, text: msg._retryPayload.text, imgs: msg._retryPayload.imgs });
+            }
             return;
           }
           const runAll = ev.target.closest('[data-copilot-run-all]');
