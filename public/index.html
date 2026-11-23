@@ -13202,18 +13202,31 @@
         return `執行操作：${t || '未知'}`;
       }
 
+      function normalizeAiCurrencyCode(rawCur, rawAmountText = '') {
+        const s = String(rawCur || '').trim().toUpperCase();
+        if (/^[A-Z]{3}$/.test(s)) return s;
+        const combined = `${String(rawCur || '')} ${String(rawAmountText || '')}`;
+        if (/NT\$|NTD|台幣|臺幣|新台幣/i.test(combined)) return 'TWD';
+        if (/HK\$|HKD|港幣|港元/i.test(combined)) return 'HKD';
+        if (/US\$|USD|美元|美金/i.test(combined)) return 'USD';
+        if (/JPY|日幣|日圓|円/i.test(combined)) return 'JPY';
+        if (/¥|￥|RMB|CNY|人民幣|人民币/i.test(combined)) return 'CNY';
+        if (/€|EUR|歐元/i.test(combined)) return 'EUR';
+        return 'TWD';
+      }
+
       function executeAiCopilotAction(act) {
         if (!act || !act.type) return { ok: false, msg: '無效的操作指令' };
         const t = act.type;
-        const cur = String(act.currency || 'TWD').toUpperCase();
+        const cur = normalizeAiCurrencyCode(act.currency, act.amount);
         const defaultAcc = (c) => {
           const found = (state.cash || []).find((b) => b.currency === c && b.bank);
           return found ? found.bank : `現金（${c}）`;
         };
 
         if (t === 'add_expense') {
-          const amt = safeNum(act.amount);
-          if (amt <= 0) return { ok: false, msg: '金額須大於 0' };
+          const amt = Math.abs(parseFlexibleNumber(act.amount));
+          if (!Number.isFinite(amt) || amt <= 0) return { ok: false, msg: '金額須大於 0' };
           const acc = String(act.account || defaultAcc(cur)).trim();
           const cat = ALL_EXPENSE_CATEGORIES.includes(act.category) ? act.category : mapSingleCategoryHeuristic(act.category || act.title || '');
           if (!Array.isArray(state.randomExpenses)) state.randomExpenses = [];
@@ -13225,7 +13238,7 @@
             category: ALL_EXPENSE_CATEGORIES.includes(cat) ? cat : '其他隨機支出',
             title: String(act.title || 'AI 記帳支出').trim(),
             currency: cur,
-            amount: amt,
+            amount: Number(amt.toFixed(2)),
             account: acc,
             deductStatus: act.deductNow ? 'paid' : 'paid',
             note: `${timePrefix}${act.note ? act.note + '（AI助理）' : 'AI 助理記帳'}`
@@ -13240,8 +13253,8 @@
         }
 
         if (t === 'add_income') {
-          const amt = safeNum(act.amount);
-          if (amt <= 0) return { ok: false, msg: '金額須大於 0' };
+          const amt = Math.abs(parseFlexibleNumber(act.amount));
+          if (!Number.isFinite(amt) || amt <= 0) return { ok: false, msg: '金額須大於 0' };
           const acc = String(act.account || defaultAcc(cur)).trim();
           if (!Array.isArray(state.incomeReceipts)) state.incomeReceipts = [];
           state.incomeReceipts.push({
@@ -13528,10 +13541,12 @@
           }
           const actions = Array.isArray(msg.actions) ? msg.actions : [];
           const pendingCount = actions.filter((a) => a._status === 'pending').length;
+          const hasDoneExpense = actions.some((a) => a._status === 'done' && a.type === 'add_expense');
+          const hasDoneIncome = actions.some((a) => a._status === 'done' && a.type === 'add_income');
           const actionsHtml = actions.length > 0 ? `
             <div class="mt-2.5 pt-2.5 hairline-t space-y-2">
               <div class="flex items-center justify-between gap-2 text-[11px]">
-                <span class="font-medium text-zinc-600">建議執行的操作（${actions.length} 項）</span>
+                <span class="font-medium text-zinc-600">辨識操作清單（${actions.length} 項）</span>
                 ${pendingCount > 1 ? `<button type="button" data-copilot-run-all="${mIdx}" class="px-2 py-0.5 rounded bg-zinc-900 text-white text-[10px] font-medium hover:bg-zinc-800">全部確認執行</button>` : ''}
               </div>
               ${actions.map((a, aIdx) => {
@@ -13541,7 +13556,7 @@
                   ? `<button type="button" data-copilot-edit="${mIdx}:${aIdx}" class="px-2 py-1 rounded-md text-[11px] font-medium shrink-0 bg-white hover:bg-zinc-100 hairline text-zinc-700" title="帶入完整表單微調後儲存">✎ 帶入編輯</button>`
                   : '';
                 const statusBadge = a._status === 'done'
-                  ? '<span class="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 text-[10px] font-medium shrink-0">已執行 ✓</span>'
+                  ? '<span class="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 text-[10px] font-medium shrink-0">已新增 ✓</span>'
                   : (a._status === 'error'
                     ? `<span class="px-1.5 py-0.5 rounded bg-rose-50 text-rose-700 text-[10px] font-medium shrink-0">失敗：${escapeHtml(a._err || '')}</span>`
                     : `<div class="flex items-center gap-1 shrink-0">${editBtnHtml}<button type="button" data-copilot-run="${mIdx}:${aIdx}" class="px-2.5 py-1 rounded-md text-[11px] font-medium shrink-0 ${isDanger ? 'bg-rose-700 hover:bg-rose-800 text-white' : 'bg-zinc-900 hover:bg-zinc-800 text-white'}">${isDanger ? '確認刪除' : '確認執行'}</button></div>`);
@@ -13552,10 +13567,17 @@
                   </div>
                 `;
               }).join('')}
+              ${(hasDoneExpense || hasDoneIncome) ? `
+                <div class="flex flex-wrap items-center justify-end gap-1.5 pt-1">
+                  ${hasDoneExpense ? '<button type="button" data-copilot-jump="expenses" class="btn-focus h-7 px-2.5 rounded-lg bg-white hover:bg-zinc-50 text-zinc-800 hairline text-[11px] font-medium">📋 前往查看支出明細</button>' : ''}
+                  ${hasDoneIncome ? '<button type="button" data-copilot-jump="income" class="btn-focus h-7 px-2.5 rounded-lg bg-white hover:bg-zinc-50 text-zinc-800 hairline text-[11px] font-medium">📋 前往查看收入明細</button>' : ''}
+                </div>
+              ` : ''}
             </div>
           ` : '';
           const retryHtml = msg._retryPayload ? `
-            <div class="mt-2 pt-2 hairline-t flex items-center justify-end gap-2">
+            <div class="mt-2 pt-2 hairline-t flex flex-wrap items-center justify-end gap-2">
+              ${msg._noActionImg ? '<button type="button" data-copilot-open-expense="1" class="btn-focus h-7 px-2.5 rounded-lg bg-white hover:bg-zinc-50 text-zinc-800 hairline text-[11px] font-medium">➕ 手動新增支出</button>' : ''}
               <button type="button" data-copilot-retry="${mIdx}" class="btn-focus h-7 px-3 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white text-[11px] font-medium">🔄 重新發送</button>
             </div>
           ` : '';
@@ -13740,11 +13762,12 @@
             .slice(Math.max(0, targetIdx - 5), targetIdx)
             .map((m) => `${m.role === 'user' ? '使用者' : '助理'}：${m.text}`)
             .join('\n');
+          const defaultImgInstruction = '請詳細辨識所有附圖中的購物訂單、發票、收據或帳單明細（含商品/店家名稱、金額、幣別如 CNY/TWD/USD、日期與分類），在 reply 中列出辨識摘要，並為每一筆消費在 actions 陣列中產生對應的 add_expense 操作（amount 請填純數字）。';
           const prompt = [
             '【帳本即時摘要】：',
             JSON.stringify(buildAiCopilotContext()),
             recentTurns ? `\n【最近對話】：\n${recentTurns}` : '',
-            `\n【使用者指令】：\n${text || '請辨識附圖並產生對應記帳操作'}`
+            `\n【使用者指令】：\n${text || defaultImgInstruction}`
           ].filter(Boolean).join('\n');
 
           const resp = await callAiEndpoint({
@@ -13763,31 +13786,151 @@
           const sec = ((performance.now() - t0) / 1000).toFixed(1);
           const upSec = resp.upstreamMs ? `（AI 伺服器 ${(resp.upstreamMs / 1000).toFixed(1)}s）` : '';
           const keyTag = resp.usedKeyLabel ? `${resp.usedKeyLabel} · ` : '';
-          let replyText = '';
-          let actions = [];
-          try {
-            const parsed = extractJsonFromAiText(resp.text);
-            replyText = String(parsed.reply || parsed.message || '已完成分析').trim();
-            actions = Array.isArray(parsed.actions) ? parsed.actions.map((a) => ({ ...a, _status: 'pending' })) : [];
-          } catch (parseErr) {
-            replyText = String(resp.text || '（AI 未回傳內容）').trim();
-          }
+
+          const normalizeCopilotAiResponse = (rawText) => {
+            const rawStr = String(rawText || '').trim();
+            if (!rawStr) return { reply: '（AI 未回傳任何內容，請點擊重新發送或切換其他模型）', actions: [] };
+            let parsed = null;
+            try {
+              parsed = extractJsonFromAiText(rawStr);
+            } catch (e) {
+              return { reply: rawStr, actions: [] };
+            }
+            if (!parsed || typeof parsed !== 'object') {
+              return { reply: rawStr, actions: [] };
+            }
+
+            const toExpenseAction = (item) => {
+              if (!item || typeof item !== 'object') return null;
+              if (item.type) {
+                const copy = { ...item };
+                if (copy.amount !== undefined) copy.amount = Math.abs(parseFlexibleNumber(copy.amount));
+                if (copy.currency || item.amount) copy.currency = normalizeAiCurrencyCode(copy.currency, item.amount);
+                return copy;
+              }
+              const rawAmt = item.amount ?? item.total ?? item.price ?? item.cost ?? item.actualAmount ?? item.total_amount ?? item.paid ?? item.subtotal;
+              const amt = Math.abs(parseFlexibleNumber(rawAmt));
+              if (!Number.isFinite(amt) || amt <= 0) return null;
+              const title = String(item.title || item.name || item.product || item.item || item.description || item.merchant || item.store || item.shop || '購物支出').trim();
+              const cur = normalizeAiCurrencyCode(item.currency || item.currency_code, rawAmt);
+              const rawCat = String(item.category || '').trim();
+              const cat = ALL_EXPENSE_CATEGORIES.includes(rawCat) ? rawCat : mapSingleCategoryHeuristic(rawCat || title);
+              return {
+                type: 'add_expense',
+                date: parseFlexibleDate(item.date || item.order_date || item.time) || todayISO(),
+                time: '',
+                title,
+                category: ALL_EXPENSE_CATEGORIES.includes(cat) ? cat : '其他隨機支出',
+                currency: cur,
+                amount: Number(amt.toFixed(2)),
+                account: String(item.account || item.payment || item.payment_method || '').trim(),
+                deductNow: false,
+                note: String(item.note || item.store || item.shop || item.merchant || '').trim()
+              };
+            };
+
+            const toIncomeAction = (item) => {
+              if (!item || typeof item !== 'object') return null;
+              const rawAmt = item.amount ?? item.actualAmount ?? item.total;
+              const amt = Math.abs(parseFlexibleNumber(rawAmt));
+              if (!Number.isFinite(amt) || amt <= 0) return null;
+              return {
+                type: 'add_income',
+                date: parseFlexibleDate(item.date) || todayISO(),
+                name: String(item.name || item.title || '收入項目').trim(),
+                category: String(item.category || '其他收入').trim(),
+                currency: normalizeAiCurrencyCode(item.currency, rawAmt),
+                amount: Number(amt.toFixed(2)),
+                account: String(item.account || '').trim(),
+                depositNow: false,
+                note: String(item.note || '').trim()
+              };
+            };
+
+            let rawActions = [];
+            if (Array.isArray(parsed)) {
+              rawActions = parsed.map(toExpenseAction).filter(Boolean);
+            } else {
+              const directList = Array.isArray(parsed.actions) ? parsed.actions
+                : (Array.isArray(parsed.operations) ? parsed.operations
+                  : (Array.isArray(parsed.commands) ? parsed.commands
+                    : (parsed.action && typeof parsed.action === 'object' ? [parsed.action] : [])));
+              if (directList.length > 0) {
+                rawActions = directList.map(toExpenseAction).filter(Boolean);
+              }
+              if (rawActions.length === 0) {
+                const candidateArrays = [
+                  parsed.expenses, parsed.items, parsed.orders, parsed.transactions,
+                  parsed.purchases, parsed.records, parsed.receipts, parsed.products,
+                  parsed.data && parsed.data.actions, parsed.data && parsed.data.expenses,
+                  parsed.data && parsed.data.items, parsed.data && parsed.data.orders
+                ].filter(Array.isArray);
+                candidateArrays.forEach((arr) => {
+                  arr.forEach((it) => {
+                    const act = toExpenseAction(it);
+                    if (act) rawActions.push(act);
+                  });
+                });
+                const incArr = Array.isArray(parsed.incomes) ? parsed.incomes
+                  : (parsed.data && Array.isArray(parsed.data.incomes) ? parsed.data.incomes : []);
+                incArr.forEach((it) => {
+                  const act = toIncomeAction(it);
+                  if (act) rawActions.push(act);
+                });
+              }
+              if (rawActions.length === 0) {
+                const single = toExpenseAction(parsed);
+                if (single) rawActions.push(single);
+              }
+            }
+
+            let reply = '';
+            if (!Array.isArray(parsed)) {
+              const r = parsed.reply ?? parsed.message ?? parsed.summary ?? parsed.text ?? parsed.content ?? parsed.analysis ?? parsed.description ?? '';
+              if (typeof r === 'string') reply = r.trim();
+              else if (r && typeof r === 'object') reply = JSON.stringify(r, null, 2);
+            }
+            if (!reply) {
+              if (rawActions.length > 0) {
+                reply = `已從內容辨識出 ${rawActions.length} 筆明細：\n${rawActions.map((a, i) => `${i + 1}. ${describeAiAction(a)}`).join('\n')}`;
+              } else {
+                const pretty = JSON.stringify(parsed, null, 2);
+                reply = pretty && pretty !== '{}' && pretty !== '[]'
+                  ? `AI 回傳內容（未能自動轉成記帳指令，請確認或點下方重新發送）：\n${pretty.slice(0, 1200)}`
+                  : 'AI 未能從圖片辨識出明確金額與品項，建議點下方「🔄 重新發送」或換一組模型再試。';
+              }
+            }
+            return {
+              reply,
+              actions: rawActions.map((a) => ({ ...a, _status: 'pending' }))
+            };
+          };
+
+          const normalized = normalizeCopilotAiResponse(resp.text);
+          const replyText = normalized.reply;
+          const actions = normalized.actions;
 
           const autoExec = Boolean(document.getElementById('ai-copilot-auto-exec') && document.getElementById('ai-copilot-auto-exec').checked);
+          let autoDoneCount = 0;
           if (autoExec && actions.length > 0) {
             actions.forEach((a) => {
               if (AI_COPILOT_SAFE_AUTO_TYPES.has(a.type)) {
                 const res = executeAiCopilotAction(a);
                 a._status = res.ok ? 'done' : 'error';
                 a._err = res.ok ? '' : res.msg;
+                if (res.ok) autoDoneCount += 1;
               }
             });
+            if (autoDoneCount > 0) {
+              showToast(`AI 已自動新增 ${autoDoneCount} 筆紀錄！`);
+            }
           }
 
           aiCopilotHistory[targetIdx] = {
             role: 'assistant',
             text: replyText,
             actions,
+            ...(imgsToSend.length > 0 && actions.length === 0 ? { _retryPayload: { text, imgs: imgsToSend }, _noActionImg: true } : {}),
             meta: `${keyTag}${resp.model || appConfig.aiModel || ''} · 總耗時 ${sec}s${upSec}`
           };
           renderAiCopilotMessages();
@@ -13939,6 +14082,22 @@
             act._err = res.ok ? '' : res.msg;
             renderAiCopilotMessages();
             showToast(res.msg);
+            return;
+          }
+          const jumpBtn = ev.target.closest('[data-copilot-jump]');
+          if (jumpBtn) {
+            const tab = jumpBtn.dataset.copilotJump;
+            if (tab) {
+              closeAiCopilotDrawer();
+              switchTab(tab);
+            }
+            return;
+          }
+          const openExpBtn = ev.target.closest('[data-copilot-open-expense]');
+          if (openExpBtn) {
+            closeAiCopilotDrawer();
+            switchTab('expenses');
+            setTimeout(() => openRandomExpenseModal(null), 120);
             return;
           }
           const retryBtn = ev.target.closest('[data-copilot-retry]');
