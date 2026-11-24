@@ -1,4 +1,4 @@
-const CACHE_NAME = 'wealth-ledger-v3';
+const CACHE_NAME = 'wealth-ledger-v4';
 const ASSETS = [
   '/',
   '/index.html',

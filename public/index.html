@@ -9534,9 +9534,10 @@
         if (!k) return true;
         const p = String(k.provider || '').toLowerCase();
         const m = String(k.model || '').toLowerCase();
-        if (p === 'gemini' || p === 'anthropic' || p === 'cloudflare' || p === 'mistral') return true;
-        // Known text-only models on Groq / OpenRouter / Custom
-        if (/gpt-oss|llama-3\.3-70b|llama-3\.1-8b|deepseek-r1|deepseek-chat|qwen-2\.5-72b-instruct$|gemma-7b/i.test(m) && !/vl|vision|pixtral|scout|maverick|qwen3\.8|gemini|gpt-4o|claude-3|claude-sonnet|claude-opus/i.test(m)) {
+        // Providers whose backend auto-promotes to a vision model when attachments are present
+        if (p === 'gemini' || p === 'anthropic' || p === 'cloudflare' || p === 'mistral' || p === 'groq' || (p === 'openrouter' && (!m || m === 'openrouter/free'))) return true;
+        // Block known text-only models on OpenRouter / OpenAI / Custom
+        if (/gpt-oss|llama-3\.[13]|deepseek|qwq|qwen3-32b|qwen-2\.5-72b-instruct$|qwen2\.5-coder|codestral|mistral-nemo|kimi|phi-3|gemma-7b|gemma-2-/i.test(m) && !/vl|vision|pixtral|scout|maverick|qwen3\.8|gemini|gpt-4o|gpt-4\.1|gpt-5|claude-3|claude-sonnet|claude-opus/i.test(m)) {
           return false;
         }
         return true;
@@ -10066,12 +10067,23 @@
           const time = normTime(e.time);
           const title = String(e.title || e.name || e.category || '支出項目').trim();
           const rawCat = String(e.category || '').trim();
-          const mapped = mapSingleCategoryHeuristic(rawCat);
+          const mapped = mapSingleCategoryHeuristic(rawCat || title);
           const category = ALL_EXPENSE_CATEGORIES.includes(mapped) ? mapped : (ALL_EXPENSE_CATEGORIES.includes(rawCat) ? rawCat : '其他隨機支出');
-          const currency = /^[A-Z]{3}$/.test(String(e.currency || 'TWD').toUpperCase()) ? String(e.currency || 'TWD').toUpperCase() : 'TWD';
+          const currency = normalizeAiCurrencyCode(e.currency, e.amount);
+          const expItem = applyLocalUserHabitToExpense({
+            kind: 'expense',
+            date,
+            time,
+            category,
+            title,
+            amount: Number(amount.toFixed(2)),
+            currency,
+            account: String(e.account || '').trim(),
+            note: String(e.note || '').trim()
+          });
           const dupKey = `${date}|${Math.round(amount)}|${title.toLowerCase()}`;
           const isDuplicate = expKeys.has(dupKey);
-          items.push({ kind: 'expense', date, time, category, title, amount: Number(amount.toFixed(2)), currency, account: String(e.account || '').trim(), note: String(e.note || '').trim(), isDuplicate, checked: !isDuplicate });
+          items.push({ ...expItem, isDuplicate, checked: !isDuplicate });
         });
 
         (Array.isArray(obj.incomes) ? obj.incomes : []).forEach((r) => {
@@ -10643,7 +10655,10 @@
         saveState();
         renderAll();
         migratePreviewItems = [];
+        migrateBatchesMeta = [];
+        migrateImages = [];
         migrateSkippedTransfers = 0;
+        if (typeof renderMigrateImgThumbs === 'function') renderMigrateImgThumbs();
         renderMigratePreview();
         const parts = [];
         if (cExp) parts.push(`支出 ${cExp} 筆`);
@@ -11326,6 +11341,33 @@
         return top;
       }
 
+      // Apply past merchant/item habit defaults purely in local JS AFTER vision extraction so past item names are NEVER sent in image prompts
+      function applyLocalUserHabitToExpense(item) {
+        if (!item || typeof item !== 'object') return item;
+        const rawTitle = String(item.title || '').trim().toLowerCase();
+        if (!rawTitle || rawTitle.length < 2 || rawTitle === '購物支出' || rawTitle === '支出項目' || rawTitle === 'ai 記帳支出') return item;
+        const exps = state.randomExpenses || [];
+        let matched = null;
+        for (let i = exps.length - 1; i >= 0; i--) {
+          const past = exps[i];
+          const pt = String((past && past.title) || '').trim().toLowerCase();
+          if (!pt || pt.length < 2) continue;
+          if (pt === rawTitle || (pt.length >= 3 && rawTitle.length >= 3 && (rawTitle.includes(pt) || pt.includes(rawTitle)))) {
+            matched = past;
+            if (pt === rawTitle) break;
+          }
+        }
+        if (!matched) return item;
+        const out = { ...item };
+        if ((!out.category || out.category === '其他隨機支出') && matched.category && ALL_EXPENSE_CATEGORIES.includes(matched.category)) {
+          out.category = matched.category;
+        }
+        if (!out.account && matched.account && (!matched.currency || !out.currency || matched.currency === out.currency)) {
+          out.account = matched.account;
+        }
+        return out;
+      }
+
       async function callAiImagesInParallelBatches({ imgs, batchSize = 2, runSingleBatch }) {
         if (!Array.isArray(imgs) || imgs.length <= batchSize) {
           return [await runSingleBatch(imgs || [], 0, 1)];
@@ -11422,7 +11464,6 @@
 
       function buildExtractionPrompt(targetType, userHint = '', fallbackDate = '') {
         const accounts = [...new Set((state.cash || []).map((c) => c.bank).filter(Boolean))];
-        const habits = buildUserHabitContext();
         const focusMap = {
           auto: '自動判斷內容中所有出現的支出、收入、股票/ETF 持股與銀行現金帳戶餘額',
           transactions: '僅擷取支出與收入交易明細（忽略轉帳、繳卡費、前期應繳總額；若圖片為某月多項統計表，請將各統計類別／項目拆成獨立多筆）',
@@ -11440,12 +11481,11 @@
           `  "cash": [{ "bank": "銀行或券商名", "currency": "TWD|USD|JPY|HKD|CNY", "amount": 餘額, "note": "" }]`,
           `}`,
           `支出 category 必須從以下 15 類擇一：${ALL_EXPENSE_CATEGORIES.join('、')}。`,
-          accounts.length ? `使用者現有帳戶參考：${accounts.join('、')}。` : '',
-          habits.length ? `使用者歷史習慣記憶（遇到相同或相似店家／品項時請優先套用對應分類、帳戶與幣別）：${habits.join('；')}。` : '',
+          accounts.length ? `使用者帳戶名稱清單（僅在圖片中明確對應時填寫，否則留空字串）：${accounts.join('、')}。` : '',
           `若圖片顯示 ¥ / RMB / 淘寶 / 拼多多 / 京東，currency 請填 CNY；若為 NT$ / 台幣 請填 TWD。`,
           `若圖片沒有顯示明確日期，請優先依「使用者補充說明」指定之年份／月份／日期填入（若只指定某月如 2026年10月，可填該月最後一日或 01 日）；若仍無日期則預設填 ${fbDate}。`,
           hint ? `【使用者補充說明（請務必優先遵守）】：\n${hint}` : '',
-          `若某類別沒有資料請回傳空陣列 []；金額一律用正數。`
+          `【嚴格防幻覺規則】：每一次請求皆為完全獨立辨識，只能擷取「本次附帶的這張圖片／內容中實際肉眼可見」的品項與金額，嚴禁編造、猜測或混入任何非本圖的資料；若圖片中無對應項目請回傳空陣列 []。金額一律用正數。`
         ].filter(Boolean).join('\n');
       }
 
@@ -11471,7 +11511,9 @@
         migThumbsBox.addEventListener('click', (ev) => {
           if (ev.target.id === 'btn-mig-clear-imgs') {
             migrateImages = [];
+            migrateBatchesMeta = [];
             renderMigrateImgThumbs();
+            renderMigratePreview();
             return;
           }
           const idx = ev.target.dataset.migRmImg;
@@ -11490,7 +11532,15 @@
           setMigrateStatus(`正在壓縮 ${files.length} 張圖片...`);
           try {
             const newImgs = await Promise.all(files.map((f) => compressImageToBase64(f)));
-            migrateImages = [...migrateImages, ...newImgs].slice(0, 8);
+            // If previous batch was already recognized, start a clean batch so old images never mix into new recognition
+            if (migrateBatchesMeta.length > 0) {
+              migrateImages = newImgs.slice(0, 8);
+              migratePreviewItems = [];
+              migrateBatchesMeta = [];
+              renderMigratePreview();
+            } else {
+              migrateImages = [...migrateImages, ...newImgs].slice(0, 8);
+            }
             renderMigrateImgThumbs();
             showToast(`已載入共 ${migrateImages.length} 張圖片，請點「AI 辨識截圖」`);
           } catch (err) {
@@ -11513,7 +11563,14 @@
           setMigrateStatus(`正在壓縮剪貼簿的 ${clip.files.length} 張截圖...`);
           try {
             const imgs = await Promise.all(clip.files.map((f) => compressImageToBase64(f)));
-            migrateImages = [...migrateImages, ...imgs].slice(0, 8);
+            if (migrateBatchesMeta.length > 0) {
+              migrateImages = imgs.slice(0, 8);
+              migratePreviewItems = [];
+              migrateBatchesMeta = [];
+              renderMigratePreview();
+            } else {
+              migrateImages = [...migrateImages, ...imgs].slice(0, 8);
+            }
             renderMigrateImgThumbs();
             showToast(`已從剪貼簿貼上 ${imgs.length} 張截圖（共 ${migrateImages.length} 張）`);
           } catch (err) {
@@ -11809,7 +11866,7 @@
       const btnMigSelNone = document.getElementById('btn-migrate-sel-none');
       if (btnMigSelNone) btnMigSelNone.addEventListener('click', () => { migratePreviewItems.forEach((x) => { x.checked = false; }); renderMigratePreview(); });
       const btnMigClear = document.getElementById('btn-migrate-clear');
-      if (btnMigClear) btnMigClear.addEventListener('click', () => { migratePreviewItems = []; migrateSkippedTransfers = 0; renderMigratePreview(); });
+      if (btnMigClear) btnMigClear.addEventListener('click', () => { migratePreviewItems = []; migrateBatchesMeta = []; migrateImages = []; migrateSkippedTransfers = 0; renderMigrateImgThumbs(); renderMigratePreview(); });
       const btnMigCommit = document.getElementById('btn-migrate-commit');
       if (btnMigCommit) btnMigCommit.addEventListener('click', commitMigrateImport);
 
@@ -12541,7 +12598,9 @@
           thumbsEl.addEventListener('click', (ev) => {
             if (ev.target.id === 'btn-qpb-clear-imgs') {
               stagedImgs = [];
+              qpbBatchesMeta = [];
               renderThumbs();
+              renderQpbBatchStats();
               if (statusEl) statusEl.textContent = '已清除照片，可重新選擇或直接輸入文字辨識';
               return;
             }
@@ -12561,7 +12620,15 @@
             if (statusEl) statusEl.textContent = `正在壓縮 ${files.length} 張照片...`;
             try {
               const newImgs = await Promise.all(files.map((f) => compressImageToBase64(f)));
-              stagedImgs = [...stagedImgs, ...newImgs].slice(0, 8);
+              if (qpbBatchesMeta.length > 0) {
+                stagedImgs = newImgs.slice(0, 8);
+                batchItems = [];
+                qpbBatchesMeta = [];
+                renderQpbList();
+                if (btnRunAi) btnRunAi.textContent = '開始 AI 辨識';
+              } else {
+                stagedImgs = [...stagedImgs, ...newImgs].slice(0, 8);
+              }
               renderThumbs();
               if (statusEl) statusEl.textContent = `✓ 已載入 ${stagedImgs.length} 張照片！可在下方補充日期／月份／帳戶說明，再點「開始 AI 辨識」`;
             } catch (err) {
@@ -12581,7 +12648,15 @@
               if (statusEl) statusEl.textContent = `正在壓縮剪貼簿的 ${clip.files.length} 張截圖...`;
               try {
                 const newImgs = await Promise.all(clip.files.map((f) => compressImageToBase64(f)));
-                stagedImgs = [...stagedImgs, ...newImgs].slice(0, 8);
+                if (qpbBatchesMeta.length > 0) {
+                  stagedImgs = newImgs.slice(0, 8);
+                  batchItems = [];
+                  qpbBatchesMeta = [];
+                  renderQpbList();
+                  if (btnRunAi) btnRunAi.textContent = '開始 AI 辨識';
+                } else {
+                  stagedImgs = [...stagedImgs, ...newImgs].slice(0, 8);
+                }
                 renderThumbs();
                 if (statusEl) statusEl.textContent = `✓ 已從剪貼簿貼上 ${newImgs.length} 張截圖（共 ${stagedImgs.length} 張）`;
               } catch (err) {
@@ -14474,6 +14549,148 @@
         return null;
       }
 
+      function buildAiCopilotVisionSystemPrompt() {
+        return [
+          '你是精準的繁體中文單據、訂單截圖與金融畫面視覺辨識專家。',
+          '你必須**只回傳合法 JSON 物件**，格式如下（不要加任何 JSON 以外的解釋文字）：',
+          '{ "reply": "簡短列出本張圖片辨識到的明細摘要", "actions": [ ... ] }',
+          '每筆支出請放入 actions：{"type":"add_expense","date":"YYYY-MM-DD","time":"HH:MM或空字串","title":"圖片中的實際商品或店家名稱","category":"15類擇一","currency":"TWD|CNY|USD|JPY|HKD","amount":純數字,"account":"","deductNow":false,"note":""}',
+          '若圖片明確為薪資／入帳收入，請用：{"type":"add_income","date":"YYYY-MM-DD","name":"收入項目名","category":"薪資收入|獎金|分潤|其他收入","currency":"TWD","amount":純數字,"account":"","depositNow":false,"note":""}',
+          '若圖片為銀行餘額畫面，請用：{"type":"update_cash","bank":"銀行名","currency":"TWD","amount":純數字,"note":""}',
+          `支出 category 必須從以下 15 類擇一：${ALL_EXPENSE_CATEGORIES.join('、')}。`,
+          '【最高優先防幻覺規則】：每一次請求皆為完全獨立的單張圖片辨識！只能擷取「本次附圖中肉眼實際可見」的文字、品項與金額，嚴禁編造、猜測或輸出任何不在這張圖片中的項目。若圖片中沒有明確金額或明細，actions 必須回傳空陣列 []。'
+        ].join('\n');
+      }
+
+      function buildAiCopilotVisionPrompt(userText = '') {
+        const accounts = [...new Set((state.cash || []).map((c) => c.bank).filter(Boolean))];
+        const defaultImgInstruction = '請只根據這張附圖中實際可見的內容，辨識所有購物訂單、發票、收據或帳單明細（含商品/店家名稱、金額、幣別如 CNY/TWD/USD/JPY、日期與分類），在 reply 列出本圖辨識摘要，並在 actions 產生對應的 add_expense / add_income 操作（amount 填正數純數字）。若圖片顯示 ¥ / RMB / 淘寶 / 拼多多 / 京東，currency 請填 CNY；若無顯示年份或日期則預設填今天日期。';
+        return [
+          `今天日期：${todayISO()}。`,
+          accounts.length ? `使用者現有帳戶清單（僅在圖片明確出現該銀行／支付名稱時填入 account，否則留空字串）：${accounts.join('、')}。` : '',
+          userText ? `【使用者針對本圖的補充指示】：\n${userText}\n\n（請結合上方指示，並只擷取本張附圖中實際出現的明細，回傳 reply 與 actions JSON）` : defaultImgInstruction
+        ].filter(Boolean).join('\n');
+      }
+
+      function normalizeCopilotAiResponse(rawText) {
+        const rawStr = String(rawText || '').trim();
+        if (!rawStr) return { reply: '（AI 未回傳任何內容，請點擊重新發送或切換其他模型）', actions: [] };
+        let parsed = null;
+        try {
+          parsed = extractJsonFromAiText(rawStr);
+        } catch (e) {
+          return { reply: rawStr, actions: [] };
+        }
+        if (!parsed || typeof parsed !== 'object') {
+          return { reply: rawStr, actions: [] };
+        }
+
+        const toExpenseAction = (item) => {
+          if (!item || typeof item !== 'object') return null;
+          if (item.type) {
+            const copy = { ...item };
+            if (copy.amount !== undefined) copy.amount = Math.abs(parseFlexibleNumber(copy.amount));
+            if (copy.currency || item.amount) copy.currency = normalizeAiCurrencyCode(copy.currency, item.amount);
+            return copy.type === 'add_expense' ? applyLocalUserHabitToExpense(copy) : copy;
+          }
+          const rawAmt = item.amount ?? item.total ?? item.price ?? item.cost ?? item.actualAmount ?? item.total_amount ?? item.paid ?? item.subtotal;
+          const amt = Math.abs(parseFlexibleNumber(rawAmt));
+          if (!Number.isFinite(amt) || amt <= 0) return null;
+          const title = String(item.title || item.name || item.product || item.item || item.description || item.merchant || item.store || item.shop || '購物支出').trim();
+          const cur = normalizeAiCurrencyCode(item.currency || item.currency_code, rawAmt);
+          const rawCat = String(item.category || '').trim();
+          const cat = ALL_EXPENSE_CATEGORIES.includes(rawCat) ? rawCat : mapSingleCategoryHeuristic(rawCat || title);
+          return applyLocalUserHabitToExpense({
+            type: 'add_expense',
+            date: parseFlexibleDate(item.date || item.order_date || item.time) || todayISO(),
+            time: '',
+            title,
+            category: ALL_EXPENSE_CATEGORIES.includes(cat) ? cat : '其他隨機支出',
+            currency: cur,
+            amount: Number(amt.toFixed(2)),
+            account: String(item.account || item.payment || item.payment_method || '').trim(),
+            deductNow: false,
+            note: String(item.note || item.store || item.shop || item.merchant || '').trim()
+          });
+        };
+
+        const toIncomeAction = (item) => {
+          if (!item || typeof item !== 'object') return null;
+          const rawAmt = item.amount ?? item.actualAmount ?? item.total;
+          const amt = Math.abs(parseFlexibleNumber(rawAmt));
+          if (!Number.isFinite(amt) || amt <= 0) return null;
+          return {
+            type: 'add_income',
+            date: parseFlexibleDate(item.date) || todayISO(),
+            name: String(item.name || item.title || '收入項目').trim(),
+            category: String(item.category || '其他收入').trim(),
+            currency: normalizeAiCurrencyCode(item.currency, rawAmt),
+            amount: Number(amt.toFixed(2)),
+            account: String(item.account || '').trim(),
+            depositNow: false,
+            note: String(item.note || '').trim()
+          };
+        };
+
+        let rawActions = [];
+        if (Array.isArray(parsed)) {
+          rawActions = parsed.map(toExpenseAction).filter(Boolean);
+        } else {
+          const directList = Array.isArray(parsed.actions) ? parsed.actions
+            : (Array.isArray(parsed.operations) ? parsed.operations
+              : (Array.isArray(parsed.commands) ? parsed.commands
+                : (parsed.action && typeof parsed.action === 'object' ? [parsed.action] : [])));
+          if (directList.length > 0) {
+            rawActions = directList.map(toExpenseAction).filter(Boolean);
+          }
+          if (rawActions.length === 0) {
+            const candidateArrays = [
+              parsed.expenses, parsed.items, parsed.orders, parsed.transactions,
+              parsed.purchases, parsed.records, parsed.receipts, parsed.products,
+              parsed.data && parsed.data.actions, parsed.data && parsed.data.expenses,
+              parsed.data && parsed.data.items, parsed.data && parsed.data.orders
+            ].filter(Array.isArray);
+            candidateArrays.forEach((arr) => {
+              arr.forEach((it) => {
+                const act = toExpenseAction(it);
+                if (act) rawActions.push(act);
+              });
+            });
+            const incArr = Array.isArray(parsed.incomes) ? parsed.incomes
+              : (parsed.data && Array.isArray(parsed.data.incomes) ? parsed.data.incomes : []);
+            incArr.forEach((it) => {
+              const act = toIncomeAction(it);
+              if (act) rawActions.push(act);
+            });
+          }
+          if (rawActions.length === 0) {
+            const single = toExpenseAction(parsed);
+            if (single) rawActions.push(single);
+          }
+        }
+
+        let reply = '';
+        if (!Array.isArray(parsed)) {
+          const r = parsed.reply ?? parsed.message ?? parsed.summary ?? parsed.text ?? parsed.content ?? parsed.analysis ?? parsed.description ?? '';
+          if (typeof r === 'string') reply = r.trim();
+          else if (r && typeof r === 'object') reply = JSON.stringify(r, null, 2);
+        }
+        if (!reply) {
+          if (rawActions.length > 0) {
+            reply = `已從內容辨識出 ${rawActions.length} 筆明細：\n${rawActions.map((a, i) => `${i + 1}. ${describeAiAction(a)}`).join('\n')}`;
+          } else {
+            const pretty = JSON.stringify(parsed, null, 2);
+            reply = pretty && pretty !== '{}' && pretty !== '[]'
+              ? `AI 回傳內容（未能自動轉成記帳指令，請確認或點下方重新發送）：\n${pretty.slice(0, 1200)}`
+              : 'AI 未能從圖片辨識出明確金額與品項，建議點下方「🔄 重新發送」或換一組模型再試。';
+          }
+        }
+        return {
+          reply,
+          actions: rawActions.map((a) => ({ ...a, _status: 'pending' }))
+        };
+      }
+
       async function sendAiCopilotMessage(overrideText = '', retryOpts = null) {
         if (aiCopilotBusy) return;
         const inputEl = document.getElementById('ai-copilot-input');
@@ -14532,143 +14749,35 @@
         const t0 = performance.now();
 
         try {
-          const recentTurns = aiCopilotHistory
-            .slice(Math.max(0, targetIdx - 5), targetIdx)
-            .map((m) => `${m.role === 'user' ? '使用者' : '助理'}：${m.text}`)
-            .join('\n');
-          const defaultImgInstruction = '請詳細辨識所有附圖中的購物訂單、發票、收據或帳單明細（含商品/店家名稱、金額、幣別如 CNY/TWD/USD、日期與分類），在 reply 中列出辨識摘要，並為每一筆消費在 actions 陣列中產生對應的 add_expense 操作（amount 請填純數字）。';
-          const prompt = [
-            '【帳本即時摘要】：',
-            JSON.stringify(buildAiCopilotContext()),
-            recentTurns ? `\n【最近對話】：\n${recentTurns}` : '',
-            `\n【使用者指令】：\n${text || defaultImgInstruction}`
-          ].filter(Boolean).join('\n');
-
-          const normalizeCopilotAiResponse = (rawText) => {
-            const rawStr = String(rawText || '').trim();
-            if (!rawStr) return { reply: '（AI 未回傳任何內容，請點擊重新發送或切換其他模型）', actions: [] };
-            let parsed = null;
-            try {
-              parsed = extractJsonFromAiText(rawStr);
-            } catch (e) {
-              return { reply: rawStr, actions: [] };
-            }
-            if (!parsed || typeof parsed !== 'object') {
-              return { reply: rawStr, actions: [] };
-            }
-
-            const toExpenseAction = (item) => {
-              if (!item || typeof item !== 'object') return null;
-              if (item.type) {
-                const copy = { ...item };
-                if (copy.amount !== undefined) copy.amount = Math.abs(parseFlexibleNumber(copy.amount));
-                if (copy.currency || item.amount) copy.currency = normalizeAiCurrencyCode(copy.currency, item.amount);
-                return copy;
-              }
-              const rawAmt = item.amount ?? item.total ?? item.price ?? item.cost ?? item.actualAmount ?? item.total_amount ?? item.paid ?? item.subtotal;
-              const amt = Math.abs(parseFlexibleNumber(rawAmt));
-              if (!Number.isFinite(amt) || amt <= 0) return null;
-              const title = String(item.title || item.name || item.product || item.item || item.description || item.merchant || item.store || item.shop || '購物支出').trim();
-              const cur = normalizeAiCurrencyCode(item.currency || item.currency_code, rawAmt);
-              const rawCat = String(item.category || '').trim();
-              const cat = ALL_EXPENSE_CATEGORIES.includes(rawCat) ? rawCat : mapSingleCategoryHeuristic(rawCat || title);
-              return {
-                type: 'add_expense',
-                date: parseFlexibleDate(item.date || item.order_date || item.time) || todayISO(),
-                time: '',
-                title,
-                category: ALL_EXPENSE_CATEGORIES.includes(cat) ? cat : '其他隨機支出',
-                currency: cur,
-                amount: Number(amt.toFixed(2)),
-                account: String(item.account || item.payment || item.payment_method || '').trim(),
-                deductNow: false,
-                note: String(item.note || item.store || item.shop || item.merchant || '').trim()
-              };
-            };
-
-            const toIncomeAction = (item) => {
-              if (!item || typeof item !== 'object') return null;
-              const rawAmt = item.amount ?? item.actualAmount ?? item.total;
-              const amt = Math.abs(parseFlexibleNumber(rawAmt));
-              if (!Number.isFinite(amt) || amt <= 0) return null;
-              return {
-                type: 'add_income',
-                date: parseFlexibleDate(item.date) || todayISO(),
-                name: String(item.name || item.title || '收入項目').trim(),
-                category: String(item.category || '其他收入').trim(),
-                currency: normalizeAiCurrencyCode(item.currency, rawAmt),
-                amount: Number(amt.toFixed(2)),
-                account: String(item.account || '').trim(),
-                depositNow: false,
-                note: String(item.note || '').trim()
-              };
-            };
-
-            let rawActions = [];
-            if (Array.isArray(parsed)) {
-              rawActions = parsed.map(toExpenseAction).filter(Boolean);
-            } else {
-              const directList = Array.isArray(parsed.actions) ? parsed.actions
-                : (Array.isArray(parsed.operations) ? parsed.operations
-                  : (Array.isArray(parsed.commands) ? parsed.commands
-                    : (parsed.action && typeof parsed.action === 'object' ? [parsed.action] : [])));
-              if (directList.length > 0) {
-                rawActions = directList.map(toExpenseAction).filter(Boolean);
-              }
-              if (rawActions.length === 0) {
-                const candidateArrays = [
-                  parsed.expenses, parsed.items, parsed.orders, parsed.transactions,
-                  parsed.purchases, parsed.records, parsed.receipts, parsed.products,
-                  parsed.data && parsed.data.actions, parsed.data && parsed.data.expenses,
-                  parsed.data && parsed.data.items, parsed.data && parsed.data.orders
-                ].filter(Array.isArray);
-                candidateArrays.forEach((arr) => {
-                  arr.forEach((it) => {
-                    const act = toExpenseAction(it);
-                    if (act) rawActions.push(act);
-                  });
-                });
-                const incArr = Array.isArray(parsed.incomes) ? parsed.incomes
-                  : (parsed.data && Array.isArray(parsed.data.incomes) ? parsed.data.incomes : []);
-                incArr.forEach((it) => {
-                  const act = toIncomeAction(it);
-                  if (act) rawActions.push(act);
-                });
-              }
-              if (rawActions.length === 0) {
-                const single = toExpenseAction(parsed);
-                if (single) rawActions.push(single);
-              }
-            }
-
-            let reply = '';
-            if (!Array.isArray(parsed)) {
-              const r = parsed.reply ?? parsed.message ?? parsed.summary ?? parsed.text ?? parsed.content ?? parsed.analysis ?? parsed.description ?? '';
-              if (typeof r === 'string') reply = r.trim();
-              else if (r && typeof r === 'object') reply = JSON.stringify(r, null, 2);
-            }
-            if (!reply) {
-              if (rawActions.length > 0) {
-                reply = `已從內容辨識出 ${rawActions.length} 筆明細：\n${rawActions.map((a, i) => `${i + 1}. ${describeAiAction(a)}`).join('\n')}`;
-              } else {
-                const pretty = JSON.stringify(parsed, null, 2);
-                reply = pretty && pretty !== '{}' && pretty !== '[]'
-                  ? `AI 回傳內容（未能自動轉成記帳指令，請確認或點下方重新發送）：\n${pretty.slice(0, 1200)}`
-                  : 'AI 未能從圖片辨識出明確金額與品項，建議點下方「🔄 重新發送」或換一組模型再試。';
-              }
-            }
-            return {
-              reply,
-              actions: rawActions.map((a) => ({ ...a, _status: 'pending' }))
-            };
-          };
+          const isVisionMode = imgsToSend.length > 0;
+          // CRITICAL ISOLATION: When recognizing images, NEVER send past chat turns (aiCopilotHistory) or past ledger items (recentExpenses/userHabits),
+          // otherwise vision/fallback models can copy past recognition results into the new image response!
+          let sysPrompt = '';
+          let prompt = '';
+          if (isVisionMode) {
+            sysPrompt = buildAiCopilotVisionSystemPrompt();
+            prompt = buildAiCopilotVisionPrompt(text);
+          } else {
+            sysPrompt = buildAiCopilotSystemPrompt();
+            const recentTurns = aiCopilotHistory
+              .slice(Math.max(0, targetIdx - 5), targetIdx)
+              .filter((m) => !Array.isArray(m.batches) || m.batches.length === 0)
+              .map((m) => `${m.role === 'user' ? '使用者' : '助理'}：${String(m.text || '').slice(0, 300)}`)
+              .join('\n');
+            prompt = [
+              '【帳本即時摘要】：',
+              JSON.stringify(buildAiCopilotContext()),
+              recentTurns ? `\n【最近對話】：\n${recentTurns}` : '',
+              `\n【使用者指令】：\n${text}`
+            ].filter(Boolean).join('\n');
+          }
 
           // 1 image = 1 independent task so every attached image (1st, 2nd, 3rd, ... up to 8th) is guaranteed to be recognized
-          const chunks = imgsToSend.length ? imgsToSend.map((im) => [im]) : [[]];
+          const chunks = isVisionMode ? imgsToSend.map((im) => [im]) : [[]];
           const avoidKeyIdOnRetry = (retryOpts && retryOpts.avoidKeyId) || '';
           const perImgStatus = chunks.map((_, i) => (chunks.length > 1 ? `第 ${i + 1}/${chunks.length} 張：等待分派…` : '思考與分析中…'));
           const settled = await Promise.allSettled(chunks.map((chunk, idx) => callAiEndpoint({
-            systemPrompt: buildAiCopilotSystemPrompt(),
+            systemPrompt: sysPrompt,
             prompt,
             attachments: chunk.map((im) => ({ mimeType: im.mimeType, base64: im.base64 })),
             expectJson: true,
@@ -14817,44 +14926,29 @@
         aiCopilotBusy = true;
         showToast(switchKey ? `⚡ 正在切換另一組 AI 重新辨識第 ${bIdx + 1} 張...` : `🔄 正在重新辨識第 ${bIdx + 1} 張...`);
         try {
-          const defaultImgInstruction = '請詳細辨識所有附圖中的購物訂單、發票、收據或帳單明細（含商品/店家名稱、金額、幣別如 CNY/TWD/USD、日期與分類），在 reply 中列出辨識摘要，並為每一筆消費在 actions 陣列中產生對應的 add_expense 操作（amount 請填純數字）。';
-          const prompt = [
-            '【帳本即時摘要】：',
-            JSON.stringify(buildAiCopilotContext()),
-            `\n【使用者指令】：\n${text || defaultImgInstruction}`
-          ].join('\n');
-
+          const isVision = imgs.length > 0;
           const r = await callAiEndpoint({
-            systemPrompt: buildAiCopilotSystemPrompt(),
-            prompt,
+            systemPrompt: isVision ? buildAiCopilotVisionSystemPrompt() : buildAiCopilotSystemPrompt(),
+            prompt: isVision
+              ? buildAiCopilotVisionPrompt(text)
+              : ['【帳本即時摘要】：', JSON.stringify(buildAiCopilotContext()), `\n【使用者指令】：\n${text}`].join('\n'),
             attachments: imgs.map((im) => ({ mimeType: im.mimeType, base64: im.base64 })),
             expectJson: true,
             avoidKeyId: switchKey ? (batch.usedKeyId || '') : ''
           });
 
-          const parsed = extractJsonFromAiText(r.text);
+          const norm = normalizeCopilotAiResponse(r.text);
           const keyLabel = r.usedKeyLabel || r.usedProvider || 'AI';
           const totalBatches = msg.batches.length;
           const tag = totalBatches > 1 ? `第${bIdx + 1}張·${keyLabel} (${r.model || ''})` : `${keyLabel} (${r.model || ''})`;
-          const items = normalizeAiExtractedPayload(parsed, state);
-          const rawActs = Array.isArray(parsed && parsed.actions) && parsed.actions.length > 0
-            ? parsed.actions.map((a) => ({
-                ...a,
-                amount: Math.abs(parseFlexibleNumber(a.amount)),
-                currency: normalizeAiCurrencyCode(a.currency, a.amount)
-              }))
-            : items.filter((x) => x.kind === 'expense' || x.kind === 'income').map((it) => (
-                it.kind === 'income'
-                  ? { type: 'add_income', date: it.date, name: it.title, category: it.category, currency: it.currency, amount: it.amount, account: it.account, depositNow: false, note: it.note }
-                  : { type: 'add_expense', date: it.date, time: it.time || '', title: it.title, category: it.category, currency: it.currency, amount: it.amount, account: it.account, deductNow: false, note: it.note }
-              ));
 
           const autoExec = Boolean(document.getElementById('ai-copilot-auto-exec') && document.getElementById('ai-copilot-auto-exec').checked);
-          const newBatchActions = rawActs.map((a) => {
+          const seenSingleKeys = new Set();
+          const newBatchActions = norm.actions.map((a) => {
             const actObj = {
               ...a,
               _status: 'pending',
-              _isDuplicate: isCopilotActionDuplicate(a),
+              _isDuplicate: isCopilotActionDuplicate(a, seenSingleKeys),
               _batchIdx: bIdx,
               _batchTag: tag,
               _usedKeyId: r.usedKeyId || ''
@@ -14867,7 +14961,7 @@
             return actObj;
           });
 
-          const newReply = (parsed && (parsed.reply || parsed.message || parsed.summary))
+          const newReply = norm.reply
             || (newBatchActions.length > 0 ? `已重新辨識出 ${newBatchActions.length} 筆明細：\n${newBatchActions.map((a, i) => `${i + 1}. ${describeAiAction(a)}`).join('\n')}` : '已完成重新辨識');
 
           msg.batches[bIdx] = {

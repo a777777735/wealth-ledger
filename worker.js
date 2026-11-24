@@ -344,9 +344,9 @@ async function handleAiProxy(request, env) {
         mistral: hasImg ? 'pixtral-12b-2409' : 'mistral-small-latest'
       };
       const presetFallbacks = {
-        groq: attachments.length > 0 ? [] : ['openai/gpt-oss-120b', 'openai/gpt-oss-20b'],
+        groq: hasImg ? [] : ['openai/gpt-oss-120b', 'openai/gpt-oss-20b'],
         openrouter: hasImg
-          ? ['google/gemma-3-27b-it:free', 'qwen/qwen2.5-vl-32b-instruct:free', 'openrouter/free']
+          ? ['google/gemma-3-27b-it:free', 'mistralai/mistral-small-3.1-24b-instruct:free', 'qwen/qwen2.5-vl-32b-instruct:free']
           : ['nvidia/nemotron-3.5-super-vl:free'],
         mistral: ['pixtral-12b-2409']
       };
@@ -360,7 +360,7 @@ async function handleAiProxy(request, env) {
         return jsonResp({ ok: false, error: '自訂 Base URL 必須使用 https://（本機測試限 localhost）' }, 400);
       }
       let primaryModel = String(body.model || presetDefaults[provider] || '').trim();
-      if (provider === 'groq' && /llama-4-(scout|maverick)/i.test(primaryModel)) {
+      if (provider === 'groq' && (/llama-4-(scout|maverick)/i.test(primaryModel) || (hasImg && /gpt-oss|llama-3\.[13]|deepseek|qwq|qwen3-32b|kimi/i.test(primaryModel)))) {
         primaryModel = 'qwen/qwen3.8-27b';
       }
       if (provider === 'openrouter' && (/qwen2\.5-vl-72b-instruct:free/i.test(primaryModel) || (hasImg && primaryModel === 'openrouter/free'))) {
