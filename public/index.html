@@ -1252,6 +1252,9 @@
               </table>
             </div>
           </div>
+
+          <!-- Physical Investment Health & Performance Report -->
+          <div id="report-physical-inv-panel"></div>
         </section>
 
         <!-- TAB 7.8: AI SMART MIGRATION WIZARD -->
@@ -6230,6 +6233,405 @@
             </tr>
           `;
         }
+
+        // 7. Physical Investment Health & Performance Report
+        renderReportPhysicalInvestments();
+      }
+
+      let reportInvTagFilter = 'all';
+      let reportInvStatusFilter = 'all';
+
+      function renderReportPhysicalInvestments() {
+        const container = document.getElementById('report-physical-inv-panel');
+        if (!container) return;
+        const investments = Array.isArray(state.investments) ? state.investments : [];
+        const invLogs = Array.isArray(state.investmentLogs) ? state.investmentLogs : [];
+        if (investments.length === 0) {
+          container.replaceChildren();
+          return;
+        }
+
+        const STATUS_TAG_SET = new Set(['進行中', '已結算', '已結案', '暫停分紅']);
+        const getCustomTags = (inv) => {
+          const raw = typeof normalizeInvTags === 'function' ? normalizeInvTags(inv.tags) : (Array.isArray(inv.tags) ? inv.tags : []);
+          return raw.filter((t) => t && !STATUS_TAG_SET.has(t));
+        };
+        const addMonthsYM = (isoDate, months) => {
+          const m = String(isoDate || '').match(/^(\d{4})-(\d{2})/);
+          if (!m) return '';
+          const d = new Date(Number(m[1]), Number(m[2]) - 1 + Math.max(1, safeNum(months, 1)), 1);
+          return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        };
+
+        // Compute overall recycling stats
+        const overallRec = typeof computeInvestmentRecyclingStats === 'function'
+          ? computeInvestmentRecyclingStats(state)
+          : null;
+
+        // Compute per-investment analytics
+        const items = investments.map((inv) => {
+          const ana = computeSingleInvestmentAnalytics(inv, invLogs);
+          const st = typeof getInvestmentStatus === 'function' ? getInvestmentStatus(inv) : (inv.status || 'active');
+          const kind = typeof getInvestmentKind === 'function' ? getInvestmentKind(inv) : (inv.investKind || 'recurring');
+          const tags = getCustomTags(inv);
+          const cyc = Math.max(1, safeNum(inv.cycleMonths, 1));
+          const minR = safeNum(inv.minRate);
+          const maxR = safeNum(inv.maxRate);
+          const plannedP = Math.round(safeNum(inv.principal));
+          const estMaturity = (st === 'active' && ana.lastInvestDate) ? addMonthsYM(ana.lastInvestDate, cyc) : '';
+          const estReturnMin = Math.round(plannedP * (1 + minR / 100));
+          const estReturnMax = Math.round(plannedP * (1 + maxR / 100));
+          return { inv, ana, st, kind, tags, cyc, minR, maxR, plannedP, estMaturity, estReturnMin, estReturnMax };
+        });
+
+        // Build tag aggregation dynamically (100% generic, zero hardcoded tags)
+        const tagMap = new Map();
+        items.forEach((it) => {
+          const tagList = it.tags.length > 0 ? it.tags : ['未分類'];
+          tagList.forEach((tag) => {
+            if (!tagMap.has(tag)) tagMap.set(tag, { tag, items: [], ids: new Set(), names: new Set() });
+            const entry = tagMap.get(tag);
+            entry.items.push(it);
+            entry.ids.add(it.inv.id);
+            if (it.inv.name) entry.names.add(String(it.inv.name).trim());
+          });
+        });
+
+        const tagSummaries = Array.from(tagMap.values()).map((g) => {
+          const subLogs = invLogs.filter((l) => g.ids.has(l.investmentId) || g.names.has(String(l.investmentName || '').trim()));
+          const rec = (subLogs.length > 0 && typeof computeInvestmentRecyclingStats === 'function')
+            ? computeInvestmentRecyclingStats({ investmentLogs: subLogs })
+            : null;
+          const totalInvested = rec ? rec.totalInvested : g.items.reduce((s, it) => s + it.ana.actualInvestedTWD, 0);
+          const totalReturned = rec ? rec.totalReturned : g.items.reduce((s, it) => s + it.ana.totalReturnedTWD, 0);
+          const peakOutflow = rec ? rec.peakOutflow : totalInvested;
+          const netCashflow = rec ? rec.netCashflow : (totalReturned - totalInvested);
+          const unrecovered = Math.max(0, Math.round(-netCashflow));
+          const moic = rec && rec.moic !== null ? rec.moic : (totalInvested > 0 ? totalReturned / totalInvested : null);
+          const activeCount = g.items.filter((it) => it.st === 'active').length;
+          const closedCount = g.items.filter((it) => it.st === 'closed').length;
+          const paidBackCount = g.items.filter((it) => it.ana.isPaidBack).length;
+          return { tag: g.tag, count: g.items.length, activeCount, closedCount, paidBackCount, totalInvested, peakOutflow, totalReturned, netCashflow, unrecovered, moic };
+        }).sort((a, b) => b.totalInvested - a.totalInvested);
+
+        const allTags = tagSummaries.map((t) => t.tag);
+        if (reportInvTagFilter !== 'all' && !allTags.includes(reportInvTagFilter)) {
+          reportInvTagFilter = 'all';
+        }
+
+        const filteredItems = items.filter((it) => {
+          if (reportInvStatusFilter !== 'all' && it.st !== reportInvStatusFilter) return false;
+          if (reportInvTagFilter !== 'all') {
+            const tagList = it.tags.length > 0 ? it.tags : ['未分類'];
+            if (!tagList.includes(reportInvTagFilter)) return false;
+          }
+          return true;
+        }).sort((a, b) => {
+          // Active first, then by investedTWD desc
+          if (a.st === 'active' && b.st !== 'active') return -1;
+          if (a.st !== 'active' && b.st === 'active') return 1;
+          return (b.ana.actualInvestedTWD || b.plannedP) - (a.ana.actualInvestedTWD || a.plannedP);
+        });
+
+        // Overall KPI values
+        const ovInvested = overallRec ? overallRec.totalInvested : items.reduce((s, it) => s + it.ana.actualInvestedTWD, 0);
+        const ovPeak = overallRec ? overallRec.peakOutflow : ovInvested;
+        const ovRecycledPct = overallRec ? overallRec.recycledPct : 0;
+        const ovReturned = overallRec ? overallRec.totalReturned : items.reduce((s, it) => s + it.ana.totalReturnedTWD, 0);
+        const ovNet = overallRec ? overallRec.netCashflow : (ovReturned - ovInvested);
+        const ovUnrecovered = Math.max(0, Math.round(-ovNet));
+        const ovMoic = overallRec && overallRec.moic !== null ? overallRec.moic : (ovInvested > 0 ? ovReturned / ovInvested : null);
+        const ovNetCls = ovNet >= 0 ? 'text-rose-700' : 'text-emerald-700';
+
+        // Helper for per-item health badge & deterministic takeaway
+        const evaluateItemHealth = (it) => {
+          const { ana, st, kind, estMaturity, estReturnMin, estReturnMax } = it;
+          const pctChange = (ana.allTimeMonthlyAvgTWD > 0 && ana.recent6mMonthlyAvgTWD > 0)
+            ? Number((((ana.recent6mMonthlyAvgTWD - ana.allTimeMonthlyAvgTWD) / ana.allTimeMonthlyAvgTWD) * 100).toFixed(1))
+            : null;
+          if (st === 'closed') {
+            const roiPct = ana.actualInvestedTWD > 0 ? ((ana.netProfitTWD / ana.actualInvestedTWD) * 100).toFixed(1) : '0.0';
+            return {
+              badge: '<span class="px-2 py-0.5 rounded-full text-[11px] font-medium bg-zinc-100 text-zinc-700">⚪ 已結案</span>',
+              pctChange,
+              takeaway: `已結案專案，累計回收 ${fmtTWD(ana.totalReturnedTWD)}，淨損益 ${ana.netProfitTWD >= 0 ? '+' : ''}${fmtTWD(ana.netProfitTWD)}（總報酬率 ${roiPct}%）。`
+            };
+          }
+          if (st === 'paused') {
+            return {
+              badge: '<span class="px-2 py-0.5 rounded-full text-[11px] font-medium bg-amber-100 text-amber-800">⏸️ 暫停分紅</span>',
+              pctChange,
+              takeaway: `目前為暫停分紅狀態，累計已回收 ${fmtTWD(ana.totalReturnedTWD)}（${ana.isPaidBack ? '已回本' : `尚差 ${fmtTWD(Math.max(0, ana.actualInvestedTWD - ana.totalReturnedTWD))} 回本`}），建議追蹤營運恢復進度。`
+            };
+          }
+          if (!ana.principalRecoverable) {
+            // Sunk principal / ongoing payout (e.g. store share)
+            if (ana.isPaidBack) {
+              if (ana.trendStatus === 'declining' || ana.trendStatus === 'below_target') {
+                const dropTxt = pctChange !== null && pctChange < 0 ? `較全期下滑 ${Math.abs(pctChange)}%` : '低於預期月分潤下限';
+                return {
+                  badge: `<span class="px-2 py-0.5 rounded-full text-[11px] font-medium bg-amber-100 text-amber-800">🟡 純利期 · 分潤下滑警示</span>`,
+                  pctChange,
+                  takeaway: `已進入無本純利期（第 ${ana.paybackMonthsActual || '—'} 個月回本），但近 6 個月月均分潤 ${dropTxt}（達標率 ${ana.payoutHitRatePct !== null ? ana.payoutHitRatePct + '%' : '—'}），建議留意營收成本；若遇增資或翻修，應以近 6 月均分潤重估回本期。`
+                };
+              }
+              return {
+                badge: '<span class="px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-100 text-emerald-800">🟢 純利期 · 穩健達標</span>',
+                pctChange,
+                takeaway: `已跨越零成本安全線進入純利期，近 6 個月年化殖利率 ${ana.currentAnnualizedYieldPct !== null ? ana.currentAnnualizedYieldPct + '%' : '—'}，現金流表現穩健，適合持續持有收息。`
+              };
+            }
+            // Not yet paid back
+            if (ana.trendStatus === 'stable' || ana.trendStatus === 'growing') {
+              const remTxt = ana.estimatedRemainingPaybackMonths !== null ? `預估再約 ${ana.estimatedRemainingPaybackMonths} 個月即可回本` : '正穩定累積回收中';
+              return {
+                badge: '<span class="px-2 py-0.5 rounded-full text-[11px] font-medium bg-blue-100 text-blue-800">🔵 穩健邁向回本</span>',
+                pctChange,
+                takeaway: `分潤表現穩健（達標率 ${ana.payoutHitRatePct !== null ? ana.payoutHitRatePct + '%' : '—'}、近 6 月年化殖利率 ${ana.currentAnnualizedYieldPct !== null ? ana.currentAnnualizedYieldPct + '%' : '—'}），${remTxt}進入純利期，屬回本進度中而非虧損，建議續持。`
+              };
+            }
+            if (ana.trendStatus === 'declining' || ana.trendStatus === 'below_target') {
+              return {
+                badge: '<span class="px-2 py-0.5 rounded-full text-[11px] font-medium bg-rose-100 text-rose-800">🔴 未回本 · 分潤偏低警示</span>',
+                pctChange,
+                takeaway: `尚未回本（尚差 ${fmtTWD(Math.max(0, ana.actualInvestedTWD - ana.totalReturnedTWD))}）且近期分潤低於預期下限（達標率 ${ana.payoutHitRatePct !== null ? ana.payoutHitRatePct + '%' : '—'}），建議檢視營運狀況與回本時程。`
+              };
+            }
+            return {
+              badge: '<span class="px-2 py-0.5 rounded-full text-[11px] font-medium bg-blue-100 text-blue-800">🔵 回本進行中</span>',
+              pctChange,
+              takeaway: `本金不可回收之持續分潤專案，目前累計回收 ${fmtTWD(ana.totalReturnedTWD)}／${fmtTWD(ana.actualInvestedTWD)}，待累積更多期分潤紀錄以評估動能趨勢。`
+            };
+          }
+          // Principal recoverable (e.g. one-time or periodic settlement project)
+          const matTxt = estMaturity ? `預計於 ${estMaturity} 結算` : '執行中';
+          const rangeTxt = kind === 'one_time' ? `（預估到期回收 ${fmtTWD(estReturnMin)} ～ ${fmtTWD(estReturnMax)}）` : '';
+          return {
+            badge: '<span class="px-2 py-0.5 rounded-full text-[11px] font-medium bg-indigo-100 text-indigo-800">🔵 本金可回收 · 執行中</span>',
+            pctChange,
+            takeaway: `${matTxt}${rangeTxt}；結算回收時建議優先抽回未回收自備本金，鎖定零成本後再評估是否滾動複投。`
+          };
+        };
+
+        const tagRowsHtml = tagSummaries.map((t) => {
+          const isSelected = reportInvTagFilter === t.tag;
+          const netCls = t.netCashflow >= 0 ? 'text-rose-700' : 'text-emerald-700';
+          return `
+            <tr data-report-inv-tag="${escapeHtml(t.tag)}" class="cursor-pointer transition-colors ${isSelected ? 'bg-zinc-900/[0.04]' : 'hover:bg-[#f7f7f5]'}">
+              <td class="py-2.5 px-2 font-sans font-semibold text-zinc-900 whitespace-nowrap">
+                <span class="inline-flex items-center gap-1.5">
+                  <span class="px-2 py-0.5 rounded-md text-[11px] ${isSelected ? 'bg-zinc-900 text-white' : 'bg-zinc-100 text-zinc-800'}">${escapeHtml(t.tag)}</span>
+                </span>
+              </td>
+              <td class="py-2.5 px-2 text-right text-zinc-600 whitespace-nowrap">${t.count} 筆（${t.activeCount} 進行／${t.closedCount} 結案）</td>
+              <td class="py-2.5 px-2 text-right text-zinc-700">${fmtTWD(t.totalInvested)}</td>
+              <td class="py-2.5 px-2 text-right text-zinc-700">${fmtTWD(t.peakOutflow)}</td>
+              <td class="py-2.5 px-2 text-right font-medium text-zinc-900">${fmtTWD(t.totalReturned)}</td>
+              <td class="py-2.5 px-2 text-right font-semibold ${netCls}">${t.netCashflow >= 0 ? '+' : ''}${fmtTWD(t.netCashflow)}</td>
+              <td class="py-2.5 px-2 text-right ${t.unrecovered > 0 ? 'text-amber-700 font-medium' : 'text-emerald-700 font-medium'}">${t.unrecovered > 0 ? fmtTWD(t.unrecovered) : '0（已回本）'}</td>
+              <td class="py-2.5 px-2 text-right font-semibold text-zinc-900">${t.moic !== null ? `${t.moic.toFixed(2)}x` : '—'}</td>
+            </tr>
+          `;
+        }).join('');
+
+        const cardsHtml = filteredItems.length === 0
+          ? '<div class="text-xs text-zinc-400 text-center py-6">此篩選條件下尚無實體投資專案</div>'
+          : filteredItems.map((it) => {
+            const { inv, ana, st, kind, tags, minR, maxR, estMaturity, estReturnMin, estReturnMax } = it;
+            const health = evaluateItemHealth(it);
+            const invested = ana.actualInvestedTWD || it.plannedP;
+            const paybackPct = invested > 0 ? Math.min(100, (ana.totalReturnedTWD / invested) * 100) : 0;
+            const netCls = ana.netProfitTWD >= 0 ? 'text-rose-700' : 'text-emerald-700';
+            const modeTag = ana.principalRecoverable
+              ? '<span class="px-1.5 py-0.5 rounded text-[10px] bg-indigo-50 text-indigo-700">本金可回收</span>'
+              : '<span class="px-1.5 py-0.5 rounded text-[10px] bg-amber-50 text-amber-800">沉沒本金·持續分潤</span>';
+            const customTagBadges = tags.map((t) => `<span class="px-1.5 py-0.5 rounded text-[10px] bg-zinc-100 text-zinc-600">${escapeHtml(t)}</span>`).join('');
+            const deltaHtml = health.pctChange !== null
+              ? `<span class="ml-1 text-[10px] font-semibold ${health.pctChange >= 0 ? 'text-rose-700' : 'text-amber-700'}">(${health.pctChange >= 0 ? '+' : ''}${health.pctChange}%)</span>`
+              : '';
+
+            const momentumBlock = (!ana.principalRecoverable || ana.payoutMonthsCount > 0)
+              ? `
+                <div class="p-3 rounded-lg bg-[#f7f7f5] hairline space-y-1">
+                  <div class="text-[11px] text-zinc-500">分潤動能與預期對比</div>
+                  <div class="text-xs font-mono-num text-zinc-800">全期月均 <strong>${ana.allTimeMonthlyAvgTWD ? fmtTWD(ana.allTimeMonthlyAvgTWD) : '—'}</strong> → 近6月 <strong>${ana.recent6mMonthlyAvgTWD ? fmtTWD(ana.recent6mMonthlyAvgTWD) : '—'}</strong>${deltaHtml}</div>
+                  <div class="text-[11px] font-mono-num text-zinc-500">近3月均 ${ana.recent3mMonthlyAvgTWD ? fmtTWD(ana.recent3mMonthlyAvgTWD) : '—'} · 預期下限 ${ana.expectedMinMonthlyTWD ? fmtTWD(ana.expectedMinMonthlyTWD) : '—'}</div>
+                  <div class="text-[11px] font-mono-num text-zinc-600">近6月達標率 <strong class="${ana.payoutHitRatePct !== null && ana.payoutHitRatePct >= 70 ? 'text-emerald-700' : 'text-amber-700'}">${ana.payoutHitRatePct !== null ? `${ana.payoutHitRatePct}%` : '—'}</strong></div>
+                </div>
+              `
+              : `
+                <div class="p-3 rounded-lg bg-[#f7f7f5] hairline space-y-1">
+                  <div class="text-[11px] text-zinc-500">週期結算與預估區間</div>
+                  <div class="text-xs font-mono-num text-zinc-800">設定報酬率 <strong>${minR}% ～ ${maxR}%</strong>（每 ${it.cyc} 月結）</div>
+                  <div class="text-[11px] font-mono-num text-zinc-500">${estMaturity ? `預計結算：${estMaturity}` : (st === 'closed' ? '已完成結算' : '尚未有投入日期紀錄')}</div>
+                  <div class="text-[11px] font-mono-num text-zinc-600">${st === 'active' && kind === 'one_time' ? `預估回收 ${fmtTWD(estReturnMin)} ～ ${fmtTWD(estReturnMax)}` : `回收倍數 ${ana.totalReturnMultiple !== null ? `${ana.totalReturnMultiple}x` : '—'}`}</div>
+                </div>
+              `;
+
+            return `
+              <div class="rounded-xl p-4 hairline bg-white space-y-3">
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                  <div class="flex flex-wrap items-center gap-1.5">
+                    <span class="text-sm font-semibold text-zinc-900">${escapeHtml(inv.name || '未命名專案')}</span>
+                    ${modeTag}
+                    ${customTagBadges}
+                  </div>
+                  ${health.badge}
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+                  <div class="p-3 rounded-lg bg-[#f7f7f5] hairline space-y-1">
+                    <div class="text-[11px] text-zinc-500">投入與回收</div>
+                    <div class="text-xs font-mono-num text-zinc-700">投入 <strong class="text-zinc-900">${fmtTWD(invested)}</strong></div>
+                    <div class="text-xs font-mono-num text-zinc-700">回收 <strong class="text-zinc-900">${fmtTWD(ana.totalReturnedTWD)}</strong></div>
+                    <div class="text-[11px] font-mono-num">淨損益 <strong class="${netCls}">${ana.netProfitTWD >= 0 ? '+' : ''}${fmtTWD(ana.netProfitTWD)}</strong>${ana.totalReturnMultiple !== null ? ` · ${ana.totalReturnMultiple}x` : ''}</div>
+                  </div>
+
+                  <div class="p-3 rounded-lg bg-[#f7f7f5] hairline space-y-1.5">
+                    <div class="flex items-center justify-between text-[11px] text-zinc-500">
+                      <span>回本進度</span>
+                      <span class="font-mono-num font-semibold ${ana.isPaidBack ? 'text-emerald-700' : 'text-zinc-800'}">${paybackPct.toFixed(1)}%</span>
+                    </div>
+                    <div class="h-2 w-full rounded-full bg-zinc-200/80 overflow-hidden">
+                      <div class="h-full rounded-full transition-all" style="width:${paybackPct.toFixed(1)}%;background-color:${ana.isPaidBack ? '#059669' : '#18181b'}"></div>
+                    </div>
+                    <div class="text-[11px] font-mono-num text-zinc-600">
+                      ${ana.isPaidBack
+                        ? `✅ 已回本${ana.paybackMonthsActual ? `（第 ${ana.paybackMonthsActual} 個月）` : ''}`
+                        : (ana.estimatedRemainingPaybackMonths !== null
+                          ? `尚差 ${fmtTWD(Math.max(0, invested - ana.totalReturnedTWD))} · 約剩 ${ana.estimatedRemainingPaybackMonths} 月`
+                          : (estMaturity ? `預計 ${estMaturity} 結算` : `尚差 ${fmtTWD(Math.max(0, invested - ana.totalReturnedTWD))}`))}
+                    </div>
+                  </div>
+
+                  ${momentumBlock}
+
+                  <div class="p-3 rounded-lg bg-[#f7f7f5] hairline space-y-1">
+                    <div class="text-[11px] text-zinc-500">營運時長與年化效率</div>
+                    <div class="text-xs font-mono-num text-zinc-800">營運 <strong>${ana.operatingMonths > 0 ? `${ana.operatingMonths} 個月（${ana.operatingYears} 年）` : '—'}</strong></div>
+                    <div class="text-[11px] font-mono-num text-zinc-600">全期年化淨報酬 <strong class="${ana.annualizedNetRoiPct !== null && ana.annualizedNetRoiPct >= 0 ? 'text-rose-700' : 'text-zinc-700'}">${ana.annualizedNetRoiPct !== null ? `${ana.annualizedNetRoiPct}%` : '—'}</strong></div>
+                    <div class="text-[11px] font-mono-num text-zinc-600">近6月年化殖利率 <strong class="text-rose-700">${ana.currentAnnualizedYieldPct !== null ? `${ana.currentAnnualizedYieldPct}%` : '—'}</strong></div>
+                  </div>
+                </div>
+
+                <div class="text-xs text-zinc-600 bg-zinc-50/80 rounded-lg px-3 py-2 hairline">
+                  <span class="font-medium text-zinc-800">健檢判讀：</span>${escapeHtml(health.takeaway)}
+                </div>
+              </div>
+            `;
+          }).join('');
+
+        container.innerHTML = `
+          <div class="bg-white rounded-xl p-6 hairline space-y-5">
+            <div class="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h3 class="text-sm font-semibold text-zinc-900">實體投資效益健檢總表</h3>
+                <p class="text-xs text-zinc-500 mt-0.5">依自訂標籤自動彙總資金循環，並逐筆追蹤回本進度、分潤動能、達標率與年化殖利率（零 AI 誤差）</p>
+              </div>
+              <div class="flex flex-wrap items-center gap-2">
+                <select id="report-inv-tag-filter" class="h-8 px-2.5 rounded-lg hairline bg-white text-xs font-medium text-zinc-700">
+                  <option value="all"${reportInvTagFilter === 'all' ? ' selected' : ''}>全部標籤 (${items.length})</option>
+                  ${tagSummaries.map((t) => `<option value="${escapeHtml(t.tag)}"${reportInvTagFilter === t.tag ? ' selected' : ''}>${escapeHtml(t.tag)} (${t.count})</option>`).join('')}
+                </select>
+                <select id="report-inv-status-filter" class="h-8 px-2.5 rounded-lg hairline bg-white text-xs font-medium text-zinc-700">
+                  <option value="all"${reportInvStatusFilter === 'all' ? ' selected' : ''}>全部狀態</option>
+                  <option value="active"${reportInvStatusFilter === 'active' ? ' selected' : ''}>進行中</option>
+                  <option value="closed"${reportInvStatusFilter === 'closed' ? ' selected' : ''}>已結算／結案</option>
+                  <option value="paused"${reportInvStatusFilter === 'paused' ? ' selected' : ''}>暫停分紅</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Layer 1: Overall KPIs -->
+            <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
+              <div class="p-3 rounded-lg bg-[#f7f7f5] hairline">
+                <div class="text-[11px] text-zinc-500">累計投入總額</div>
+                <div class="mt-1 text-sm font-semibold font-mono-num text-zinc-900">${fmtTWD(ovInvested)}</div>
+              </div>
+              <div class="p-3 rounded-lg bg-[#f7f7f5] hairline">
+                <div class="text-[11px] text-zinc-500">實質自備峰值</div>
+                <div class="mt-1 text-sm font-semibold font-mono-num text-zinc-900">${fmtTWD(ovPeak)}</div>
+                <div class="text-[10px] font-mono-num text-zinc-500">複投佔比 ${ovRecycledPct.toFixed(1)}%</div>
+              </div>
+              <div class="p-3 rounded-lg bg-[#f7f7f5] hairline">
+                <div class="text-[11px] text-zinc-500">累計回收總額</div>
+                <div class="mt-1 text-sm font-semibold font-mono-num text-zinc-900">${fmtTWD(ovReturned)}</div>
+              </div>
+              <div class="p-3 rounded-lg bg-[#f7f7f5] hairline">
+                <div class="text-[11px] text-zinc-500">整體淨現金流</div>
+                <div class="mt-1 text-sm font-semibold font-mono-num ${ovNetCls}">${ovNet >= 0 ? '+' : ''}${fmtTWD(ovNet)}</div>
+              </div>
+              <div class="p-3 rounded-lg bg-[#f7f7f5] hairline">
+                <div class="text-[11px] text-zinc-500">場內淨未回收本金</div>
+                <div class="mt-1 text-sm font-semibold font-mono-num ${ovUnrecovered > 0 ? 'text-amber-700' : 'text-emerald-700'}">${ovUnrecovered > 0 ? fmtTWD(ovUnrecovered) : '0（已全回本）'}</div>
+              </div>
+              <div class="p-3 rounded-lg bg-[#f7f7f5] hairline">
+                <div class="text-[11px] text-zinc-500">整體真實倍數</div>
+                <div class="mt-1 text-sm font-semibold font-mono-num text-zinc-900">${ovMoic !== null ? `${ovMoic.toFixed(2)}x MOIC` : '—'}</div>
+              </div>
+            </div>
+
+            <!-- Layer 2: Auto-Grouped by Tag Summary Table -->
+            <div class="space-y-2">
+              <div class="flex items-center justify-between">
+                <h4 class="text-xs font-semibold text-zinc-800">依標籤分組彙總（點擊任一標籤列可快速篩選下方明細）</h4>
+                ${reportInvTagFilter !== 'all' ? '<button type="button" id="report-inv-clear-tag" class="text-[11px] text-zinc-500 hover:text-zinc-900 underline">顯示全部標籤</button>' : ''}
+              </div>
+              <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr class="hairline-b text-zinc-500">
+                      <th class="py-2 px-2 font-medium">標籤</th>
+                      <th class="py-2 px-2 font-medium text-right">項目數</th>
+                      <th class="py-2 px-2 font-medium text-right">累計投入</th>
+                      <th class="py-2 px-2 font-medium text-right">自備峰值</th>
+                      <th class="py-2 px-2 font-medium text-right">累計回收</th>
+                      <th class="py-2 px-2 font-medium text-right">淨現金流</th>
+                      <th class="py-2 px-2 font-medium text-right">場內未回收本金</th>
+                      <th class="py-2 px-2 font-medium text-right">真實 MOIC</th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-zinc-900/[0.06] font-mono-num">${tagRowsHtml}</tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Layer 3: Per-Project Health Cards -->
+            <div class="space-y-2.5">
+              <h4 class="text-xs font-semibold text-zinc-800">逐筆專案效益健檢明細（共 ${filteredItems.length} 筆）</h4>
+              <div class="space-y-3">${cardsHtml}</div>
+            </div>
+          </div>
+        `;
+
+        const tagSel = document.getElementById('report-inv-tag-filter');
+        if (tagSel) {
+          tagSel.addEventListener('change', () => {
+            reportInvTagFilter = tagSel.value;
+            renderReportPhysicalInvestments();
+          });
+        }
+        const statusSel = document.getElementById('report-inv-status-filter');
+        if (statusSel) {
+          statusSel.addEventListener('change', () => {
+            reportInvStatusFilter = statusSel.value;
+            renderReportPhysicalInvestments();
+          });
+        }
+        const clearBtn = document.getElementById('report-inv-clear-tag');
+        if (clearBtn) {
+          clearBtn.addEventListener('click', () => {
+            reportInvTagFilter = 'all';
+            renderReportPhysicalInvestments();
+          });
+        }
+        container.querySelectorAll('tr[data-report-inv-tag]').forEach((tr) => {
+          tr.addEventListener('click', () => {
+            const clicked = tr.getAttribute('data-report-inv-tag');
+            reportInvTagFilter = reportInvTagFilter === clicked ? 'all' : clicked;
+            renderReportPhysicalInvestments();
+          });
+        });
       }
 
       function renderAll() {
@@ -14584,8 +14986,8 @@
           '可用 actions（僅在用戶明確要求異動/查頁/刷新/備份時加入，金額一律正數）：',
           'add_expense(date,time,title,category,currency,amount,account,deductNow,note) | add_income(date,name,category,currency,amount,account,depositNow,note) | add_fixed_expense(name,category,currency,amount,cycleMonths,account,note) | add_fixed_income(name,category,currency,amount,cycleMonths,account,note) | update_cash(bank,currency,amount,note) | transfer_cash(fromBank,toBank,currency,amount,note) | add_stock_trade(tradeType,date,market,symbol,name,shares,price,currency,fee,note) | set_budget(category,amount) | add_trip_expense(tripName,date,title,category,currency,amount,payerType,payerGroupName,note) | delete_expense(id,title) | delete_income(id,name) | navigate(tab) | refresh_quotes | export_backup。',
           `支出 category 限 15 類：${ALL_EXPENSE_CATEGORIES.join('、')}。優先套用 userHabits。`,
-          '【實體投資與現金規則】：summaryTWD.cash 與 activeInvExcluded 各自獨立（不可說現金包含進行中投資）。分析多輪可收回本金專案優先採用 invRecycling.byTag：列出實質最大自備本金(peakSelfFundedTWD)、場內淨自備風險(netUnrecoveredPrincipalTWD)、預計結算月(estMaturity，勿猜年底)、MOIC 與「結算優先抽回 netUnrecoveredPrincipalTWD 達成零成本」建議。分析沉沒本金(principalRecoverable:false)持續分潤專案勿談場內剩餘本金，改用 analytics：營運月數/年化報酬(opMonths/annNetRoiPct)、實際回本月數(paybackMonths)與倍數(multiple)、全期vs近6月vs近3月分潤動能與預期低標對比（trend 為 below_target/declining 須明確警示並報達標率 hitRatePct）、近6月年化殖利率(cur6mAnnYieldPct)，以及零成本期若遇增資翻修須以近期分潤重估。',
-          '【網頁已實作功能（勿誤判缺失）】：總覽/現金頁已有即時匯率與時間、原幣與折合台幣、各幣別預設扣款卡；頂部與股票頁已有更新報價按鈕與時間；支出頁已有月預算與超支紅字（budgetsConfigured:false 只代表用戶尚未填數字）；報告頁已有未記固定支出提醒與對比；旅遊無成員會自動建個人組；所有紀錄列皆有編輯/刪除按鈕與確認彈窗（delete id 僅供 AI 指令用）；設定頁有 JSON/Excel 備份、上次備份時間與雲端同步。'
+          '【實體投資與現金規則】：summaryTWD.cash 與 activeInvExcluded 各自獨立。回覆嚴禁印出英文欄位名（如 paybackMonths/expMinMoTWD/below_target），一律用自然繁體中文，並嚴格區分「單筆專案」、「單一標籤(invRecycling.byTag)」與「全帳本總計(invRecycling)」切勿混寫。可收回本金多輪專案用 byTag 報實質自備峰值、場內未回收自備本金、預計結算月(勿猜年底)、MOIC 與零成本抽回策略，且勿建議再投入已結案項目。沉沒本金(principalRecoverable:false)持續分潤專案用 analytics 報營運時長、回本進度、全期vs近6月月均分潤（附漲跌幅%）與預期月分潤下限對比、達標率、近6月年化殖利率；若未回本但近6月分潤穩定/達標率高/年化殖利率高屬「穩健邁向回本中」，不可誤判為營運虧損或建議退出；已回本但下滑須明確警示跌幅並提醒遇增資須以近期分潤重估。',
+          '【網頁已實作功能（勿誤判缺失）】：總覽/現金頁已有即時匯率與時間、原幣與折合台幣、各幣別預設扣款卡；頂部與股票頁已有更新報價按鈕與時間；支出頁已有月預算與超支紅字（budgetsConfigured:false 只代表用戶尚未填數字）；報告頁已有未記固定支出對比與「實體投資效益健檢總表」；旅遊無成員會自動建個人組；所有紀錄列皆有編輯/刪除按鈕；設定頁有 JSON/Excel 備份、上次備份時間與雲端同步。'
         ].join('\n');
       }
 
