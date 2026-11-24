@@ -1,4 +1,4 @@
-const CACHE_NAME = 'wealth-ledger-v13';
+const CACHE_NAME = 'wealth-ledger-v14';
 const ASSETS = [
   '/',
   '/index.html',
@@ -28,8 +28,9 @@ self.addEventListener('fetch', (event) => {
   if (url.origin !== self.location.origin) return;
   // Never cache live API endpoints (/api/quotes, /api/fx, /api/ai)
   if (url.pathname.startsWith('/api/')) return;
+  const isDoc = event.request.mode === 'navigate' || url.pathname === '/' || url.pathname === '/index.html';
   event.respondWith(
-    fetch(event.request)
+    fetch(isDoc ? new Request(event.request, { cache: 'no-cache' }) : event.request)
       .then((res) => {
         if (res && res.ok) {
           const copy = res.clone();

@@ -54,7 +54,13 @@ export default {
       return withCors(await handleAiProxy(request, env));
     }
 
-    return env.ASSETS.fetch(request);
+    const assetRes = await env.ASSETS.fetch(request);
+    if (url.pathname === '/' || url.pathname === '/index.html' || url.pathname === '/sw.js') {
+      const headers = new Headers(assetRes.headers);
+      headers.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+      return new Response(assetRes.body, { status: assetRes.status, statusText: assetRes.statusText, headers });
+    }
+    return assetRes;
   }
 };
 
@@ -339,15 +345,15 @@ async function handleAiProxy(request, env) {
       const hasImg = attachments.some((a) => String(a && a.mimeType || '').startsWith('image/'));
       const presetDefaults = {
         openai: 'gpt-4o-mini',
-        groq: 'qwen/qwen3.8-27b',
-        openrouter: hasImg ? 'nvidia/nemotron-3.5-super-vl:free' : 'openrouter/free',
+        groq: hasImg ? 'qwen/qwen3.8-27b' : 'llama-3.3-70b-versatile',
+        openrouter: hasImg ? 'nvidia/nemotron-3.5-super-vl:free' : 'meta-llama/llama-3.3-70b-instruct:free',
         mistral: hasImg ? 'pixtral-12b-2409' : 'mistral-small-latest'
       };
       const presetFallbacks = {
-        groq: hasImg ? [] : ['llama-3.3-70b-versatile', 'openai/gpt-oss-120b', 'openai/gpt-oss-20b'],
+        groq: hasImg ? [] : ['openai/gpt-oss-120b', 'openai/gpt-oss-20b', 'qwen/qwen3.8-27b'],
         openrouter: hasImg
           ? ['google/gemma-3-27b-it:free', 'mistralai/mistral-small-3.1-24b-instruct:free', 'qwen/qwen2.5-vl-32b-instruct:free']
-          : ['google/gemma-3-27b-it:free', 'meta-llama/llama-3.3-70b-instruct:free', 'mistralai/mistral-small-3.1-24b-instruct:free'],
+          : ['google/gemma-3-27b-it:free', 'mistralai/mistral-small-3.1-24b-instruct:free', 'openrouter/free'],
         mistral: ['pixtral-12b-2409']
       };
       const baseUrl = provider === 'custom'
@@ -360,11 +366,21 @@ async function handleAiProxy(request, env) {
         return jsonResp({ ok: false, error: '自訂 Base URL 必須使用 https://（本機測試限 localhost）' }, 400);
       }
       let primaryModel = String(body.model || presetDefaults[provider] || '').trim();
-      if (provider === 'groq' && (/llama-4-(scout|maverick)/i.test(primaryModel) || (hasImg && /gpt-oss|llama-3\.[13]|deepseek|qwq|qwen3-32b|kimi/i.test(primaryModel)))) {
-        primaryModel = 'qwen/qwen3.8-27b';
+      if (provider === 'groq') {
+        if (/llama-4-(scout|maverick)/i.test(primaryModel) || (hasImg && /gpt-oss|llama-3\.[13]|deepseek|qwq|qwen3-32b|kimi/i.test(primaryModel))) {
+          primaryModel = 'qwen/qwen3.8-27b';
+        } else if (!hasImg && /qwen3\.8-27b/i.test(primaryModel)) {
+          // qwen/qwen3.8-27b has a tight 7,000 ITPM free limit on Groq; use higher-TPM llama-3.3-70b-versatile for text-only
+          primaryModel = 'llama-3.3-70b-versatile';
+        }
       }
-      if (provider === 'openrouter' && (/qwen2\.5-vl-72b-instruct:free/i.test(primaryModel) || (hasImg && primaryModel === 'openrouter/free'))) {
-        primaryModel = hasImg ? 'nvidia/nemotron-3.5-super-vl:free' : 'openrouter/free';
+      if (provider === 'openrouter') {
+        if (/qwen2\.5-vl-72b-instruct:free/i.test(primaryModel) || (hasImg && primaryModel === 'openrouter/free')) {
+          primaryModel = hasImg ? 'nvidia/nemotron-3.5-super-vl:free' : 'meta-llama/llama-3.3-70b-instruct:free';
+        } else if (!hasImg && primaryModel === 'openrouter/free') {
+          // openrouter/free often routes to reasoning models that return empty content; try stable non-reasoning free models first
+          primaryModel = 'meta-llama/llama-3.3-70b-instruct:free';
+        }
       }
       if (hasImg && provider === 'mistral' && /mistral-small|open-mistral|codestral/i.test(primaryModel)) {
         primaryModel = 'pixtral-12b-2409';
@@ -580,7 +596,7 @@ async function callOpenAICompat({ apiKey, baseUrl, model, fallbackModels = [], s
       break;
     }
   }
-  throw new Error(primaryErr || lastErr);
+  throw new Error(primaryErr && lastErr && lastErr !== primaryErr ? `${primaryErr}（備援亦失敗：${lastErr}）` : (primaryErr || lastErr));
 }
 
 async function callAnthropic({ apiKey, model, systemPrompt, prompt, attachments }) {
