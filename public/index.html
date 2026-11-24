@@ -3896,6 +3896,11 @@
                     <div class="mt-0.5 font-semibold text-emerald-700">${fmtTWD(rStats.totalReturned)}</div>
                   </div>
                 </div>
+                <div class="rounded-lg bg-white hairline px-3 py-2 flex flex-wrap items-center justify-between gap-2 text-xs">
+                  ${rStats.netCashflow < 0
+                    ? `<span class="text-zinc-700">🛡️ 目前場內淨自備風險本金：<strong class="font-mono-num text-amber-800">${fmtTWD(-rStats.netCashflow)}</strong></span><span class="text-[11px] text-zinc-500">下次結算優先抽回此金額，即可達成 100% 零成本純利潤滾動</span>`
+                    : `<span class="text-emerald-700 font-medium">✓ 已達成 100% 零成本純利潤滾動！目前累計淨落袋 <strong class="font-mono-num">+${fmtTWD(rStats.netCashflow)}</strong></span><span class="text-[11px] text-zinc-500">原始自備本金已全數安全收回</span>`}
+                </div>
                 <div class="space-y-1.5">${barHtml}</div>
               </div>
             `;
@@ -14211,26 +14216,47 @@
           const isInvest = l.eventType === 'invest';
           const touch = (map, k) => {
             if (!k) return;
-            const cur = map.get(k) || { investedTWD: 0, returnedTWD: 0, count: 0 };
-            if (isInvest) cur.investedTWD += amt;
-            else cur.returnedTWD += amt;
+            const cur = map.get(k) || { investedTWD: 0, returnedTWD: 0, count: 0, lastInvestDate: '' };
+            if (isInvest) {
+              cur.investedTWD += amt;
+              if (l.date && String(l.date) > cur.lastInvestDate) cur.lastInvestDate = String(l.date);
+            } else {
+              cur.returnedTWD += amt;
+            }
             cur.count += 1;
             map.set(k, cur);
           };
           touch(invAggById, l.investmentId);
           touch(invAggByName, String(l.investmentName || '').trim());
         });
+        const addMonthsYM = (isoDate, months) => {
+          const m = String(isoDate || '').match(/^(\d{4})-(\d{2})/);
+          if (!m) return '';
+          const d = new Date(Number(m[1]), Number(m[2]) - 1 + Math.max(1, safeNum(months, 1)), 1);
+          return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        };
         const physicalInvestments = (state.investments || []).map((inv) => {
-          const agg = invAggById.get(inv.id) || invAggByName.get(String(inv.name || '').trim()) || { investedTWD: 0, returnedTWD: 0, count: 0 };
+          const agg = invAggById.get(inv.id) || invAggByName.get(String(inv.name || '').trim()) || { investedTWD: 0, returnedTWD: 0, count: 0, lastInvestDate: '' };
+          const st = typeof getInvestmentStatus === 'function' ? getInvestmentStatus(inv) : (inv.status || 'active');
+          const kind = typeof getInvestmentKind === 'function' ? getInvestmentKind(inv) : (inv.investKind || 'recurring');
+          const plannedP = Math.round(safeNum(inv.principal));
+          const cyc = Math.max(1, safeNum(inv.cycleMonths, 1));
+          const minR = safeNum(inv.minRate);
+          const maxR = safeNum(inv.maxRate);
+          const estMaturity = (st === 'active' && agg.lastInvestDate) ? addMonthsYM(agg.lastInvestDate, cyc) : '';
           return {
             id: inv.id,
             name: inv.name,
-            status: typeof getInvestmentStatus === 'function' ? getInvestmentStatus(inv) : (inv.status || 'active'),
-            investKind: typeof getInvestmentKind === 'function' ? getInvestmentKind(inv) : (inv.investKind || 'recurring'),
-            plannedPrincipalTWD: Math.round(safeNum(inv.principal)),
-            cycleMonths: safeNum(inv.cycleMonths, 1),
-            minRatePct: safeNum(inv.minRate),
-            maxRatePct: safeNum(inv.maxRate),
+            status: st,
+            investKind: kind,
+            plannedPrincipalTWD: plannedP,
+            cycleMonths: cyc,
+            minRatePct: minR,
+            maxRatePct: maxR,
+            expectedTotalReturnMinTWD: st === 'active' ? Math.round(plannedP * (1 + minR / 100)) : 0,
+            expectedTotalReturnMaxTWD: st === 'active' ? Math.round(plannedP * (1 + maxR / 100)) : 0,
+            lastInvestDate: agg.lastInvestDate || '',
+            estimatedMaturityMonth: estMaturity,
             tags: Array.isArray(inv.tags) ? inv.tags : [],
             sourceInvestmentId: inv.sourceInvestmentId || '',
             actualInvestedTWD: Math.round(agg.investedTWD),
@@ -14240,7 +14266,40 @@
             note: inv.note || ''
           };
         });
+        const packRecStats = (rs) => (rs ? {
+          totalInvestedTWD: Math.round(rs.totalInvested),
+          peakSelfFundedPrincipalTWD: Math.round(rs.peakOutflow),
+          recycledTotalTWD: Math.round(rs.recycledTotal),
+          recycledPct: Number(rs.recycledPct.toFixed(1)),
+          totalReturnedTWD: Math.round(rs.totalReturned),
+          netCashflowTWD: Math.round(rs.netCashflow),
+          netUnrecoveredPrincipalTWD: Math.max(0, Math.round(-rs.netCashflow)),
+          freshTotalTWD: Math.round(rs.freshTotal),
+          recycledPrincipalTotalTWD: Math.round(rs.recycledPrincipalTotal),
+          reinvestedProfitTotalTWD: Math.round(rs.reinvestedProfitTotal),
+          moic: rs.moic !== null ? Number(rs.moic.toFixed(2)) : null
+        } : null);
         const recStats = typeof computeInvestmentRecyclingStats === 'function' ? computeInvestmentRecyclingStats(state) : null;
+        // Build isolated per-tag recycling stats (e.g., 房地產 alone) so multi-tag portfolios never cross-contaminate
+        const invRecyclingByTag = {};
+        if (typeof computeInvestmentRecyclingStats === 'function') {
+          const tagToInvSet = new Map();
+          (state.investments || []).forEach((inv) => {
+            const tags = typeof normalizeInvTags === 'function' ? normalizeInvTags(inv.tags) : (Array.isArray(inv.tags) ? inv.tags : []);
+            tags.forEach((t) => {
+              if (!t || ['進行中', '已結算', '已結案', '暫停分紅'].includes(t)) return;
+              if (!tagToInvSet.has(t)) tagToInvSet.set(t, { ids: new Set(), names: new Set() });
+              tagToInvSet.get(t).ids.add(inv.id);
+              if (inv.name) tagToInvSet.get(t).names.add(String(inv.name).trim());
+            });
+          });
+          tagToInvSet.forEach((sets, tag) => {
+            const subLogs = invLogs.filter((l) => sets.ids.has(l.investmentId) || sets.names.has(String(l.investmentName || '').trim()));
+            if (subLogs.length > 0) {
+              invRecyclingByTag[tag] = packRecStats(computeInvestmentRecyclingStats({ investmentLogs: subLogs }));
+            }
+          });
+        }
         const recentInvestmentLogs = invLogs
           .toSorted((a, b) => String(b.date || '').localeCompare(String(a.date || '')))
           .slice(0, 25)
@@ -14286,19 +14345,7 @@
             actualRecordedExpenseThisMonthTWD: Math.round(totals.randomExpenseThisMonthTWD)
           },
           physicalInvestments,
-          investmentRecyclingSummary: recStats ? {
-            totalInvestedTWD: Math.round(recStats.totalInvested),
-            peakSelfFundedPrincipalTWD: Math.round(recStats.peakOutflow),
-            recycledTotalTWD: Math.round(recStats.recycledTotal),
-            recycledPct: Number(recStats.recycledPct.toFixed(1)),
-            totalReturnedTWD: Math.round(recStats.totalReturned),
-            netCashflowTWD: Math.round(recStats.netCashflow),
-            netUnrecoveredPrincipalTWD: Math.max(0, Math.round(-recStats.netCashflow)),
-            freshTotalTWD: Math.round(recStats.freshTotal),
-            recycledPrincipalTotalTWD: Math.round(recStats.recycledPrincipalTotal),
-            reinvestedProfitTotalTWD: Math.round(recStats.reinvestedProfitTotal),
-            moic: recStats.moic !== null ? Number(recStats.moic.toFixed(2)) : null
-          } : null,
+          investmentRecyclingSummary: recStats ? { ...packRecStats(recStats), byTag: invRecyclingByTag } : null,
           recentInvestmentLogs,
           fixedExpenses: fixedExpensesList,
           fixedIncomes: fixedIncomesList,
@@ -14343,7 +14390,7 @@
           `支出 category 必須從以下 15 類擇一：${ALL_EXPENSE_CATEGORIES.join('、')}。`,
           '【實體投資與現金統計口徑規則（嚴禁算錯或混為一談）】：',
           '- summaryTWD.cashTWD 是銀行目前獨立登錄的可用現金；summaryTWD.plannedInvestmentsExcludedTWD 是另計的進行中實體投資本金，兩者各自獨立（且歷史投資紀錄多為補登），嚴禁將進行中投資本金說成「包含在 cashTWD 裡導致現金只剩差額」。',
-          '- 分析實體投資（如房地產多輪滾動）時，必須優先直接採用 investmentRecyclingSummary 算好的精準數字：peakSelfFundedPrincipalTWD（口袋實質最大自備本金）、recycledTotalTWD（滾動複投金額）、netUnrecoveredPrincipalTWD（目前仍在場內承擔風險的淨自備本金）、netCashflowTWD（累計總回收減累計總投入），並結合 recentInvestmentLogs 的時間順序還原每一輪的補差額或先落袋金額，切勿自行心算重複加總。',
+          '- 分析實體投資（如某個標籤「房地產」的多輪滾動）時，若 investmentRecyclingSummary.byTag 中有該標籤，請**直接採用該標籤的獨立統計**，並明確列出：(1) 實質最大自備本金（peakSelfFundedPrincipalTWD）與各輪補差額／先落袋金額；(2) 目前仍在場內承擔風險的淨自備本金（netUnrecoveredPrincipalTWD）與純利潤滾動部位；(3) 進行中專案的精準預計結算月份（直接採用 estimatedMaturityMonth，嚴禁猜測年底）與預估回收區間（expectedTotalReturnMinTWD～MaxTWD）；(4) 以實質自備本金計算的報酬倍數（moic）以及「下次結算優先抽回 netUnrecoveredPrincipalTWD 達成 100% 零成本純利潤滾動」的具體風險控管建議。',
           '【網頁介面已實作功能清單（回答產品評價或優化建議時必須先核對，嚴禁將以下已存在功能誤報為缺失）】：',
           '- 總覽與銀行現金頁：皆已直接顯示各幣別即時匯率與更新時間、每個帳戶的原幣餘額與折合台幣 (TWD) 及佔比，且支援「各幣別預設扣款銀行卡」設定與一鍵刷新匯率。',
           '- 股票頁與頂部工具列：頂部常駐「更新報價」按鈕，股票頁標題下方已顯示即時更新時間與同步筆數，並支援批次調整現價與買賣／配息紀錄。',
