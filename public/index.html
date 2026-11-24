@@ -2,7 +2,7 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <meta name="theme-color" content="#18181b" />
   <link rel="manifest" href="/manifest.json" />
   <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png" />
@@ -37,10 +37,20 @@
       scrollbar-width: thin;
       scrollbar-color: rgba(24, 24, 27, 0.22) transparent;
     }
+    html {
+      -webkit-text-size-adjust: 100%;
+      text-size-adjust: 100%;
+      touch-action: manipulation;
+      overflow-x: clip;
+    }
     body {
       font-family: 'Inter', 'Noto Sans TC', system-ui, -apple-system, sans-serif;
       background-color: var(--bg-canvas);
       color: var(--ink-primary);
+      overflow-x: clip;
+    }
+    button, a, label, input, select, textarea {
+      touch-action: manipulation;
     }
     h1, h2, h3 {
       text-wrap: balance;
@@ -91,6 +101,12 @@
       box-shadow: 0 0 0 2px rgba(24, 24, 27, 0.18);
     }
     @media (max-width: 1023px) {
+      /* Prevent iOS Safari / mobile browsers from auto-zooming on input focus (requires >= 16px) */
+      input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]),
+      select,
+      textarea {
+        font-size: 16px !important;
+      }
       main {
         padding-bottom: calc(5.5rem + env(safe-area-inset-bottom, 0px)) !important;
       }
@@ -1890,7 +1906,7 @@
   </button>
 
   <div id="ai-copilot-drawer" class="fixed inset-0 z-50 hidden justify-end modal-backdrop">
-    <div class="bg-white w-full max-w-md h-full shadow-2xl hairline-l flex flex-col relative">
+    <div class="bg-white w-full max-w-md h-[100dvh] max-h-full shadow-2xl hairline-l flex flex-col relative">
       <!-- Gemini-style Minimal Header -->
       <div class="px-3.5 py-2.5 hairline-b flex items-center justify-between gap-2 bg-white shrink-0 relative z-20">
         <button id="btn-ai-copilot-go-settings" type="button" title="切換 AI 模型與 API Key 設定" class="btn-focus min-w-0 inline-flex items-center gap-1.5 px-2 py-1 rounded-full hover:bg-zinc-100 transition-colors text-left">
