@@ -614,6 +614,8 @@
               </div>
             </div>
 
+            <div id="cash-fx-bar" class="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-[#f7f7f5] hairline px-3.5 py-2 text-[11px] font-mono-num text-zinc-600"></div>
+
             <div id="cash-currency-pills" class="grid grid-cols-2 sm:grid-cols-4 gap-3"></div>
 
             <div class="overflow-x-auto">
@@ -1127,6 +1129,9 @@
             <!-- 4 Health KPI Cards -->
             <div id="report-health-cards" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3"></div>
           </div>
+
+          <!-- Fixed vs Actual Expense Comparison & Unpaid Fixed Bills Reminder -->
+          <div id="report-fixed-vs-actual-panel"></div>
 
           <!-- Expense Structure + Single Category Trend -->
           <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -1765,6 +1770,7 @@
               <div>
                 <h3 class="text-sm font-semibold text-zinc-900">JSON 完整備份與還原</h3>
                 <p class="text-xs text-zinc-500 mt-1">保留所有持股、現金、實體投資、固定收支、隨機支出與歷史快照，網頁升級無需重填</p>
+                <div id="backup-status-bar" class="mt-2 text-[11px] text-zinc-500"></div>
               </div>
               <div class="flex flex-wrap gap-2">
                 <button id="btn-export-json" type="button" class="btn-focus h-8 px-3.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-medium transition-colors duration-150">下載 JSON 備份檔</button>
@@ -3265,6 +3271,13 @@
           btn.disabled = false;
           btn.innerHTML = originalHtml;
         }
+        const nowIso = new Date().toISOString();
+        if (fxUpdated) {
+          try { localStorage.setItem('wealth_last_fx_sync_at', nowIso); } catch (e) {}
+        }
+        if (stockUpdatedCount > 0) {
+          try { localStorage.setItem('wealth_last_quote_sync_at', nowIso); } catch (e) {}
+        }
         if (stockUpdatedCount > 0 || fxUpdated) {
           saveState();
           renderAll();
@@ -3331,13 +3344,30 @@
         renderAll();
       }
 
+      function formatFxSyncTimeLabel() {
+        try {
+          const iso = localStorage.getItem('wealth_last_fx_sync_at') || '';
+          if (!iso) return '';
+          const d = new Date(iso);
+          if (Number.isNaN(d.getTime())) return '';
+          const mm = String(d.getMonth() + 1).padStart(2, '0');
+          const dd = String(d.getDate()).padStart(2, '0');
+          const hh = String(d.getHours()).padStart(2, '0');
+          const mi = String(d.getMinutes()).padStart(2, '0');
+          return `${mm}/${dd} ${hh}:${mi}`;
+        } catch (e) {
+          return '';
+        }
+      }
+
       // Overview Rendering
       function renderOverview(totals) {
         const nw = totals.netWorthTWD || 1;
-        const fxText = `USD ${safeNum(state.fx.USD).toFixed(2)} · HKD ${safeNum(state.fx.HKD).toFixed(2)} · CNY ${safeNum(state.fx.CNY).toFixed(2)}`;
+        const fxBaseText = `USD ${safeNum(state.fx.USD).toFixed(2)} · HKD ${safeNum(state.fx.HKD).toFixed(2)} · CNY ${safeNum(state.fx.CNY).toFixed(2)}${state.fx.JPY ? ` · JPY ${safeNum(state.fx.JPY).toFixed(4)}` : ''}`;
+        const fxSyncLabel = formatFxSyncTimeLabel();
         document.getElementById('kpi-total-networth').textContent = fmtTWD(totals.netWorthTWD);
-        document.getElementById('kpi-fx-hint').textContent = fxText;
-        document.getElementById('sidebar-fx-summary').textContent = fxText;
+        document.getElementById('kpi-fx-hint').textContent = fxSyncLabel ? `${fxBaseText} · 匯率更新 ${fxSyncLabel}` : fxBaseText;
+        document.getElementById('sidebar-fx-summary').textContent = fxBaseText;
 
         document.getElementById('kpi-total-cash').textContent = fmtTWD(totals.cashTWD);
         document.getElementById('kpi-cash-pct').textContent = ((totals.cashTWD / nw) * 100).toFixed(1) + '%';
@@ -3645,6 +3675,18 @@
       // Cash Rendering
       function renderCash(totals) {
         const rateOf = (cur) => (cur === 'TWD' ? 1 : safeNum(state.fx[cur], 1));
+        const fxBar = document.getElementById('cash-fx-bar');
+        if (fxBar) {
+          const fxRatesStr = getAllCurrencies()
+            .filter((code) => code !== 'TWD' && (['USD', 'HKD', 'CNY', 'JPY'].includes(code) || (totals.cashByCurrency[code] || 0) > 0))
+            .map((code) => `${code} ${safeNum(state.fx[code], 1).toFixed(code === 'JPY' ? 4 : 2)}`)
+            .join(' · ');
+          const syncLbl = formatFxSyncTimeLabel();
+          fxBar.innerHTML = `
+            <span>💱 即時對台幣匯率：${escapeHtml(fxRatesStr || 'TWD 1.00')}${syncLbl ? ` <span class="text-zinc-400">（更新於 ${escapeHtml(syncLbl)}）</span>` : ' <span class="text-zinc-400">（點右方更新即時匯率）</span>'}</span>
+            <button type="button" data-action="refresh-fx-now" class="font-sans text-[11px] font-medium text-zinc-700 hover:text-zinc-900 underline">🔄 刷新匯率</button>
+          `;
+        }
         const curList = getAllCurrencies()
           .filter((code) => ['TWD', 'USD', 'HKD', 'CNY'].includes(code) || (totals.cashByCurrency[code] || 0) > 0 || !DEFAULT_FOREIGN_CURRENCIES.includes(code))
           .map((code) => ({ code, label: currencyName(code) }));
@@ -5471,6 +5513,29 @@
         ].join('\n');
       }
 
+      function getUnpaidFixedExpensesThisMonth() {
+        const curYm = todayISO().slice(0, 7);
+        const rateOf = (cur) => (cur === 'TWD' ? 1 : safeNum(state.fx && state.fx[cur], 1));
+        const thisMonthExps = (state.randomExpenses || []).filter((e) => String(e.date || '').startsWith(curYm));
+        return (state.fixedExpenses || [])
+          .filter((f) => f && f.status !== 'inactive' && safeNum(f.amount) > 0)
+          .filter((f) => {
+            const fname = String(f.name || '').trim().toLowerCase();
+            if (!fname) return false;
+            return !thisMonthExps.some((e) => {
+              const et = String(e.title || '').trim().toLowerCase();
+              if (!et) return false;
+              return et === fname || et.includes(fname) || fname.includes(et);
+            });
+          })
+          .map((f) => {
+            const cur = f.currency || 'TWD';
+            const cycle = Math.max(1, safeNum(f.cycleMonths, 1));
+            const monthlyTWD = (safeNum(f.amount) * rateOf(cur)) / cycle;
+            return { ...f, currency: cur, monthlyTWD };
+          });
+      }
+
       function renderReports(totals) {
         const panel = document.getElementById('tab-reports');
         if (!panel) return;
@@ -5535,6 +5600,62 @@
               <div class="mt-1 text-[11px] text-zinc-500 font-mono-num">月均結餘 ${r.avgMonthlyNet >= 0 ? '+' : ''}${fmtTWD(r.avgMonthlyNet)}（${r.monthCount} 個月）</div>
             </div>
           `;
+        }
+
+        // 1.5 Fixed vs Actual Comparison + Unpaid Fixed Bills This Month
+        const fixedPanel = document.getElementById('report-fixed-vs-actual-panel');
+        if (fixedPanel) {
+          const curYm = todayISO().slice(0, 7);
+          const unpaidList = getUnpaidFixedExpensesThisMonth();
+          const actualTWD = safeNum(totals.randomExpenseThisMonthTWD);
+          const unpaidTWD = unpaidList.reduce((s, f) => s + f.monthlyTWD, 0);
+          const projectedTWD = Math.max(actualTWD + unpaidTWD, safeNum(totals.estimatedMonthlyExpenseTWD));
+          const actualPct = projectedTWD > 0 ? Math.min(100, (actualTWD / projectedTWD) * 100) : 0;
+          const unpaidPct = projectedTWD > 0 ? Math.min(100 - actualPct, (unpaidTWD / projectedTWD) * 100) : 0;
+
+          if ((state.fixedExpenses || []).filter((f) => f.status !== 'inactive').length === 0) {
+            fixedPanel.replaceChildren();
+          } else {
+            const unpaidHtml = unpaidList.length > 0
+              ? `
+                <div class="space-y-1.5 pt-2 hairline-t">
+                  <div class="text-xs font-medium text-amber-900">📌 本月（${escapeHtml(curYm)}）尚未登記扣款的固定支出（共 ${unpaidList.length} 筆，月均約 ${fmtTWD(unpaidTWD)}）：</div>
+                  <div class="flex flex-wrap gap-2">
+                    ${unpaidList.map((f) => `
+                      <div class="inline-flex items-center gap-2 rounded-lg bg-amber-50/70 border border-amber-200/80 px-2.5 py-1.5 text-xs">
+                        <span class="font-medium text-zinc-900">${escapeHtml(f.name)}</span>
+                        <span class="font-mono-num text-zinc-600">${escapeHtml(f.currency)} ${safeNum(f.amount).toLocaleString('zh-TW')}</span>
+                        <button type="button" data-action="record-fixed-exp" data-id="${escapeHtml(f.id)}" class="px-2 py-0.5 rounded bg-zinc-900 hover:bg-zinc-800 text-white text-[10px] font-medium">立即登記扣款</button>
+                      </div>
+                    `).join('')}
+                  </div>
+                </div>
+              `
+              : `<div class="pt-2 hairline-t text-xs text-emerald-700">✓ 本月（${escapeHtml(curYm)}）所有啟用中的固定支出皆已登記入帳，無漏記項目。</div>`;
+
+            fixedPanel.innerHTML = `
+              <div class="bg-white rounded-xl p-5 hairline space-y-3">
+                <div class="flex flex-wrap items-baseline justify-between gap-2">
+                  <div>
+                    <h3 class="text-sm font-semibold text-zinc-900">本月「純記帳支出」vs「含固定支出預估總支出」對比</h3>
+                    <p class="text-xs text-zinc-500 mt-0.5">避免尚未入帳的房租、保險或定期帳單導致本月支出看起來偏低</p>
+                  </div>
+                  <div class="text-xs font-mono-num text-zinc-600">
+                    純記帳 <strong class="text-zinc-900">${fmtTWD(actualTWD)}</strong> ／ 含未記固定支出預估 <strong class="text-rose-700">${fmtTWD(projectedTWD)}</strong>
+                  </div>
+                </div>
+                <div class="h-2.5 w-full rounded-full bg-zinc-100 overflow-hidden flex">
+                  <div style="width:${actualPct.toFixed(1)}%;background-color:#18181b" title="本月已記帳支出 ${fmtTWD(actualTWD)}"></div>
+                  ${unpaidPct > 0 ? `<div style="width:${unpaidPct.toFixed(1)}%;background-color:#f59e0b" title="本月尚未登記之固定支出 ${fmtTWD(unpaidTWD)}"></div>` : ''}
+                </div>
+                <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-zinc-500 font-mono-num">
+                  <span class="inline-flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-zinc-900"></span><span class="font-sans">已記帳支出</span> ${fmtTWD(actualTWD)} (${actualPct.toFixed(0)}%)</span>
+                  <span class="inline-flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-amber-500"></span><span class="font-sans">本月尚未登記固定項目</span> ${fmtTWD(unpaidTWD)}</span>
+                </div>
+                ${unpaidHtml}
+              </div>
+            `;
+          }
         }
 
         // 2. Expense Category Ranking + Single Category Trend
@@ -5831,6 +5952,7 @@
         renderReports(totals);
         if (typeof renderTrips === 'function') renderTrips();
         renderSettings();
+        if (typeof renderBackupStatus === 'function') renderBackupStatus();
       }
 
       // Modal Helpers
@@ -8200,8 +8322,42 @@
         URL.revokeObjectURL(url);
       }
 
+      function recordManualBackup(format = 'JSON') {
+        try {
+          localStorage.setItem('wealth_last_backup_at', new Date().toISOString());
+          localStorage.setItem('wealth_last_backup_fmt', String(format || 'JSON'));
+        } catch (e) {}
+        renderBackupStatus();
+      }
+
+      function renderBackupStatus() {
+        const el = document.getElementById('backup-status-bar');
+        if (!el) return;
+        let iso = '';
+        let fmt = 'JSON';
+        try {
+          iso = localStorage.getItem('wealth_last_backup_at') || '';
+          fmt = localStorage.getItem('wealth_last_backup_fmt') || 'JSON';
+        } catch (e) {}
+        if (!iso) {
+          el.innerHTML = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200/80">⏰ 尚未手動匯出過離線備份，建議每週下載 1 次 JSON 留存</span>`;
+          return;
+        }
+        const d = new Date(iso);
+        if (Number.isNaN(d.getTime())) return;
+        const days = Math.floor((Date.now() - d.getTime()) / 86400000);
+        const dtStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+        if (days >= 7) {
+          el.innerHTML = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200/80">⏰ 上次備份：${escapeHtml(dtStr)}（${escapeHtml(fmt)}，已超過 ${days} 天，建議重新備份）</span>`;
+        } else {
+          const dayNote = days === 0 ? '今天' : `${days} 天前`;
+          el.innerHTML = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200/80">✓ 上次備份：${escapeHtml(dtStr)}（${escapeHtml(fmt)} · ${dayNote}）</span>`;
+        }
+      }
+
       function exportJSON() {
         downloadJson({ ...state, exportedAt: new Date().toISOString() }, `wealth_backup_${todayISO()}.json`);
+        recordManualBackup('JSON');
         showToast('已下載 JSON 備份檔');
       }
 
@@ -8307,6 +8463,7 @@
         ]), '匯率設定');
 
         XLSX.writeFile(wb, `wealth_portfolio_${todayISO()}.xlsx`);
+        recordManualBackup('Excel');
         showToast('已下載多工作表 Excel 檔');
       }
 
@@ -9081,6 +9238,7 @@
           const t = (state.stockTrades || []).find((x) => x.id === id);
           if (t) openConfirmModal('刪除股票交易紀錄', '確定要刪除此筆交易紀錄嗎？', () => { state.stockTrades = (state.stockTrades || []).filter((x) => x.id !== id); saveState(); renderAll(); showToast('已刪除股票交易紀錄'); });
         }
+        else if (action === 'refresh-fx-now') { refreshLivePricesAndFX(false); }
         else if (action === 'set-default-cash') { setDefaultDebitAccount(id, true); }
         else if (action === 'unset-default-cash') { setDefaultDebitAccount(id, false); }
         else if (action === 'edit-cash') { const item = state.cash.find((x) => x.id === id); if (item) openCashModal(item); }
@@ -13562,11 +13720,14 @@
       }
 
       function openTripExpenseModal(trip, editExp = null, memberSubmitMode = false) {
-        const groups = trip.groups || [];
-        if (groups.length === 0) {
-          showToast('請先新增至少 1 個參與家庭／成員');
-          return;
+        if (!Array.isArray(trip.groups)) trip.groups = [];
+        if (trip.groups.length === 0) {
+          trip.groups.push({ id: uid('tg'), name: '個人／我家', adults: 1, children: 0, prepaid: 0 });
+          if (typeof persistTrip === 'function') persistTrip(trip, true);
+          else { saveState(); renderAll(); }
+          showToast('此旅程尚無成員，已自動建立預設組別「個人／我家」');
         }
+        const groups = trip.groups;
         const isEdit = Boolean(editExp);
         const e = editExp || {
           date: todayISO(),
@@ -13574,7 +13735,7 @@
           category: '餐飲',
           currency: 'TWD',
           amount: '',
-          payerType: memberSubmitMode ? 'member' : 'pool',
+          payerType: (memberSubmitMode || groups.length === 1) ? 'member' : 'pool',
           payerGroupId: memberSubmitMode ? (tripMyGroupId || groups[0].id) : groups[0].id,
           payerMemberName: '',
           splitMode: 'weighted',
@@ -13954,10 +14115,11 @@
       function buildAiCopilotContext() {
         const totals = computeTotals(state);
         const curYm = todayISO().slice(0, 7);
+        const rateOf = (cur) => (cur === 'TWD' ? 1 : safeNum(state.fx && state.fx[cur], 1));
         const catTotals = {};
         (state.randomExpenses || []).forEach((e) => {
           if (!String(e.date || '').startsWith(curYm)) return;
-          const r = e.currency === 'TWD' ? 1 : safeNum(state.fx && state.fx[e.currency], 1);
+          const r = rateOf(e.currency);
           const cat = e.category || '其他隨機支出';
           catTotals[cat] = (catTotals[cat] || 0) + safeNum(e.amount) * r;
         });
@@ -13969,9 +14131,24 @@
           .toSorted((a, b) => String(b.date || '').localeCompare(String(a.date || '')))
           .slice(0, 5)
           .map((r) => ({ id: r.id, date: r.date, name: r.name, category: r.category, currency: r.currency, amount: r.actualAmount, account: r.account }));
+        const unpaidFixed = (typeof getUnpaidFixedExpensesThisMonth === 'function' ? getUnpaidFixedExpensesThisMonth() : [])
+          .map((f) => ({ name: f.name, category: f.category, currency: f.currency, amount: f.amount, monthlyTWD: Math.round(f.monthlyTWD) }));
+        let fxLastSyncedAt = '';
+        let quoteLastSyncedAt = '';
+        let lastBackupAt = '';
+        try {
+          fxLastSyncedAt = localStorage.getItem('wealth_last_fx_sync_at') || '';
+          quoteLastSyncedAt = localStorage.getItem('wealth_last_quote_sync_at') || '';
+          lastBackupAt = localStorage.getItem('wealth_last_backup_at') || '';
+        } catch (e) {}
+        const b = state.budgets || {};
+        const budgetsConfigured = Boolean(safeNum(b.monthlyTotal) > 0 || (b.byCategory && Object.values(b.byCategory).some((v) => safeNum(v) > 0)));
         return {
           today: todayISO(),
           fx: state.fx || {},
+          fxLastSyncedAt: fxLastSyncedAt || '尚未於此裝置手動刷新（使用最新已存匯率）',
+          quoteLastSyncedAt: quoteLastSyncedAt || '尚未於此裝置手動刷新',
+          lastBackupAt: lastBackupAt || '尚未於此裝置手動匯出離線檔（已登入 Google 時會自動雲端同步）',
           summaryTWD: {
             netWorthTWD: Math.round(totals.netWorthTWD),
             cashTWD: Math.round(totals.cashTWD),
@@ -13983,9 +14160,17 @@
             estimatedMonthlyExpenseTWD: Math.round(totals.estimatedMonthlyExpenseTWD),
             actualRecordedExpenseThisMonthTWD: Math.round(totals.randomExpenseThisMonthTWD)
           },
+          unpaidFixedExpensesThisMonth: unpaidFixed,
           thisMonthByCategoryTWD: Object.fromEntries(Object.entries(catTotals).map(([k, v]) => [k, Math.round(v)])),
-          budgets: state.budgets || {},
-          cashAccounts: (state.cash || []).map((c) => ({ bank: c.bank, currency: c.currency, amount: c.amount })),
+          budgets: b,
+          budgetsConfigured,
+          cashAccounts: (state.cash || []).map((c) => ({
+            bank: c.bank,
+            currency: c.currency,
+            amount: c.amount,
+            twdAmount: Math.round(safeNum(c.amount) * rateOf(c.currency)),
+            isDefaultDebit: Boolean(c.isDefaultDebit)
+          })),
           stocks: (state.stocks || []).map((s) => ({ market: s.market, symbol: s.symbol, name: s.name, shares: s.shares, avgCost: s.avgCost, currentPrice: s.currentPrice, currency: s.currency })),
           recentExpenses: recentExp,
           recentIncomes: recentInc,
@@ -14014,6 +14199,16 @@
           '12. {"type":"navigate","tab":"overview|stocks|cash|investments|income|expenses|trips|reports|history|migrate|settings"}',
           '13. {"type":"refresh_quotes"} 或 {"type":"export_backup"}',
           `支出 category 必須從以下 15 類擇一：${ALL_EXPENSE_CATEGORIES.join('、')}。`,
+          '【網頁介面已實作功能清單（回答產品評價或優化建議時必須先核對，嚴禁將以下已存在功能誤報為缺失）】：',
+          '- 總覽與銀行現金頁：皆已直接顯示各幣別即時匯率與更新時間、每個帳戶的原幣餘額與折合台幣 (TWD) 及佔比，且支援「各幣別預設扣款銀行卡」設定與一鍵刷新匯率。',
+          '- 股票頁與頂部工具列：頂部常駐「更新報價」按鈕，股票頁標題下方已顯示即時更新時間與同步筆數，並支援批次調整現價與買賣／配息紀錄。',
+          '- 支出頁：已有「月度預算管理」介面（可設每月總預算與 15 個分類各自上限，超支自動顯示進度條與紅色警示）；若摘要中 budgets 為空，僅代表使用者尚未填寫數字，不代表系統缺乏預算功能。',
+          '- 財務報告頁：已有本月「純記帳支出 vs 含固定支出預估總支出」對比條、本月尚未登記扣款的固定支出提醒清單（含一鍵登記扣款）、緊急預備金安全墊、被動收入覆蓋率、類別趨勢圖。',
+          '- 旅遊分帳頁：支援揪團家庭權重分攤與 LINE 分享；若旅程尚無成員，新增開銷時會自動建立「個人／我家」並預設個人支付，不會卡住。',
+          '- 所有明細與歷史流水：網頁上每一筆支出、收入、股票、現金、流水列皆已內建「編輯」與「刪除」按鈕及防誤刪確認彈窗（上方 delete_expense 需帶 id 僅是供你 AI 執行程式指令的格式，使用者在網頁上完全不需要知道 id）。',
+          '- 匯率與備份頁：支援 Firebase 雲端即時同步、手動一鍵下載 JSON 與 Excel (.xlsx) 備份、匯入還原，並顯示「上次手動備份時間」與超過 7 天提醒。',
+          '- AI 能力：支援多組免費 API Key 輪替冷卻、逐張獨立看圖辨識（最多 8 張）、剪貼簿貼圖、語音記帳、單張重跑與自動撤銷。',
+          '當使用者問「網頁或帳本有什麼可以優化」時，請區分「使用者個人財務數據上的改善建議（例如未設預算、有未記固定支出、現金比例過高）」與「真正尚未實作的新產品功能」，絕不可捏造或誤判上述已實作的介面功能為缺失。',
           '請優先參考帳本即時摘要中的 userHabits（使用者歷史習慣：店家→分類/帳戶/幣別）來填入最符合使用者習慣的 category、account 與 currency。',
           '如果圖片或文字包含多筆明細，請在 actions 陣列放入多筆對應的 action。金額一律用正數。'
         ].join('\n');
