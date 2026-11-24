@@ -2399,6 +2399,189 @@
           moic
         };
       }
+
+      // Generic per-project investor analytics (works dynamically for ALL physical/business investments)
+      function computeSingleInvestmentAnalytics(inv, allLogs = null) {
+        const logsPool = Array.isArray(allLogs) ? allLogs : (state.investmentLogs || []);
+        const logs = logsPool
+          .filter((l) => l && safeNum(l.amountTWD) > 0 && (l.investmentId === inv.id || (inv.name && l.investmentName === inv.name)))
+          .toSorted((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
+        const status = getInvestmentStatus(inv);
+        const kind = getInvestmentKind(inv);
+        const principalRecoverable = typeof inv.principalRecoverable === 'boolean' ? inv.principalRecoverable : (kind === 'one_time');
+        const cyc = Math.max(1, safeNum(inv.cycleMonths, 1));
+        const minR = safeNum(inv.minRate);
+        const maxR = safeNum(inv.maxRate);
+
+        let actualInvestedTWD = 0;
+        let totalPayoutTWD = 0;
+        let totalWithdrawTWD = 0;
+        let firstInvestDate = '';
+        let lastInvestDate = '';
+        let firstAnyDate = '';
+        let latestPayoutDate = '';
+        const payoutByMonth = new Map();
+
+        logs.forEach((l) => {
+          const amt = safeNum(l.amountTWD);
+          const dStr = String(l.date || '').trim();
+          if (dStr && !firstAnyDate) firstAnyDate = dStr;
+          if (l.eventType === 'invest') {
+            actualInvestedTWD += amt;
+            if (dStr && !firstInvestDate) firstInvestDate = dStr;
+            if (dStr && dStr > lastInvestDate) lastInvestDate = dStr;
+          } else {
+            if (l.eventType === 'payout') {
+              totalPayoutTWD += amt;
+              if (dStr && dStr > latestPayoutDate) latestPayoutDate = dStr;
+              const ym = dStr.slice(0, 7);
+              if (/^\d{4}-\d{2}$/.test(ym)) payoutByMonth.set(ym, (payoutByMonth.get(ym) || 0) + amt);
+            } else {
+              totalWithdrawTWD += amt;
+            }
+          }
+        });
+
+        const totalReturnedTWD = totalPayoutTWD + totalWithdrawTWD;
+        const basePrincipal = actualInvestedTWD > 0 ? actualInvestedTWD : safeNum(inv.principal);
+        const netProfitTWD = totalReturnedTWD - basePrincipal;
+        const totalReturnMultiple = basePrincipal > 0 ? (totalReturnedTWD / basePrincipal) : null;
+
+        const monthsBetween = (d1, d2) => {
+          const a = new Date(`${String(d1).slice(0, 10)}T00:00:00`);
+          const b = new Date(`${String(d2).slice(0, 10)}T00:00:00`);
+          if (Number.isNaN(a.getTime()) || Number.isNaN(b.getTime())) return 0;
+          return Math.max(0, (b.getTime() - a.getTime()) / (30.4375 * 86400000));
+        };
+
+        const startRefDate = firstInvestDate || firstAnyDate;
+        const endRefDate = status === 'closed' && logs.length ? String(logs[logs.length - 1].date || todayISO()) : todayISO();
+        const operatingMonths = startRefDate ? Math.max(1, Math.round(monthsBetween(startRefDate, endRefDate))) : 0;
+        const operatingYears = operatingMonths > 0 ? Number((operatingMonths / 12).toFixed(2)) : 0;
+
+        // Actual payback period: first date when cumulative returned >= basePrincipal
+        const isPaidBack = basePrincipal > 0 && totalReturnedTWD >= basePrincipal;
+        let paybackMonthsActual = null;
+        if (isPaidBack && startRefDate) {
+          let cum = 0;
+          for (const l of logs) {
+            if (l.eventType === 'invest') continue;
+            cum += safeNum(l.amountTWD);
+            if (cum >= basePrincipal && l.date) {
+              paybackMonthsActual = Math.max(1, Math.round(monthsBetween(startRefDate, l.date)));
+              break;
+            }
+          }
+        }
+
+        // Monthly payout momentum: all-time avg vs recent 6m vs recent 3m
+        const payoutMonthsSorted = [...payoutByMonth.keys()].sort();
+        const payoutMonthsCount = payoutMonthsSorted.length;
+        const allTimeMonthlyAvgTWD = payoutMonthsCount > 0 ? (totalPayoutTWD / payoutMonthsCount) : 0;
+
+        const anchorDateStr = latestPayoutDate || todayISO();
+        const anchorDate = new Date(`${anchorDateStr.slice(0, 10)}T00:00:00`);
+        const ymWindowSet = (n) => {
+          const set = new Set();
+          if (Number.isNaN(anchorDate.getTime())) return set;
+          for (let i = 0; i < n; i++) {
+            const d = new Date(anchorDate.getFullYear(), anchorDate.getMonth() - i, 1);
+            set.add(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+          }
+          return set;
+        };
+        const sumInWindow = (n) => {
+          const w = ymWindowSet(n);
+          let sum = 0;
+          let hitMonths = 0;
+          w.forEach((ym) => {
+            if (payoutByMonth.has(ym)) {
+              sum += payoutByMonth.get(ym);
+              hitMonths += 1;
+            }
+          });
+          return { sum, hitMonths };
+        };
+
+        const w3 = sumInWindow(3);
+        const w6 = sumInWindow(6);
+        const w12 = sumInWindow(12);
+        const denom3 = Math.max(1, Math.min(3, operatingMonths || payoutMonthsCount || 1));
+        const denom6 = Math.max(1, Math.min(6, operatingMonths || payoutMonthsCount || 1));
+        const recent3mMonthlyAvgTWD = payoutMonthsCount > 0 ? (w3.sum / denom3) : 0;
+        const recent6mMonthlyAvgTWD = payoutMonthsCount > 0 ? (w6.sum / denom6) : 0;
+
+        const expectedMinMonthlyTWD = (basePrincipal > 0 && minR > 0) ? ((basePrincipal * (minR / 100)) / cyc) : 0;
+        const expectedMaxMonthlyTWD = (basePrincipal > 0 && maxR > 0) ? ((basePrincipal * (maxR / 100)) / cyc) : 0;
+
+        let hitTargetMonths = 0;
+        if (expectedMinMonthlyTWD > 0 && payoutMonthsCount > 0) {
+          payoutByMonth.forEach((v) => {
+            if (v >= expectedMinMonthlyTWD * 0.95) hitTargetMonths += 1;
+          });
+        }
+        const payoutHitRatePct = (expectedMinMonthlyTWD > 0 && payoutMonthsCount > 0)
+          ? Math.round((hitTargetMonths / payoutMonthsCount) * 100)
+          : null;
+
+        const currentAnnualizedYieldPct = (basePrincipal > 0 && recent6mMonthlyAvgTWD > 0)
+          ? Number((((recent6mMonthlyAvgTWD * 12) / basePrincipal) * 100).toFixed(1))
+          : null;
+        const annualizedNetRoiPct = (basePrincipal > 0 && operatingYears >= 0.25)
+          ? Number((((netProfitTWD / basePrincipal) / operatingYears) * 100).toFixed(1))
+          : null;
+
+        const remainingToPaybackTWD = Math.max(0, basePrincipal - totalReturnedTWD);
+        const refMonthlyForPayback = recent6mMonthlyAvgTWD > 0 ? recent6mMonthlyAvgTWD : allTimeMonthlyAvgTWD;
+        const estimatedRemainingPaybackMonths = (!isPaidBack && remainingToPaybackTWD > 0 && refMonthlyForPayback > 0)
+          ? Math.ceil(remainingToPaybackTWD / refMonthlyForPayback)
+          : null;
+
+        let trendStatus = 'insufficient_data';
+        if (kind === 'recurring' && payoutMonthsCount >= 2) {
+          if (expectedMinMonthlyTWD > 0 && recent6mMonthlyAvgTWD < expectedMinMonthlyTWD * 0.85) {
+            trendStatus = 'below_target';
+          } else if (allTimeMonthlyAvgTWD > 0 && recent6mMonthlyAvgTWD < allTimeMonthlyAvgTWD * 0.8) {
+            trendStatus = 'declining';
+          } else if (allTimeMonthlyAvgTWD > 0 && recent6mMonthlyAvgTWD > allTimeMonthlyAvgTWD * 1.15) {
+            trendStatus = 'growing';
+          } else {
+            trendStatus = 'stable';
+          }
+        }
+
+        return {
+          principalRecoverable,
+          basePrincipalTWD: Math.round(basePrincipal),
+          actualInvestedTWD: Math.round(actualInvestedTWD),
+          totalPayoutTWD: Math.round(totalPayoutTWD),
+          totalWithdrawTWD: Math.round(totalWithdrawTWD),
+          totalReturnedTWD: Math.round(totalReturnedTWD),
+          netProfitTWD: Math.round(netProfitTWD),
+          totalReturnMultiple: totalReturnMultiple !== null ? Number(totalReturnMultiple.toFixed(2)) : null,
+          firstInvestDate: startRefDate,
+          lastInvestDate,
+          latestPayoutDate,
+          operatingMonths,
+          operatingYears,
+          isPaidBack,
+          paybackMonthsActual,
+          remainingToPaybackTWD: Math.round(remainingToPaybackTWD),
+          estimatedRemainingPaybackMonths,
+          payoutMonthsCount,
+          recent12mPayoutMonthsCount: w12.hitMonths,
+          allTimeMonthlyAvgTWD: Math.round(allTimeMonthlyAvgTWD),
+          recent6mMonthlyAvgTWD: Math.round(recent6mMonthlyAvgTWD),
+          recent3mMonthlyAvgTWD: Math.round(recent3mMonthlyAvgTWD),
+          expectedMinMonthlyTWD: Math.round(expectedMinMonthlyTWD),
+          expectedMaxMonthlyTWD: Math.round(expectedMaxMonthlyTWD),
+          payoutHitRatePct,
+          hitTargetMonths,
+          currentAnnualizedYieldPct,
+          annualizedNetRoiPct,
+          trendStatus
+        };
+      }
       let chartAllocation = null;
       let chartCurrency = null;
       let chartTrend = null;
@@ -3995,9 +4178,14 @@
           const roundBadge = roundInfo.round > 1
             ? `<span class="text-[11px] px-1.5 py-0.5 rounded font-medium bg-indigo-50 text-indigo-700">第 ${roundInfo.round} 輪轉投${roundInfo.parentName ? ' · 承接 ' + escapeHtml(roundInfo.parentName) : ''}</span>`
             : '';
+          const ana = computeSingleInvestmentAnalytics(inv);
+          const principalBadge = ana.principalRecoverable
+            ? '<span class="text-[11px] px-1.5 py-0.5 rounded font-medium bg-sky-50 text-sky-700">本金可收回</span>'
+            : '<span class="text-[11px] px-1.5 py-0.5 rounded font-medium bg-zinc-100 text-zinc-600">沉沒本金</span>';
           const tagsHtml = `<div class="mt-1.5 flex flex-wrap items-center gap-1">` +
             `<span class="text-[11px] px-1.5 py-0.5 rounded font-medium ${stMeta.cls}">${stMeta.label}</span>` +
             `<span class="text-[11px] px-1.5 py-0.5 rounded font-medium ${kdMeta.cls}">${kdMeta.label}</span>` +
+            principalBadge +
             roundBadge +
             customTags.map((t) => `<span class="text-[11px] px-1.5 py-0.5 rounded font-medium ${invTagBadgeClass(t)}">${escapeHtml(t)}</span>`).join('') +
             `</div>`;
@@ -4048,13 +4236,55 @@
             `;
           }
 
+          const trendBadgeMap = {
+            below_target: '<span class="px-1.5 py-0.5 rounded bg-rose-50 text-rose-700 text-[10px] font-medium">📉 近6月低於預期低標</span>',
+            declining: '<span class="px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 text-[10px] font-medium">📉 近期較歷史均額下滑</span>',
+            growing: '<span class="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 text-[10px] font-medium">📈 近期分潤成長</span>',
+            stable: '<span class="px-1.5 py-0.5 rounded bg-zinc-100 text-zinc-700 text-[10px] font-medium">✓ 分潤穩定</span>',
+            insufficient_data: ''
+          };
+          const analyticsBoxHtml = (status !== 'closed' && logs.length > 0 && (ana.operatingMonths > 0 || ana.payoutMonthsCount > 0)) ? `
+            <div class="pt-2 mt-2 hairline-t space-y-1 text-[11px] font-sans">
+              <div class="flex flex-wrap items-center justify-between gap-1">
+                <span class="text-zinc-500">營運 ${ana.operatingMonths} 個月（${ana.operatingYears.toFixed(1)} 年）</span>
+                ${ana.isPaidBack
+                  ? `<span class="text-emerald-700 font-medium">✓ 已回本${ana.paybackMonthsActual ? `（${ana.paybackMonthsActual} 個月）` : ''} · 零成本期</span>`
+                  : (ana.estimatedRemainingPaybackMonths ? `<span class="text-amber-800">預估再 ${ana.estimatedRemainingPaybackMonths} 個月回本</span>` : '')}
+              </div>
+              ${kind === 'recurring' && ana.payoutMonthsCount >= 2 ? `
+                <div class="flex flex-wrap items-center justify-between gap-1 pt-0.5">
+                  <span class="text-zinc-500">分潤動能</span>
+                  ${trendBadgeMap[ana.trendStatus] || ''}
+                </div>
+                <div class="grid grid-cols-3 gap-1.5 pt-0.5 font-mono-num text-[10px]">
+                  <div class="rounded bg-[#f7f7f5] px-1.5 py-1">
+                    <div class="font-sans text-zinc-400">全期月均</div>
+                    <div class="font-medium text-zinc-800">${fmtTWD(ana.allTimeMonthlyAvgTWD)}</div>
+                  </div>
+                  <div class="rounded bg-[#f7f7f5] px-1.5 py-1">
+                    <div class="font-sans text-zinc-400">近 6 月均</div>
+                    <div class="font-medium ${ana.trendStatus === 'below_target' || ana.trendStatus === 'declining' ? 'text-rose-700' : 'text-zinc-800'}">${fmtTWD(ana.recent6mMonthlyAvgTWD)}</div>
+                  </div>
+                  <div class="rounded bg-[#f7f7f5] px-1.5 py-1">
+                    <div class="font-sans text-zinc-400">近 3 月均</div>
+                    <div class="font-medium text-zinc-800">${fmtTWD(ana.recent3mMonthlyAvgTWD)}</div>
+                  </div>
+                </div>
+                <div class="flex flex-wrap items-center justify-between gap-1 text-[10px] text-zinc-500 font-mono-num pt-0.5">
+                  <span>${ana.currentAnnualizedYieldPct !== null ? `近6月年化 ${ana.currentAnnualizedYieldPct}%` : ''}</span>
+                  <span>${ana.payoutHitRatePct !== null ? `達標率 ${ana.payoutHitRatePct}% (${ana.hitTargetMonths}/${ana.payoutMonthsCount}月)` : `近12月領息 ${ana.recent12mPayoutMonthsCount} 次`}</span>
+                </div>
+              ` : ''}
+            </div>
+          ` : '';
+
           const logSummaryHtml = (status !== 'closed' && logs.length)
             ? `<div class="pt-2 mt-2 hairline-t space-y-1 text-[11px]">` +
               (sumInv > 0 ? `<div class="flex justify-between"><span class="font-sans text-zinc-400">紀錄累計投入</span><span class="text-zinc-700">${fmtTWD(sumInv)}</span></div>` : '') +
               splitLine +
               (sumWd > 0 ? `<div class="flex justify-between"><span class="font-sans text-zinc-400">紀錄累計撤資／結算</span><span class="text-amber-700">${fmtTWD(sumWd)}</span></div>` : '') +
-              (sumPay > 0 ? `<div class="flex justify-between"><span class="font-sans text-zinc-400">累計已領分紅</span><span class="text-emerald-700 font-medium">${fmtTWD(sumPay)}${pctBack !== null ? `（總回收 ${pctBack.toFixed(1)}%）` : ''}</span></div>` : '') +
-              `</div>`
+              (sumPay > 0 ? `<div class="flex justify-between"><span class="font-sans text-zinc-400">累計已領分紅</span><span class="text-emerald-700 font-medium">${fmtTWD(sumPay)}${pctBack !== null ? `（總回收 ${pctBack.toFixed(1)}%${ana.totalReturnMultiple ? ` · ${ana.totalReturnMultiple}x` : ''}）` : ''}</span></div>` : '') +
+              `</div>${analyticsBoxHtml}`
             : '';
 
           const subtitle = status === 'closed'
@@ -6649,6 +6879,7 @@
         const inv = item || { name: '', principal: 0, cycleMonths: 1, minRate: 3, maxRate: 5, status: 'active', investKind: 'recurring', principalRecoverable: false, sourceInvestmentId: '', tags: [], note: '' };
         const initStatus = isEdit ? getInvestmentStatus(inv) : 'active';
         const initKind = isEdit ? getInvestmentKind(inv) : 'recurring';
+        const initRecoverable = typeof inv.principalRecoverable === 'boolean' ? inv.principalRecoverable : (initKind === 'one_time');
         const selectedTags = new Set(normalizeInvTags(inv.tags).filter((t) => !['進行中', '已結算', '已結案', '暫停分紅'].includes(t)));
         const allTagOptions = [...new Set([...getAllInvTagOptions(), ...selectedTags])];
         const parentOptions = `<option value="">無（第 1 輪原始投資）</option>` +
@@ -6675,6 +6906,13 @@
                 <option value="one_time" ${initKind === 'one_time' ? 'selected' : ''}>一次性（到期結算，不計月現金流）</option>
               </select>
             </div>
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-zinc-600 mb-1">本金性質</label>
+            <select name="principalRecoverable" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white">
+              <option value="0" ${!initRecoverable ? 'selected' : ''}>沉沒本金／不可收回（開店、合夥股權，靠分潤逐步回本）</option>
+              <option value="1" ${initRecoverable ? 'selected' : ''}>本金到期可收回（專案借貸、房地產短期結算連本帶利）</option>
+            </select>
           </div>
           <div class="grid grid-cols-2 gap-3">
             <div><label class="block text-xs font-medium text-zinc-600 mb-1">預計投入 (台幣)</label><input name="principal" type="number" step="1" min="0" required value="${safeNum(inv.principal)}" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" /></div>
@@ -6704,6 +6942,7 @@
           const sourceInvestmentId = String(fd.get('sourceInvestmentId') || '').trim();
           const status = String(fd.get('status') || 'active');
           const investKind = String(fd.get('investKind') || 'recurring');
+          const principalRecoverable = fd.get('principalRecoverable') === '1';
           const record = {
             id: isEdit ? inv.id : uid('i'),
             name: String(fd.get('name')).trim(),
@@ -6713,7 +6952,7 @@
             maxRate: safeNum(fd.get('maxRate')),
             status,
             investKind,
-            principalRecoverable: false,
+            principalRecoverable,
             ...(sourceInvestmentId ? { sourceInvestmentId } : {}),
             tags: normalizeInvTags(fd.get('tags')),
             note: String(fd.get('note')).trim()
@@ -14237,6 +14476,7 @@
         };
         const physicalInvestments = (state.investments || []).map((inv) => {
           const agg = invAggById.get(inv.id) || invAggByName.get(String(inv.name || '').trim()) || { investedTWD: 0, returnedTWD: 0, count: 0, lastInvestDate: '' };
+          const ana = computeSingleInvestmentAnalytics(inv, invLogs);
           const st = typeof getInvestmentStatus === 'function' ? getInvestmentStatus(inv) : (inv.status || 'active');
           const kind = typeof getInvestmentKind === 'function' ? getInvestmentKind(inv) : (inv.investKind || 'recurring');
           const plannedP = Math.round(safeNum(inv.principal));
@@ -14249,6 +14489,7 @@
             name: inv.name,
             status: st,
             investKind: kind,
+            principalRecoverable: ana.principalRecoverable,
             plannedPrincipalTWD: plannedP,
             cycleMonths: cyc,
             minRatePct: minR,
@@ -14259,10 +14500,30 @@
             estimatedMaturityMonth: estMaturity,
             tags: Array.isArray(inv.tags) ? inv.tags : [],
             sourceInvestmentId: inv.sourceInvestmentId || '',
-            actualInvestedTWD: Math.round(agg.investedTWD),
-            actualReturnedTWD: Math.round(agg.returnedTWD),
-            netProfitTWD: Math.round(agg.returnedTWD - agg.investedTWD),
+            actualInvestedTWD: ana.actualInvestedTWD,
+            actualReturnedTWD: ana.totalReturnedTWD,
+            netProfitTWD: ana.netProfitTWD,
             logCount: agg.count,
+            analytics: {
+              operatingMonths: ana.operatingMonths,
+              operatingYears: ana.operatingYears,
+              isPaidBack: ana.isPaidBack,
+              paybackMonthsActual: ana.paybackMonthsActual,
+              remainingToPaybackTWD: ana.remainingToPaybackTWD,
+              estimatedRemainingPaybackMonths: ana.estimatedRemainingPaybackMonths,
+              totalReturnMultiple: ana.totalReturnMultiple,
+              annualizedNetRoiPct: ana.annualizedNetRoiPct,
+              allTimeMonthlyAvgTWD: ana.allTimeMonthlyAvgTWD,
+              recent6mMonthlyAvgTWD: ana.recent6mMonthlyAvgTWD,
+              recent3mMonthlyAvgTWD: ana.recent3mMonthlyAvgTWD,
+              expectedMinMonthlyTWD: ana.expectedMinMonthlyTWD,
+              expectedMaxMonthlyTWD: ana.expectedMaxMonthlyTWD,
+              payoutMonthsCount: ana.payoutMonthsCount,
+              recent12mPayoutMonthsCount: ana.recent12mPayoutMonthsCount,
+              payoutHitRatePct: ana.payoutHitRatePct,
+              currentAnnualizedYieldPct: ana.currentAnnualizedYieldPct,
+              trendStatus: ana.trendStatus
+            },
             note: inv.note || ''
           };
         });
@@ -14390,7 +14651,8 @@
           `支出 category 必須從以下 15 類擇一：${ALL_EXPENSE_CATEGORIES.join('、')}。`,
           '【實體投資與現金統計口徑規則（嚴禁算錯或混為一談）】：',
           '- summaryTWD.cashTWD 是銀行目前獨立登錄的可用現金；summaryTWD.plannedInvestmentsExcludedTWD 是另計的進行中實體投資本金，兩者各自獨立（且歷史投資紀錄多為補登），嚴禁將進行中投資本金說成「包含在 cashTWD 裡導致現金只剩差額」。',
-          '- 分析實體投資（如某個標籤「房地產」的多輪滾動）時，若 investmentRecyclingSummary.byTag 中有該標籤，請**直接採用該標籤的獨立統計**，並明確列出：(1) 實質最大自備本金（peakSelfFundedPrincipalTWD）與各輪補差額／先落袋金額；(2) 目前仍在場內承擔風險的淨自備本金（netUnrecoveredPrincipalTWD）與純利潤滾動部位；(3) 進行中專案的精準預計結算月份（直接採用 estimatedMaturityMonth，嚴禁猜測年底）與預估回收區間（expectedTotalReturnMinTWD～MaxTWD）；(4) 以實質自備本金計算的報酬倍數（moic）以及「下次結算優先抽回 netUnrecoveredPrincipalTWD 達成 100% 零成本純利潤滾動」的具體風險控管建議。',
+          '- 分析實體投資（如多輪滾動專案）時，若 investmentRecyclingSummary.byTag 中有該標籤，請**直接採用該標籤的獨立統計**，並明確列出：(1) 實質最大自備本金（peakSelfFundedPrincipalTWD）與各輪補差額／先落袋金額；(2) 目前仍在場內承擔風險的淨自備本金（netUnrecoveredPrincipalTWD）與純利潤滾動部位；(3) 進行中專案的精準預計結算月份（直接採用 estimatedMaturityMonth，嚴禁猜測年底）與預估回收區間（expectedTotalReturnMinTWD～MaxTWD）；(4) 以實質自備本金計算的報酬倍數（moic）以及「下次結算優先抽回 netUnrecoveredPrincipalTWD 達成 100% 零成本純利潤滾動」的具體風險控管建議。',
+          '- 分析「本金不可收回（principalRecoverable: false，如開店、合夥現金流型）」的持續性實體投資時，請勿談「場內剩餘本金」，改以該專案的 analytics 欄位分析：(1) 已營運時間（operatingMonths / operatingYears）與真實累計年化報酬（annualizedNetRoiPct）；(2) 實際回本週期（paybackMonthsActual，或未回本時的 estimatedRemainingPaybackMonths）與總回收倍數（totalReturnMultiple）；(3) 分潤動能對比：全期月均（allTimeMonthlyAvgTWD）vs 近 6 月均（recent6mMonthlyAvgTWD）vs 近 3 月均（recent3mMonthlyAvgTWD）vs 預期低標（expectedMinMonthlyTWD），若 trendStatus 為 below_target 或 declining 必須明確發出衰退／低於預期警訊並呈現達標率（payoutHitRatePct）；(4) 近 6 月年化現金流殖利率（currentAnnualizedYieldPct）與「已進入零成本現金牛期後，若未來面臨二次增資／翻修應以近期實領分潤重估」的決策提醒。',
           '【網頁介面已實作功能清單（回答產品評價或優化建議時必須先核對，嚴禁將以下已存在功能誤報為缺失）】：',
           '- 總覽與銀行現金頁：皆已直接顯示各幣別即時匯率與更新時間、每個帳戶的原幣餘額與折合台幣 (TWD) 及佔比，且支援「各幣別預設扣款銀行卡」設定與一鍵刷新匯率。',
           '- 股票頁與頂部工具列：頂部常駐「更新報價」按鈕，股票頁標題下方已顯示即時更新時間與同步筆數，並支援批次調整現價與買賣／配息紀錄。',
