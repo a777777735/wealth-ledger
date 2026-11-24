@@ -336,15 +336,18 @@ async function handleAiProxy(request, env) {
         openrouter: 'https://openrouter.ai/api/v1',
         mistral: 'https://api.mistral.ai/v1'
       };
+      const hasImg = attachments.some((a) => String(a && a.mimeType || '').startsWith('image/'));
       const presetDefaults = {
         openai: 'gpt-4o-mini',
         groq: 'qwen/qwen3.8-27b',
-        openrouter: 'openrouter/free',
-        mistral: 'mistral-small-latest'
+        openrouter: hasImg ? 'nvidia/nemotron-3.5-super-vl:free' : 'openrouter/free',
+        mistral: hasImg ? 'pixtral-12b-2409' : 'mistral-small-latest'
       };
       const presetFallbacks = {
         groq: attachments.length > 0 ? [] : ['openai/gpt-oss-120b', 'openai/gpt-oss-20b'],
-        openrouter: ['nvidia/nemotron-3.5-super-vl:free'],
+        openrouter: hasImg
+          ? ['google/gemma-3-27b-it:free', 'qwen/qwen2.5-vl-32b-instruct:free', 'openrouter/free']
+          : ['nvidia/nemotron-3.5-super-vl:free'],
         mistral: ['pixtral-12b-2409']
       };
       const baseUrl = provider === 'custom'
@@ -360,8 +363,11 @@ async function handleAiProxy(request, env) {
       if (provider === 'groq' && /llama-4-(scout|maverick)/i.test(primaryModel)) {
         primaryModel = 'qwen/qwen3.8-27b';
       }
-      if (provider === 'openrouter' && /qwen2\.5-vl-72b-instruct:free/i.test(primaryModel)) {
-        primaryModel = 'openrouter/free';
+      if (provider === 'openrouter' && (/qwen2\.5-vl-72b-instruct:free/i.test(primaryModel) || (hasImg && primaryModel === 'openrouter/free'))) {
+        primaryModel = hasImg ? 'nvidia/nemotron-3.5-super-vl:free' : 'openrouter/free';
+      }
+      if (hasImg && provider === 'mistral' && /mistral-small|open-mistral|codestral/i.test(primaryModel)) {
+        primaryModel = 'pixtral-12b-2409';
       }
       if (!primaryModel) {
         return jsonResp({ ok: false, error: '自訂模式請填寫模型名稱（Model ID）' }, 400);
@@ -428,6 +434,7 @@ async function callGemini({ apiKey, model, systemPrompt, prompt, attachments, ex
     payload.generationConfig.responseMimeType = 'application/json';
   }
 
+  const timeoutMs = attachments.length > 0 ? 18000 : 12000;
   const candidates = [...new Set([model, 'gemini-flash-latest'])];
   let primaryErr = '';
   let lastErr = 'Gemini API 暫時繁忙，建議改用 Groq 免費高速 Key';
@@ -446,10 +453,10 @@ async function callGemini({ apiKey, model, systemPrompt, prompt, attachments, ex
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(reqBody),
-          signal: makeTimeoutSignal(12000)
+          signal: makeTimeoutSignal(timeoutMs)
         });
       } catch (netErr) {
-        lastErr = 'Gemini 伺服器回應逾時（>12秒），建議改用 Groq 免費高速 Key';
+        lastErr = `Gemini 伺服器回應逾時（>${Math.round(timeoutMs / 1000)}秒），建議改用 Groq 免費高速 Key`;
         if (i === 0 && !primaryErr) primaryErr = lastErr;
         break;
       }
@@ -512,6 +519,7 @@ async function callOpenAICompat({ apiKey, baseUrl, model, fallbackModels = [], s
     headers['X-Title'] = 'Wealth Ledger';
   }
 
+  const timeoutMs = attachments.length > 0 ? 18000 : 12000;
   const candidates = [...new Set([model, ...fallbackModels].filter(Boolean))];
   let primaryErr = '';
   let lastErr = 'API 呼叫失敗';
@@ -528,34 +536,46 @@ async function callOpenAICompat({ apiKey, baseUrl, model, fallbackModels = [], s
       payload.response_format = { type: 'json_object' };
     }
 
-    let res;
-    try {
-      res = await fetch(endpoint, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(payload),
-        signal: makeTimeoutSignal(12000)
-      });
-    } catch (netErr) {
-      lastErr = `${provider} 回應逾時（>12秒）`;
-      if (i === 0 && !primaryErr) primaryErr = lastErr;
-      continue;
-    }
-    const data = await res.json().catch(() => ({}));
-    if (res.ok) {
-      const text = data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
-      if (text) return { text: String(text), model: m };
-      lastErr = '模型未回傳任何文字內容';
-      continue;
-    }
-    const msg = (data && data.error && data.error.message) || `API 錯誤 (${res.status})`;
-    if (i === 0 && !primaryErr) primaryErr = msg;
-    lastErr = msg;
-    if (res.status === 401 || res.status === 403) {
-      throw new Error(msg);
-    }
-    if (res.status !== 429 && res.status !== 503 && res.status !== 404) {
-      throw new Error(msg);
+    for (let attempt = 0; attempt < 2; attempt++) {
+      let res;
+      try {
+        res = await fetch(endpoint, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(payload),
+          signal: makeTimeoutSignal(timeoutMs)
+        });
+      } catch (netErr) {
+        lastErr = `${provider} 回應逾時（>${Math.round(timeoutMs / 1000)}秒）`;
+        if (i === 0 && !primaryErr) primaryErr = lastErr;
+        break;
+      }
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        const text = data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
+        if (text) return { text: String(text), model: m };
+        lastErr = '模型未回傳任何文字內容';
+        break;
+      }
+      const msg = (data && data.error && data.error.message) || `API 錯誤 (${res.status})`;
+      // Retry once after 1.25s on 429 burst limit (e.g. Mistral 1 RPS free tier)
+      if (res.status === 429 && attempt === 0 && !/quota|credit|daily|insufficient/i.test(msg)) {
+        await new Promise((r) => setTimeout(r, 1250));
+        continue;
+      }
+      if (i === 0 && !primaryErr) primaryErr = msg;
+      lastErr = msg;
+      if (res.status === 401 || res.status === 403) {
+        throw new Error(msg);
+      }
+      // Allow falling back to next candidate on 400 when attachments are sent (e.g. model doesn't support vision)
+      if (res.status === 400 && attachments.length > 0 && i + 1 < candidates.length) {
+        break;
+      }
+      if (res.status !== 429 && res.status !== 503 && res.status !== 404) {
+        throw new Error(msg);
+      }
+      break;
     }
   }
   throw new Error(primaryErr || lastErr);

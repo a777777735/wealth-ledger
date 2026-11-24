@@ -1304,7 +1304,7 @@
               <div class="rounded-xl bg-[#f7f7f5] hairline p-4 space-y-3">
                 <div class="flex flex-wrap items-center justify-between gap-3">
                   <div class="space-y-1">
-                    <div class="text-xs font-semibold text-zinc-900">上傳 App 截圖、券商庫存畫面、銀行餘額或發票載具照片（一次最多 5 張）</div>
+                    <div class="text-xs font-semibold text-zinc-900">上傳 App 截圖、券商庫存畫面、銀行餘額或發票載具照片（一次最多 8 張）</div>
                     <div class="text-[11px] text-zinc-500">圖片會在瀏覽器自動壓縮後送交你設定的 AI 視覺模型辨識，支援 Gemini / OpenAI / Claude / 自訂視覺模型</div>
                   </div>
                   <div class="flex flex-wrap items-center gap-2">
@@ -1916,7 +1916,7 @@
       <div class="p-3 hairline-t bg-white space-y-2 shrink-0">
         <div id="ai-copilot-thumbs" class="flex flex-wrap items-center gap-1.5 empty:hidden"></div>
         <div class="flex items-end gap-1.5">
-          <label title="附加收據／截圖（最多 5 張，多圖自動平行加速辨識）" class="btn-focus h-9 w-9 rounded-lg hairline bg-[#f7f7f5] hover:bg-zinc-100 flex items-center justify-center cursor-pointer shrink-0 text-zinc-700">
+          <label title="附加收據／截圖（最多 8 張，每張獨立辨識不漏單）" class="btn-focus h-9 w-9 rounded-lg hairline bg-[#f7f7f5] hover:bg-zinc-100 flex items-center justify-center cursor-pointer shrink-0 text-zinc-700">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
             <input id="ai-copilot-file" type="file" accept="image/*" multiple class="hidden" />
           </label>
@@ -9534,11 +9534,11 @@
         if (!k) return true;
         const p = String(k.provider || '').toLowerCase();
         const m = String(k.model || '').toLowerCase();
-        // Known text-only models
-        if (/gpt-oss|llama-3\.3-70b|llama-3\.1-8b|mistral-small|deepseek-r1|deepseek-chat|qwen-2\.5-72b-instruct$|gemma-7b/i.test(m) && !/vl|vision|pixtral|scout|maverick|qwen3\.8|gemini|gpt-4o|claude-3|claude-sonnet|claude-opus/i.test(m)) {
+        if (p === 'gemini' || p === 'anthropic' || p === 'cloudflare' || p === 'mistral') return true;
+        // Known text-only models on Groq / OpenRouter / Custom
+        if (/gpt-oss|llama-3\.3-70b|llama-3\.1-8b|deepseek-r1|deepseek-chat|qwen-2\.5-72b-instruct$|gemma-7b/i.test(m) && !/vl|vision|pixtral|scout|maverick|qwen3\.8|gemini|gpt-4o|claude-3|claude-sonnet|claude-opus/i.test(m)) {
           return false;
         }
-        if (p === 'gemini' || p === 'anthropic' || p === 'cloudflare') return true;
         return true;
       }
 
@@ -10135,33 +10135,63 @@
         return items;
       }
 
-      async function callAiSingleKey(keyEntry, { systemPrompt, prompt, attachments = [], expectJson = true }) {
-        const provider = (keyEntry && keyEntry.provider) || appConfig.aiProvider || 'gemini';
-        const idToken = provider === 'cloudflare' ? await getCurrentFirebaseIdToken() : '';
-        const res = await fetch(apiUrl('/api/ai'), {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(idToken ? { Authorization: `Bearer ${idToken}` } : {})
-          },
-          body: JSON.stringify({
-            provider,
-            apiKey: (keyEntry && keyEntry.apiKey) || '',
-            model: (keyEntry && keyEntry.model) || AI_PROVIDER_DEFAULTS[provider] || '',
-            baseUrl: (keyEntry && keyEntry.baseUrl) || '',
-            userEmail: (currentUser && currentUser.email) || '',
-            ...(idToken ? { firebaseIdToken: idToken } : {}),
-            systemPrompt,
-            prompt,
-            attachments,
-            expectJson
-          })
-        });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok || !data.ok) {
-          throw new Error(data.error || `AI 請求失敗 (${res.status})`);
+      const aiKeyQueueMap = {}; // { [keyId]: Promise }
+      const aiKeyLastDoneMap = {}; // { [keyId]: timestampMs }
+      const aiKeyBusyCountMap = {}; // { [keyId]: number }
+
+      async function withAiKeyConcurrencyGate(keyId, fn) {
+        const kId = keyId || 'default';
+        aiKeyBusyCountMap[kId] = (aiKeyBusyCountMap[kId] || 0) + 1;
+        const prev = aiKeyQueueMap[kId] || Promise.resolve();
+        let release;
+        const gate = new Promise((r) => { release = r; });
+        aiKeyQueueMap[kId] = prev.then(() => gate, () => gate);
+        await prev.catch(() => {});
+        try {
+          // Ensure at least 1100ms spacing between requests on the SAME free API key (prevents Mistral/OpenRouter 1-RPS 429)
+          const lastDone = aiKeyLastDoneMap[kId] || 0;
+          const elapsed = Date.now() - lastDone;
+          if (lastDone > 0 && elapsed < 1100) {
+            await new Promise((r) => setTimeout(r, 1100 - elapsed));
+          }
+          return await fn();
+        } finally {
+          aiKeyLastDoneMap[kId] = Date.now();
+          aiKeyBusyCountMap[kId] = Math.max(0, (aiKeyBusyCountMap[kId] || 1) - 1);
+          release();
         }
-        return data;
+      }
+
+      async function callAiSingleKey(keyEntry, { systemPrompt, prompt, attachments = [], expectJson = true }) {
+        const kId = (keyEntry && keyEntry.id) || 'default';
+        return withAiKeyConcurrencyGate(kId, async () => {
+          const provider = (keyEntry && keyEntry.provider) || appConfig.aiProvider || 'gemini';
+          const idToken = provider === 'cloudflare' ? await getCurrentFirebaseIdToken() : '';
+          const res = await fetch(apiUrl('/api/ai'), {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(idToken ? { Authorization: `Bearer ${idToken}` } : {})
+            },
+            body: JSON.stringify({
+              provider,
+              apiKey: (keyEntry && keyEntry.apiKey) || '',
+              model: (keyEntry && keyEntry.model) || AI_PROVIDER_DEFAULTS[provider] || '',
+              baseUrl: (keyEntry && keyEntry.baseUrl) || '',
+              userEmail: (currentUser && currentUser.email) || '',
+              ...(idToken ? { firebaseIdToken: idToken } : {}),
+              systemPrompt,
+              prompt,
+              attachments,
+              expectJson
+            })
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok || !data.ok) {
+            throw new Error(data.error || `AI 請求失敗 (${res.status})`);
+          }
+          return data;
+        });
       }
 
       async function callAiEndpoint({ systemPrompt, prompt, attachments = [], expectJson = true, onProgress = null, avoidKeyId = '' }) {
@@ -10200,23 +10230,27 @@
           rawCandidates.push(cfFallback);
         }
 
-        // Smart routing:
-        // 1. If request has image attachments, prioritize vision-capable keys over text-only models
-        // 2. Deprioritize keys currently in cooldown (circuit breaker) so we don't waste 40s retrying overloaded models
-        // 3. If avoidKeyId is set (user clicked "換組重辨識"), move that key behind other healthy vision keys
+        // Never fall back to text-only models when image attachments are present (so images are never silently ignored)
         const hasImages = Array.isArray(attachments) && attachments.some((a) => String(a && a.mimeType || '').startsWith('image/'));
+        if (hasImages) {
+          const visionOnly = rawCandidates.filter((k) => isAiKeyVisionCapable(k));
+          if (visionOnly.length > 0) {
+            rawCandidates = visionOnly;
+          }
+        }
+
+        // Smart routing:
+        // 1. Prefer healthy, non-avoided keys
+        // 2. Among healthy keys, prefer idle keys (busyCount === 0) so multi-image tasks spread across multiple keys in parallel;
+        //    if only 1 key is healthy, withAiKeyConcurrencyGate queues them safely without 429 collisions!
         const scored = rawCandidates.map((k, origIdx) => {
           const cdSec = getAiKeyCooldownRemainingSec(k.id);
-          const visionOk = !hasImages || isAiKeyVisionCapable(k);
           const isAvoided = Boolean(avoidKeyId && k.id === avoidKeyId && rawCandidates.length > 1);
-          // Tier 0: healthy + vision-capable (not avoided)
-          // Tier 1: avoided key (when user requests switching model on retry)
-          // Tier 2: cooling down + vision-capable (fallback if all healthy fail)
-          // Tier 3: text-only (last resort when images attached)
-          const tier = !visionOk ? 3 : (cdSec > 0 ? 2 : (isAvoided ? 1 : 0));
-          return { k, origIdx, tier, cdSec };
+          const busy = aiKeyBusyCountMap[k.id || 'default'] || 0;
+          const tier = cdSec > 0 ? 2 : (isAvoided ? 1 : 0);
+          return { k, origIdx, tier, busy, cdSec };
         });
-        scored.sort((a, b) => (a.tier - b.tier) || (a.origIdx - b.origIdx));
+        scored.sort((a, b) => (a.tier - b.tier) || (a.busy - b.busy) || (a.origIdx - b.origIdx));
         const candidates = scored.map((s) => s.k);
         const skippedCooldownLabels = scored.filter((s) => s.tier === 2).map((s) => s.k.label || s.k.provider);
 
@@ -10224,12 +10258,14 @@
         for (let i = 0; i < candidates.length; i++) {
           const k = candidates[i];
           const label = k.label || AI_PROV_NAMES[k.provider] || k.provider;
+          const busyNow = aiKeyBusyCountMap[k.id || 'default'] || 0;
+          const queueHint = busyNow > 0 ? '（排隊等待前一張完成，防限流）' : '';
           const skipHint = (i === 0 && skippedCooldownLabels.length > 0)
-            ? `（已自動跳過冷卻中：${skippedCooldownLabels.slice(0, 2).join('、')}）`
+            ? `（已跳過冷卻：${skippedCooldownLabels.slice(0, 2).join('、')}）`
             : '';
           const tryMsg = candidates.length > 1
-            ? `正在嘗試第 ${i + 1}/${candidates.length} 組：${label}（${k.model || k.provider}）${skipHint}…`
-            : `正在連線：${label}（${k.model || k.provider}）…`;
+            ? `正在連線第 ${i + 1}/${candidates.length} 組：${label}（${k.model || k.provider}）${queueHint}${skipHint}…`
+            : `正在連線：${label}（${k.model || k.provider}）${queueHint}…`;
           if (typeof onProgress === 'function') {
             try { onProgress({ index: i, total: candidates.length, key: k, phase: 'trying', message: tryMsg }); } catch (e) {}
           }
@@ -10417,20 +10453,25 @@
 
         const batchBarHtml = migrateBatchesMeta.length > 0 ? `
           <div class="col-span-full rounded-lg bg-[#f7f7f5] hairline p-3 space-y-1.5 text-xs">
-            <div class="font-medium text-zinc-700">🤖 各批次辨識模組與單批重跑（不同批次若用到不同 API Key 導致差異，可單獨點該批換組重辨識）：</div>
+            <div class="font-medium text-zinc-700">🤖 各張截圖獨立辨識狀態與模組（每張圖片獨立辨識不漏單，若某張結果不理想可單獨重跑）：</div>
             ${migrateBatchesMeta.map((b, bIdx) => {
-              const labelStr = migrateBatchesMeta.length > 1 ? `第 ${bIdx + 1}/${migrateBatchesMeta.length} 批（${(b.imgs || []).length} 張圖）` : `本次辨識（${(b.imgs || []).length || 1} 張）`;
+              const labelStr = migrateBatchesMeta.length > 1 ? `第 ${bIdx + 1}/${migrateBatchesMeta.length} 張` : `第 1 張`;
+              const thumbImg = b.imgs && b.imgs[0] && b.imgs[0].previewUrl
+                ? `<img src="${b.imgs[0].previewUrl}" class="w-7 h-7 object-cover rounded hairline shrink-0" />`
+                : '';
+              const statusPart = b.error
+                ? `<span class="text-rose-700 font-medium">❌ 失敗：${escapeHtml(b.error)}</span>`
+                : `<span class="font-medium text-zinc-800">${escapeHtml(b.usedKeyLabel || 'AI')}</span><span class="text-zinc-500 font-mono-num">${escapeHtml(b.model || '')}</span><span class="${(b.count || 0) > 0 ? 'text-emerald-700' : 'text-amber-700'} font-mono-num">→ ${b.count || 0} 筆</span>`;
               return `
                 <div class="flex flex-wrap items-center justify-between gap-2 bg-white rounded-md px-2.5 py-1.5 hairline text-[11px]">
-                  <div class="flex flex-wrap items-center gap-1.5">
+                  <div class="flex flex-wrap items-center gap-1.5 min-w-0">
+                    ${thumbImg}
                     <span class="px-1.5 py-0.5 rounded bg-zinc-900 text-white text-[10px] font-mono-num">${escapeHtml(labelStr)}</span>
-                    <span class="font-medium text-zinc-800">${escapeHtml(b.usedKeyLabel || 'AI')}</span>
-                    <span class="text-zinc-500 font-mono-num">${escapeHtml(b.model || '')}</span>
-                    <span class="text-emerald-700 font-mono-num">→ 擷取 ${b.count || 0} 筆</span>
+                    ${statusPart}
                   </div>
                   <div class="flex items-center gap-1 shrink-0">
-                    <button type="button" data-mig-rerun-batch="${bIdx}" data-mig-switch="0" class="btn-focus h-6 px-2 rounded bg-[#f7f7f5] hover:bg-zinc-200/70 hairline text-zinc-800 text-[10px] font-medium">🔄 原組重跑此批</button>
-                    <button type="button" data-mig-rerun-batch="${bIdx}" data-mig-switch="1" class="btn-focus h-6 px-2 rounded bg-zinc-900 hover:bg-zinc-800 text-white text-[10px] font-medium">⚡ 換組重辨識此批</button>
+                    <button type="button" data-mig-rerun-batch="${bIdx}" data-mig-switch="0" class="btn-focus h-6 px-2 rounded bg-[#f7f7f5] hover:bg-zinc-200/70 hairline text-zinc-800 text-[10px] font-medium">🔄 重跑此張</button>
+                    <button type="button" data-mig-rerun-batch="${bIdx}" data-mig-switch="1" class="btn-focus h-6 px-2 rounded bg-zinc-900 hover:bg-zinc-800 text-white text-[10px] font-medium">⚡ 換組重辨識</button>
                   </div>
                 </div>
               `;
@@ -11412,26 +11453,50 @@
       const renderMigrateImgThumbs = () => {
         const thumbs = document.getElementById('migrate-img-thumbs');
         if (!thumbs) return;
-        thumbs.innerHTML = migrateImages.map((img) => `
+        if (!migrateImages.length) {
+          thumbs.replaceChildren();
+          return;
+        }
+        thumbs.innerHTML = migrateImages.map((img, i) => `
           <div class="relative w-20 h-20 rounded-lg overflow-hidden hairline bg-white">
             <img src="${img.previewUrl}" alt="${escapeHtml(img.name)}" class="w-full h-full object-cover" />
+            <span class="absolute bottom-0.5 left-0.5 px-1 rounded bg-black/65 text-white text-[9px] font-mono-num">#${i + 1}</span>
+            <button type="button" data-mig-rm-img="${i}" class="absolute top-0.5 right-0.5 w-4 h-4 rounded-full bg-zinc-900/85 text-white text-[10px] leading-none flex items-center justify-center">×</button>
           </div>
-        `).join('');
+        `).join('') + `<button type="button" id="btn-mig-clear-imgs" class="text-[11px] text-zinc-500 hover:text-zinc-900 underline self-center ml-1">清除全部 (${migrateImages.length})</button>`;
       };
+
+      const migThumbsBox = document.getElementById('migrate-img-thumbs');
+      if (migThumbsBox) {
+        migThumbsBox.addEventListener('click', (ev) => {
+          if (ev.target.id === 'btn-mig-clear-imgs') {
+            migrateImages = [];
+            renderMigrateImgThumbs();
+            return;
+          }
+          const idx = ev.target.dataset.migRmImg;
+          if (idx !== undefined) {
+            migrateImages.splice(Number(idx), 1);
+            renderMigrateImgThumbs();
+          }
+        });
+      }
 
       const migImgInput = document.getElementById('migrate-img-input');
       if (migImgInput) {
         migImgInput.addEventListener('change', async (e) => {
-          const files = [...(e.target.files || [])].slice(0, 5);
+          const files = [...(e.target.files || [])].slice(0, 8);
           if (!files.length) return;
           setMigrateStatus(`正在壓縮 ${files.length} 張圖片...`);
           try {
-            migrateImages = await Promise.all(files.map((f) => compressImageToBase64(f)));
+            const newImgs = await Promise.all(files.map((f) => compressImageToBase64(f)));
+            migrateImages = [...migrateImages, ...newImgs].slice(0, 8);
             renderMigrateImgThumbs();
-            showToast(`已準備 ${migrateImages.length} 張圖片，請點「AI 辨識截圖」`);
+            showToast(`已載入共 ${migrateImages.length} 張圖片，請點「AI 辨識截圖」`);
           } catch (err) {
             showToast(err.message);
           } finally {
+            migImgInput.value = '';
             setMigrateStatus('');
           }
         });
@@ -11448,7 +11513,7 @@
           setMigrateStatus(`正在壓縮剪貼簿的 ${clip.files.length} 張截圖...`);
           try {
             const imgs = await Promise.all(clip.files.map((f) => compressImageToBase64(f)));
-            migrateImages = [...migrateImages, ...imgs].slice(0, 5);
+            migrateImages = [...migrateImages, ...imgs].slice(0, 8);
             renderMigrateImgThumbs();
             showToast(`已從剪貼簿貼上 ${imgs.length} 張截圖（共 ${migrateImages.length} 張）`);
           } catch (err) {
@@ -11492,7 +11557,7 @@
           btn.disabled = true;
           const origText = btn.textContent;
           btn.textContent = '重跑中…';
-          setMigrateStatus(`正在重新辨識第 ${bIdx + 1} 批截圖...`);
+          setMigrateStatus(`正在重新辨識第 ${bIdx + 1} 張截圖...`);
           try {
             const resp = await callAiEndpoint({
               systemPrompt: '你是精準的繁體中文財務單據與金融 App 截圖辨識專家，只回傳合法 JSON。',
@@ -11500,11 +11565,11 @@
               attachments: (meta.imgs || []).map((x) => ({ mimeType: x.mimeType, base64: x.base64 })),
               expectJson: true,
               avoidKeyId: switchKey ? (meta.usedKeyId || '') : '',
-              onProgress: (p) => { if (p && p.message) setMigrateStatus(`[重跑第 ${bIdx + 1} 批] ${p.message}`); }
+              onProgress: (p) => { if (p && p.message) setMigrateStatus(`[重跑第 ${bIdx + 1} 張] ${p.message}`); }
             });
             const parsed = extractJsonFromAiText(resp.text);
             const keyLabel = resp.usedKeyLabel || resp.usedProvider || 'AI';
-            const tag = migrateBatchesMeta.length > 1 ? `第${bIdx + 1}批·${keyLabel}` : `${keyLabel}${resp.model ? ` (${resp.model})` : ''}`;
+            const tag = migrateBatchesMeta.length > 1 ? `第${bIdx + 1}張·${keyLabel}` : `${keyLabel}${resp.model ? ` (${resp.model})` : ''}`;
             const newPart = normalizeAiExtractedPayload(parsed, state).map((it) => ({
               ...it,
               _batchIdx: bIdx,
@@ -11517,12 +11582,15 @@
               usedKeyId: resp.usedKeyId || '',
               usedKeyLabel: keyLabel,
               model: resp.model || '',
-              count: newPart.length
+              count: newPart.length,
+              error: ''
             };
             renderMigratePreview();
-            showToast(`第 ${bIdx + 1} 批已由「${keyLabel}」重新辨識完成（共 ${newPart.length} 筆）`);
+            showToast(`第 ${bIdx + 1} 張已由「${keyLabel}」重新辨識完成（共 ${newPart.length} 筆）`);
           } catch (err) {
-            showToast(`重跑第 ${bIdx + 1} 批失敗：${err.message}`);
+            migrateBatchesMeta[bIdx] = { ...meta, error: err.message || '辨識失敗' };
+            renderMigratePreview();
+            showToast(`重跑第 ${bIdx + 1} 張失敗：${err.message}`);
           } finally {
             setMigrateStatus('');
             btn.disabled = false;
@@ -11537,34 +11605,50 @@
           if (!migrateImages.length) { showToast('請先選擇至少 1 張截圖或照片'); return; }
           const target = (document.getElementById('migrate-img-target') && document.getElementById('migrate-img-target').value) || 'auto';
           const userHint = (document.getElementById('migrate-img-hint') && document.getElementById('migrate-img-hint').value) || '';
-          setMigrateStatus(`AI 正在平行辨識 ${migrateImages.length} 張截圖...`);
+          setMigrateStatus(`AI 正在逐張獨立辨識 ${migrateImages.length} 張截圖（自動分流防漏單）...`);
           btnImgRun.disabled = true;
           try {
-            const chunks = [];
-            for (let i = 0; i < migrateImages.length; i += 2) chunks.push(migrateImages.slice(i, i + 2));
-            const batchResults = await Promise.all(chunks.map((chunk, idx) => callAiEndpoint({
+            // 1 image = 1 independent task so no image is ever dropped or truncated
+            const chunks = migrateImages.map((im) => [im]);
+            const settled = await Promise.allSettled(chunks.map((chunk, idx) => callAiEndpoint({
               systemPrompt: '你是精準的繁體中文財務單據與金融 App 截圖辨識專家，只回傳合法 JSON。',
               prompt: buildExtractionPrompt(target, userHint),
               attachments: chunk.map((x) => ({ mimeType: x.mimeType, base64: x.base64 })),
               expectJson: true,
               onProgress: (p) => {
-                if (p && p.message) setMigrateStatus(chunks.length > 1 ? `[批次 ${idx + 1}/${chunks.length}] ${p.message}` : p.message);
+                if (p && p.message) setMigrateStatus(chunks.length > 1 ? `[第 ${idx + 1}/${chunks.length} 張] ${p.message}` : p.message);
               }
             })));
             const mergedItems = [];
             const seenBatchKeys = new Set();
             migrateBatchesMeta = [];
-            batchResults.forEach((resp, bIdx) => {
+            settled.forEach((entry, bIdx) => {
+              if (entry.status !== 'fulfilled') {
+                migrateBatchesMeta.push({
+                  batchIdx: bIdx,
+                  imgs: chunks[bIdx] || [],
+                  target,
+                  userHint,
+                  usedKeyId: '',
+                  usedKeyLabel: '失敗',
+                  model: '',
+                  count: 0,
+                  error: (entry.reason && entry.reason.message) || '連線失敗'
+                });
+                return;
+              }
+              const resp = entry.value;
               let count = 0;
               const keyLabel = resp.usedKeyLabel || resp.usedProvider || 'AI';
-              const tag = batchResults.length > 1 ? `第${bIdx + 1}批·${keyLabel}` : `${keyLabel}${resp.model ? ` (${resp.model})` : ''}`;
+              const tag = settled.length > 1 ? `第${bIdx + 1}張·${keyLabel}` : `${keyLabel}${resp.model ? ` (${resp.model})` : ''}`;
               try {
                 const parsed = extractJsonFromAiText(resp.text);
                 const list = normalizeAiExtractedPayload(parsed, state);
                 count = list.length;
                 list.forEach((it) => {
-                  const bKey = `${it.kind}|${it.date || ''}|${Math.round(safeNum(it.amount))}|${String(it.title || it.symbol || it.bank || '').toLowerCase()}`;
-                  if (seenBatchKeys.has(bKey)) {
+                  const titleNorm = String(it.title || it.symbol || it.bank || '').trim().toLowerCase();
+                  const bKey = `${it.kind}|${it.date || ''}|${Number(safeNum(it.amount).toFixed(2))}|${titleNorm}`;
+                  if (titleNorm && titleNorm !== '購物支出' && titleNorm !== '支出項目' && seenBatchKeys.has(bKey)) {
                     it.isDuplicate = true;
                     it.checked = false;
                   } else {
@@ -11585,13 +11669,15 @@
                 usedKeyId: resp.usedKeyId || '',
                 usedKeyLabel: keyLabel,
                 model: resp.model || '',
-                count
+                count,
+                error: ''
               });
             });
             migratePreviewItems = mergedItems;
             migrateSkippedTransfers = 0;
             renderMigratePreview();
-            showToast(`截圖辨識完成！共擷取 ${migratePreviewItems.length} 筆項目`);
+            const failCnt = migrateBatchesMeta.filter((b) => b.error).length;
+            showToast(`截圖辨識完成！共擷取 ${migratePreviewItems.length} 筆項目${failCnt > 0 ? `（有 ${failCnt} 張失敗，可單獨點換組重辨識）` : ''}`);
           } catch (err) {
             showToast(`截圖辨識失敗：${err.message}`);
           } finally {
@@ -12077,7 +12163,7 @@
             <div class="rounded-lg bg-[#f7f7f5] hairline p-3.5 space-y-2.5">
               <div class="flex flex-wrap items-center justify-between gap-2">
                 <div class="space-y-0.5">
-                  <div class="text-xs font-semibold text-zinc-900">一次可選 1～5 張發票、收據、月統計圖或帳單截圖（可搭配文字說明）</div>
+                  <div class="text-xs font-semibold text-zinc-900">一次可選 1～8 張發票、收據、月統計圖或帳單截圖（每張獨立辨識不漏單）</div>
                   <div id="qpb-status" class="text-[11px] text-zinc-500">選好照片後可補充日期／月份／帳戶說明，再點「開始 AI 辨識」</div>
                 </div>
                 <div class="flex flex-wrap items-center gap-1.5 shrink-0">
@@ -12236,7 +12322,7 @@
           sumEl.textContent = `共 ${batchItems.length} 筆明細（已勾選 ${checkedCount} 筆，可直接修改各欄位）`;
         };
 
-        let qpbBatchesMeta = []; // [{ batchIdx, imgs, usedKeyId, usedKeyLabel, model, count }]
+        let qpbBatchesMeta = []; // [{ batchIdx, imgs, usedKeyId, usedKeyLabel, model, count, error }]
 
         const renderQpbBatchStats = () => {
           const bar = document.getElementById('qpb-batch-stats-bar');
@@ -12246,21 +12332,25 @@
             return;
           }
           bar.classList.remove('hidden');
-          bar.innerHTML = `<div class="font-medium text-zinc-700">🤖 各批次辨識模組與單批重跑（若某批辨識結果不理想，可單獨點該批換組重辨識）：</div>` +
+          bar.innerHTML = `<div class="font-medium text-zinc-700">🤖 各張照片獨立辨識模組與單張重跑（每張獨立辨識不漏單，若某張結果不理想可單獨換組重跑）：</div>` +
             qpbBatchesMeta.map((b, bIdx) => {
-              const imgCount = Array.isArray(b.imgs) ? b.imgs.length : 0;
-              const imgRange = qpbBatchesMeta.length > 1 ? `第 ${bIdx + 1}/${qpbBatchesMeta.length} 批（${imgCount} 張圖）` : `本次辨識（${imgCount || 1} 張）`;
+              const imgRange = qpbBatchesMeta.length > 1 ? `第 ${bIdx + 1}/${qpbBatchesMeta.length} 張` : `第 1 張`;
+              const thumbImg = b.imgs && b.imgs[0] && b.imgs[0].previewUrl
+                ? `<img src="${b.imgs[0].previewUrl}" class="w-7 h-7 object-cover rounded hairline shrink-0" />`
+                : '';
+              const statusPart = b.error
+                ? `<span class="text-rose-700 font-medium">❌ 失敗：${escapeHtml(b.error)}</span>`
+                : `<span class="font-medium text-zinc-800">${escapeHtml(b.usedKeyLabel || 'AI')}</span><span class="text-zinc-500 font-mono-num">${escapeHtml(b.model || '')}</span><span class="${(b.count || 0) > 0 ? 'text-emerald-700' : 'text-amber-700'} font-mono-num">→ 擷取 ${b.count || 0} 筆</span>`;
               return `
                 <div class="flex flex-wrap items-center justify-between gap-2 bg-white rounded-md px-2.5 py-1.5 hairline">
-                  <div class="flex flex-wrap items-center gap-1.5">
+                  <div class="flex flex-wrap items-center gap-1.5 min-w-0">
+                    ${thumbImg}
                     <span class="px-1.5 py-0.5 rounded bg-zinc-900 text-white text-[10px] font-mono-num">${escapeHtml(imgRange)}</span>
-                    <span class="font-medium text-zinc-800">${escapeHtml(b.usedKeyLabel || 'AI')}</span>
-                    <span class="text-zinc-500 font-mono-num">${escapeHtml(b.model || '')}</span>
-                    <span class="text-emerald-700 font-mono-num">→ 擷取 ${b.count || 0} 筆</span>
+                    ${statusPart}
                   </div>
                   <div class="flex items-center gap-1 shrink-0">
-                    <button type="button" data-qpb-rerun-batch="${bIdx}" data-qpb-switch="0" class="btn-focus h-6 px-2 rounded bg-[#f7f7f5] hover:bg-zinc-200/70 hairline text-zinc-800 text-[10px] font-medium">🔄 原組重跑此批</button>
-                    <button type="button" data-qpb-rerun-batch="${bIdx}" data-qpb-switch="1" class="btn-focus h-6 px-2 rounded bg-zinc-900 hover:bg-zinc-800 text-white text-[10px] font-medium">⚡ 換組重辨識此批</button>
+                    <button type="button" data-qpb-rerun-batch="${bIdx}" data-qpb-switch="0" class="btn-focus h-6 px-2 rounded bg-[#f7f7f5] hover:bg-zinc-200/70 hairline text-zinc-800 text-[10px] font-medium">🔄 重跑此張</button>
+                    <button type="button" data-qpb-rerun-batch="${bIdx}" data-qpb-switch="1" class="btn-focus h-6 px-2 rounded bg-zinc-900 hover:bg-zinc-800 text-white text-[10px] font-medium">⚡ 換組重辨識</button>
                   </div>
                 </div>
               `;
@@ -12466,12 +12556,12 @@
 
         if (fileInput) {
           fileInput.addEventListener('change', async (ev) => {
-            const files = [...(ev.target.files || [])].slice(0, 5);
+            const files = [...(ev.target.files || [])].slice(0, 8);
             if (!files.length) return;
             if (statusEl) statusEl.textContent = `正在壓縮 ${files.length} 張照片...`;
             try {
               const newImgs = await Promise.all(files.map((f) => compressImageToBase64(f)));
-              stagedImgs = [...stagedImgs, ...newImgs].slice(0, 5);
+              stagedImgs = [...stagedImgs, ...newImgs].slice(0, 8);
               renderThumbs();
               if (statusEl) statusEl.textContent = `✓ 已載入 ${stagedImgs.length} 張照片！可在下方補充日期／月份／帳戶說明，再點「開始 AI 辨識」`;
             } catch (err) {
@@ -12491,7 +12581,7 @@
               if (statusEl) statusEl.textContent = `正在壓縮剪貼簿的 ${clip.files.length} 張截圖...`;
               try {
                 const newImgs = await Promise.all(clip.files.map((f) => compressImageToBase64(f)));
-                stagedImgs = [...stagedImgs, ...newImgs].slice(0, 5);
+                stagedImgs = [...stagedImgs, ...newImgs].slice(0, 8);
                 renderThumbs();
                 if (statusEl) statusEl.textContent = `✓ 已從剪貼簿貼上 ${newImgs.length} 張截圖（共 ${stagedImgs.length} 張）`;
               } catch (err) {
@@ -12520,7 +12610,7 @@
           const rawDefAcc = (document.getElementById('qpb-default-account') && document.getElementById('qpb-default-account').value) || '';
           const defParsed = parseDefaultAccVal(rawDefAcc);
           const keyLabel = resp.usedKeyLabel || resp.usedProvider || 'AI';
-          const batchTag = totalBatches > 1 ? `第${bIdx + 1}批·${keyLabel}` : `${keyLabel}${resp.model ? ` (${resp.model})` : ''}`;
+          const batchTag = totalBatches > 1 ? `第${bIdx + 1}張·${keyLabel}` : `${keyLabel}${resp.model ? ` (${resp.model})` : ''}`;
           let part = normalizeAiExtractedPayload(parsed, state).filter((x) => x.kind === 'expense' || x.kind === 'income');
           if (context === 'income') {
             part = part.map((x) => ({ ...x, kind: 'income' }));
@@ -12572,11 +12662,10 @@
                 attachments: (meta.imgs || []).map((im) => ({ mimeType: im.mimeType, base64: im.base64 })),
                 expectJson: true,
                 avoidKeyId: switchKey ? (meta.usedKeyId || '') : '',
-                onProgress: (p) => { if (statusEl && p && p.message) statusEl.textContent = `[重跑第 ${bIdx + 1} 批] ${p.message}`; }
+                onProgress: (p) => { if (statusEl && p && p.message) statusEl.textContent = `[重跑第 ${bIdx + 1} 張] ${p.message}`; }
               });
               const parsed = extractJsonFromAiText(resp.text);
               const newPart = normalizeQpbBatchItems(parsed, bIdx, qpbBatchesMeta.length, resp);
-              // Replace only items belonging to bIdx, preserving user edits in other batches
               const keptOther = batchItems.filter((it) => it._batchIdx !== bIdx);
               batchItems = [...keptOther, ...newPart].toSorted((a, b) => (a._batchIdx ?? 0) - (b._batchIdx ?? 0));
               qpbBatchesMeta[bIdx] = {
@@ -12584,13 +12673,16 @@
                 usedKeyId: resp.usedKeyId || '',
                 usedKeyLabel: resp.usedKeyLabel || resp.usedProvider || 'AI',
                 model: resp.model || '',
-                count: newPart.length
+                count: newPart.length,
+                error: ''
               };
               renderQpbList();
-              if (statusEl) statusEl.textContent = `✓ 第 ${bIdx + 1} 批已由「${qpbBatchesMeta[bIdx].usedKeyLabel} (${qpbBatchesMeta[bIdx].model})」重新辨識完成（共 ${newPart.length} 筆）`;
-              showToast(`第 ${bIdx + 1} 批已重新辨識（${qpbBatchesMeta[bIdx].usedKeyLabel}）`);
+              if (statusEl) statusEl.textContent = `✓ 第 ${bIdx + 1} 張已由「${qpbBatchesMeta[bIdx].usedKeyLabel} (${qpbBatchesMeta[bIdx].model})」重新辨識完成（共 ${newPart.length} 筆）`;
+              showToast(`第 ${bIdx + 1} 張已重新辨識（${qpbBatchesMeta[bIdx].usedKeyLabel}）`);
             } catch (err) {
-              showToast(`重跑第 ${bIdx + 1} 批失敗：${err.message}`);
+              qpbBatchesMeta[bIdx] = { ...meta, error: err.message || '辨識失敗' };
+              renderQpbList();
+              showToast(`重跑第 ${bIdx + 1} 張失敗：${err.message}`);
             } finally {
               btn.disabled = false;
               btn.textContent = origText;
@@ -12610,39 +12702,49 @@
             btnRunAi.textContent = '辨識中...';
             if (statusEl) {
               statusEl.textContent = stagedImgs.length
-                ? `正在透過 AI 平行辨識 ${stagedImgs.length} 張照片${userHint ? '（含補充文字說明）' : ''}...`
+                ? `正在透過 AI 逐張獨立辨識 ${stagedImgs.length} 張照片${userHint ? '（含補充文字說明）' : ''}...`
                 : '正在透過 AI 解析文字明細...';
             }
             try {
-              const chunks = [];
-              if (!stagedImgs.length) {
-                chunks.push([]);
-              } else {
-                for (let i = 0; i < stagedImgs.length; i += 2) chunks.push(stagedImgs.slice(i, i + 2));
-              }
-              const batchResults = await Promise.all(chunks.map((chunk, idx) => callAiEndpoint({
+              // 1 image = 1 independent task so every single photo is guaranteed to be recognized
+              const chunks = stagedImgs.length ? stagedImgs.map((im) => [im]) : [[]];
+              const settled = await Promise.allSettled(chunks.map((chunk, idx) => callAiEndpoint({
                 systemPrompt: '你是精準的繁體中文財務收據、發票、月統計表、薪資條與帳單截圖辨識專家，只回傳合法 JSON。',
                 prompt: buildExtractionPrompt('transactions', userHint, fallbackDate),
                 attachments: chunk.map((im) => ({ mimeType: im.mimeType, base64: im.base64 })),
                 expectJson: true,
                 onProgress: (p) => {
                   if (statusEl && p && p.message) {
-                    statusEl.textContent = chunks.length > 1 ? `[批次 ${idx + 1}/${chunks.length}] ${p.message}` : p.message;
+                    statusEl.textContent = chunks.length > 1 ? `[第 ${idx + 1}/${chunks.length} 張] ${p.message}` : p.message;
                   }
                 }
               })));
               let items = [];
               const seenBatchKeys = new Set();
               qpbBatchesMeta = [];
-              batchResults.forEach((resp, bIdx) => {
+              settled.forEach((entry, bIdx) => {
+                if (entry.status !== 'fulfilled') {
+                  qpbBatchesMeta.push({
+                    batchIdx: bIdx,
+                    imgs: chunks[bIdx] || [],
+                    usedKeyId: '',
+                    usedKeyLabel: '失敗',
+                    model: '',
+                    count: 0,
+                    error: (entry.reason && entry.reason.message) || '連線失敗'
+                  });
+                  return;
+                }
+                const resp = entry.value;
                 let count = 0;
                 try {
                   const parsed = extractJsonFromAiText(resp.text);
-                  const part = normalizeQpbBatchItems(parsed, bIdx, batchResults.length, resp);
+                  const part = normalizeQpbBatchItems(parsed, bIdx, settled.length, resp);
                   count = part.length;
                   part.forEach((it) => {
-                    const bKey = `${it.kind}|${it.date || ''}|${Math.round(safeNum(it.amount))}|${String(it.title || '').toLowerCase()}`;
-                    if (seenBatchKeys.has(bKey)) {
+                    const titleNorm = String(it.title || '').trim().toLowerCase();
+                    const bKey = `${it.kind}|${it.date || ''}|${Number(safeNum(it.amount).toFixed(2))}|${titleNorm}`;
+                    if (titleNorm && titleNorm !== '購物支出' && titleNorm !== '支出項目' && seenBatchKeys.has(bKey)) {
                       it.isDuplicate = true;
                       it.checked = false;
                     } else {
@@ -12657,12 +12759,18 @@
                   usedKeyId: resp.usedKeyId || '',
                   usedKeyLabel: resp.usedKeyLabel || resp.usedProvider || 'AI',
                   model: resp.model || '',
-                  count
+                  count,
+                  error: ''
                 });
               });
               batchItems = items;
               renderQpbList();
-              if (statusEl) statusEl.textContent = items.length > 0 ? `✓ AI 辨識完成！共擷取 ${items.length} 筆，可逐筆微調或針對個別批次換組重跑` : '未能辨識出任何交易明細，可點下方換組重辨識或補充說明後重試';
+              const failCnt = qpbBatchesMeta.filter((b) => b.error).length;
+              if (statusEl) {
+                statusEl.textContent = items.length > 0
+                  ? `✓ AI 辨識完成！共擷取 ${items.length} 筆${failCnt > 0 ? `（有 ${failCnt} 張失敗，可在下方點換組重辨識）` : '，可逐筆微調或針對個別照片換組重跑'}`
+                  : '未能辨識出任何交易明細，可點下方換組重辨識或補充說明後重試';
+              }
               btnRunAi.textContent = '🔄 全部重新辨識';
             } catch (err) {
               if (statusEl) statusEl.textContent = `辨識失敗：${err.message}（可點右側按鈕直接重送）`;
@@ -13797,27 +13905,33 @@
       function isCopilotActionDuplicate(act, seenBatchKeys = null) {
         if (!act || (act.type !== 'add_expense' && act.type !== 'add_income')) return false;
         const date = parseFlexibleDate(act.date) || todayISO();
-        const amt = Math.round(Math.abs(parseFlexibleNumber(act.amount)));
+        const amt = Number(Math.abs(parseFlexibleNumber(act.amount)).toFixed(2));
         if (!Number.isFinite(amt) || amt <= 0) return false;
+        const cur = normalizeAiCurrencyCode(act.currency, act.amount);
         const rawTitle = String(act.title || act.name || '').trim().toLowerCase();
-        const bKey = `${act.type}|${date}|${amt}|${rawTitle}`;
+        const isGenericTitle = !rawTitle || rawTitle === '購物支出' || rawTitle === '支出項目' || rawTitle === 'ai 記帳支出';
+        const bKey = `${act.type}|${date}|${cur}|${amt}|${rawTitle}`;
         if (seenBatchKeys) {
-          if (seenBatchKeys.has(bKey)) return true;
+          if (!isGenericTitle && seenBatchKeys.has(bKey)) return true;
           seenBatchKeys.add(bKey);
         }
         if (act.type === 'add_expense') {
           return (state.randomExpenses || []).some((e) => {
             if (normalizeDateStr(e.date) !== date) return false;
-            if (Math.round(safeNum(e.amount)) !== amt) return false;
+            if (String(e.currency || 'TWD').toUpperCase() !== cur) return false;
+            if (Number(safeNum(e.amount).toFixed(2)) !== amt) return false;
             const et = String(e.title || '').trim().toLowerCase();
-            return !rawTitle || !et || et === rawTitle || et.includes(rawTitle) || rawTitle.includes(et);
+            if (isGenericTitle || !et) return false;
+            return et === rawTitle || (et.length >= 2 && rawTitle.length >= 2 && (et.includes(rawTitle) || rawTitle.includes(et)));
           });
         }
         return (state.incomeReceipts || []).some((r) => {
           if (normalizeDateStr(r.date) !== date) return false;
-          if (Math.round(safeNum(r.actualAmount)) !== amt) return false;
+          if (String(r.currency || 'TWD').toUpperCase() !== cur) return false;
+          if (Number(safeNum(r.actualAmount).toFixed(2)) !== amt) return false;
           const rt = String(r.name || '').trim().toLowerCase();
-          return !rawTitle || !rt || rt === rawTitle || rt.includes(rawTitle) || rawTitle.includes(rt);
+          if (isGenericTitle || !rt) return false;
+          return rt === rawTitle || (rt.length >= 2 && rawTitle.length >= 2 && (rt.includes(rawTitle) || rawTitle.includes(rt)));
         });
       }
 
@@ -14158,23 +14272,28 @@
           const hasDoneIncome = actions.some((a) => a._status === 'done' && a.type === 'add_income');
           const batchesHtml = batches.length > 0 ? `
             <div class="mt-2 pt-2 hairline-t space-y-1.5 text-[11px]">
-              <div class="font-medium text-zinc-600">🤖 ${batches.length > 1 ? `分批平行辨識模組（共 ${batches.length} 批，可針對單批重跑）` : '辨識模組與重新辨識'}</div>
+              <div class="font-medium text-zinc-600">🤖 ${batches.length > 1 ? `各張圖片獨立辨識模組（共 ${batches.length} 張，每張獨立辨識不漏單）` : '辨識模組與重新辨識'}</div>
               ${batches.map((b, bIdx) => {
                 const imgCount = Array.isArray(b.imgs) ? b.imgs.length : 0;
-                const bTitle = batches.length > 1 ? `第 ${bIdx + 1}/${batches.length} 批${imgCount ? `(${imgCount}圖)` : ''}` : `本次${imgCount ? `(${imgCount}圖)` : ''}`;
+                const bTitle = batches.length > 1 ? `第 ${bIdx + 1}/${batches.length} 張` : (imgCount ? '第 1 張' : '本次');
+                const thumbImg = (b.imgs && b.imgs[0] && b.imgs[0].previewUrl)
+                  ? `<img src="${b.imgs[0].previewUrl}" class="w-6 h-6 object-cover rounded hairline shrink-0" />`
+                  : '';
                 const canRerunBatch = Array.isArray(b.imgs) && b.imgs.length > 0;
+                const statusPart = b.error
+                  ? `<span class="text-rose-700 font-medium truncate">❌ 失敗：${escapeHtml(b.error)}</span>`
+                  : `<span class="font-medium text-zinc-800">${escapeHtml(b.usedKeyLabel || 'AI')}</span><span class="text-[10px] font-mono-num text-zinc-500 truncate">${escapeHtml(b.model || '')}</span><span class="text-[10px] font-mono-num ${(b.count || 0) > 0 ? 'text-emerald-700' : 'text-amber-700'}">→ ${b.count || 0} 筆</span>`;
                 return `
                   <div class="p-1.5 rounded-lg bg-[#f7f7f5] hairline flex flex-wrap items-center justify-between gap-1.5">
                     <div class="flex flex-wrap items-center gap-1 min-w-0">
+                      ${thumbImg}
                       <span class="px-1.5 py-0.5 rounded bg-zinc-900 text-white text-[10px] font-mono-num">${escapeHtml(bTitle)}</span>
-                      <span class="font-medium text-zinc-800">${escapeHtml(b.usedKeyLabel || 'AI')}</span>
-                      <span class="text-[10px] font-mono-num text-zinc-500 truncate">${escapeHtml(b.model || '')}</span>
-                      <span class="text-[10px] font-mono-num text-emerald-700">→ ${b.count || 0} 筆</span>
+                      ${statusPart}
                     </div>
                     ${canRerunBatch ? `
                       <div class="flex items-center gap-1 shrink-0">
-                        <button type="button" data-copilot-rerun-batch="${mIdx}:${bIdx}:0" class="px-1.5 py-0.5 rounded bg-white hover:bg-zinc-100 hairline text-[10px] text-zinc-700 font-medium" title="使用原本優先順序重跑這批圖片">🔄 重跑此批</button>
-                        <button type="button" data-copilot-rerun-batch="${mIdx}:${bIdx}:1" class="px-1.5 py-0.5 rounded bg-zinc-900 hover:bg-zinc-800 text-white text-[10px] font-medium" title="跳過此批剛用的模型，換另一組 API Key 重辨識這批圖片">⚡ 換組重跑</button>
+                        <button type="button" data-copilot-rerun-batch="${mIdx}:${bIdx}:0" class="px-1.5 py-0.5 rounded bg-white hover:bg-zinc-100 hairline text-[10px] text-zinc-700 font-medium" title="重新辨識這張圖片">🔄 重跑此張</button>
+                        <button type="button" data-copilot-rerun-batch="${mIdx}:${bIdx}:1" class="px-1.5 py-0.5 rounded bg-zinc-900 hover:bg-zinc-800 text-white text-[10px] font-medium" title="跳過此張剛用的模型，換另一組 API Key 重辨識這張圖片">⚡ 換組重跑</button>
                       </div>
                     ` : ''}
                   </div>
@@ -14544,15 +14663,11 @@
             };
           };
 
-          // Parallel multi-image recognition when >2 images attached
-          const chunks = [];
-          if (!imgsToSend.length) {
-            chunks.push([]);
-          } else {
-            for (let i = 0; i < imgsToSend.length; i += 2) chunks.push(imgsToSend.slice(i, i + 2));
-          }
+          // 1 image = 1 independent task so every attached image (1st, 2nd, 3rd, ... up to 8th) is guaranteed to be recognized
+          const chunks = imgsToSend.length ? imgsToSend.map((im) => [im]) : [[]];
           const avoidKeyIdOnRetry = (retryOpts && retryOpts.avoidKeyId) || '';
-          const batchResponses = await Promise.all(chunks.map((chunk, idx) => callAiEndpoint({
+          const perImgStatus = chunks.map((_, i) => (chunks.length > 1 ? `第 ${i + 1}/${chunks.length} 張：等待分派…` : '思考與分析中…'));
+          const settled = await Promise.allSettled(chunks.map((chunk, idx) => callAiEndpoint({
             systemPrompt: buildAiCopilotSystemPrompt(),
             prompt,
             attachments: chunk.map((im) => ({ mimeType: im.mimeType, base64: im.base64 })),
@@ -14560,27 +14675,49 @@
             avoidKeyId: avoidKeyIdOnRetry,
             onProgress: (p) => {
               if (p && p.message && aiCopilotHistory[targetIdx]) {
-                const prefix = chunks.length > 1 ? `[平行批次 ${idx + 1}/${chunks.length}] ` : '';
-                aiCopilotHistory[targetIdx] = { role: 'assistant', text: `${prefix}${p.message}`, actions: [] };
+                perImgStatus[idx] = chunks.length > 1 ? `• 第 ${idx + 1}/${chunks.length} 張：${p.message}` : p.message;
+                aiCopilotHistory[targetIdx] = { role: 'assistant', text: perImgStatus.join('\n'), actions: [] };
                 renderAiCopilotMessages();
               }
             }
           })));
 
-          const resp = batchResponses[0];
+          const firstOk = settled.find((e) => e.status === 'fulfilled');
+          if (!firstOk) {
+            const firstErr = (settled[0] && settled[0].reason && settled[0].reason.message) || '全部圖片辨識連線失敗';
+            throw new Error(firstErr);
+          }
+          const resp = firstOk.value;
           const sec = ((performance.now() - t0) / 1000).toFixed(1);
-          const upSec = resp && resp.upstreamMs ? `（AI 伺服器 ${(resp.upstreamMs / 1000).toFixed(1)}s${batchResponses.length > 1 ? ` · ${batchResponses.length} 批平行` : ''}）` : '';
+          const upSec = resp && resp.upstreamMs ? `（AI 伺服器 ${(resp.upstreamMs / 1000).toFixed(1)}s${settled.length > 1 ? ` · 共 ${settled.length} 張獨立辨識` : ''}）` : '';
 
           const replies = [];
           const actions = [];
           const batchesMeta = [];
           const seenBatchKeys = new Set();
-          batchResponses.forEach((r, bIdx) => {
+          settled.forEach((entry, bIdx) => {
+            if (entry.status !== 'fulfilled') {
+              const errMsg = (entry.reason && entry.reason.message) || '連線失敗';
+              replies.push(`【第 ${bIdx + 1} 張 · ❌ 辨識失敗】\n${errMsg}（請點下方第 ${bIdx + 1} 張的「⚡ 換組重跑」）`);
+              batchesMeta.push({
+                batchIdx: bIdx,
+                imgs: chunks[bIdx] || [],
+                text,
+                usedKeyId: '',
+                usedKeyLabel: '失敗',
+                model: '',
+                count: 0,
+                error: errMsg,
+                reply: `辨識失敗：${errMsg}`
+              });
+              return;
+            }
+            const r = entry.value;
             const norm = normalizeCopilotAiResponse(r.text);
             const keyLabel = r.usedKeyLabel || r.usedProvider || 'AI';
-            const tag = batchResponses.length > 1 ? `第${bIdx + 1}批·${keyLabel} (${r.model || ''})` : `${keyLabel} (${r.model || ''})`;
+            const tag = settled.length > 1 ? `第${bIdx + 1}張·${keyLabel} (${r.model || ''})` : `${keyLabel} (${r.model || ''})`;
             if (norm.reply) {
-              replies.push(batchResponses.length > 1 ? `【第 ${bIdx + 1} 批 · ${keyLabel}】\n${norm.reply}` : norm.reply);
+              replies.push(settled.length > 1 ? `【第 ${bIdx + 1} 張 · ${keyLabel}】\n${norm.reply}` : norm.reply);
             }
             norm.actions.forEach((a) => {
               const isDup = isCopilotActionDuplicate(a, seenBatchKeys);
@@ -14600,11 +14737,12 @@
               usedKeyLabel: keyLabel,
               model: r.model || '',
               count: norm.actions.length,
+              error: '',
               reply: norm.reply
             });
           });
           const replyText = replies.join('\n\n') || '已完成分析';
-          const distinctModels = [...new Set(batchesMeta.map((b) => `${b.usedKeyLabel}${b.model ? ` (${b.model})` : ''}`))].join(' / ');
+          const distinctModels = [...new Set(batchesMeta.filter((b) => !b.error).map((b) => `${b.usedKeyLabel}${b.model ? ` (${b.model})` : ''}`))].join(' / ');
 
           const autoExec = Boolean(document.getElementById('ai-copilot-auto-exec') && document.getElementById('ai-copilot-auto-exec').checked);
           let autoDoneCount = 0;
@@ -14635,7 +14773,7 @@
             batches: batchesMeta,
             _retryPayload: { text, imgs: imgsToSend, lastUsedKeyId: (resp && resp.usedKeyId) || '' },
             ...(imgsToSend.length > 0 && actions.length === 0 ? { _noActionImg: true } : {}),
-            meta: `🤖 ${distinctModels} · 總耗時 ${sec}s${upSec}`
+            meta: `🤖 ${distinctModels || 'AI'} · 總耗時 ${sec}s${upSec}`
           };
           renderAiCopilotMessages();
         } catch (err) {
@@ -14677,7 +14815,7 @@
         renderAll();
 
         aiCopilotBusy = true;
-        showToast(switchKey ? `⚡ 正在切換另一組 AI 重新辨識第 ${bIdx + 1} 批...` : `🔄 正在重新辨識第 ${bIdx + 1} 批...`);
+        showToast(switchKey ? `⚡ 正在切換另一組 AI 重新辨識第 ${bIdx + 1} 張...` : `🔄 正在重新辨識第 ${bIdx + 1} 張...`);
         try {
           const defaultImgInstruction = '請詳細辨識所有附圖中的購物訂單、發票、收據或帳單明細（含商品/店家名稱、金額、幣別如 CNY/TWD/USD、日期與分類），在 reply 中列出辨識摘要，並為每一筆消費在 actions 陣列中產生對應的 add_expense 操作（amount 請填純數字）。';
           const prompt = [
@@ -14697,7 +14835,7 @@
           const parsed = extractJsonFromAiText(r.text);
           const keyLabel = r.usedKeyLabel || r.usedProvider || 'AI';
           const totalBatches = msg.batches.length;
-          const tag = totalBatches > 1 ? `第${bIdx + 1}批·${keyLabel} (${r.model || ''})` : `${keyLabel} (${r.model || ''})`;
+          const tag = totalBatches > 1 ? `第${bIdx + 1}張·${keyLabel} (${r.model || ''})` : `${keyLabel} (${r.model || ''})`;
           const items = normalizeAiExtractedPayload(parsed, state);
           const rawActs = Array.isArray(parsed && parsed.actions) && parsed.actions.length > 0
             ? parsed.actions.map((a) => ({
@@ -14738,18 +14876,21 @@
             usedKeyLabel: keyLabel,
             model: r.model || '',
             count: newBatchActions.length,
+            error: '',
             reply: newReply
           };
 
           const otherActions = (msg.actions || []).filter((a) => a._batchIdx !== bIdx);
           msg.actions = [...otherActions, ...newBatchActions].toSorted((a, b) => (a._batchIdx ?? 0) - (b._batchIdx ?? 0));
-          msg.text = msg.batches.map((b, i) => (msg.batches.length > 1 ? `【第 ${i + 1} 批 · ${b.usedKeyLabel}】\n${b.reply || ''}` : (b.reply || ''))).join('\n\n') || msg.text;
-          const distinctModels = [...new Set(msg.batches.map((b) => `${b.usedKeyLabel}${b.model ? ` (${b.model})` : ''}`))].join(' / ');
-          msg.meta = `🤖 ${distinctModels} · 第 ${bIdx + 1} 批已重跑`;
+          msg.text = msg.batches.map((b, i) => (msg.batches.length > 1 ? `【第 ${i + 1} 張 · ${b.usedKeyLabel}】\n${b.reply || ''}` : (b.reply || ''))).join('\n\n') || msg.text;
+          const distinctModels = [...new Set(msg.batches.filter((b) => !b.error).map((b) => `${b.usedKeyLabel}${b.model ? ` (${b.model})` : ''}`))].join(' / ');
+          msg.meta = `🤖 ${distinctModels || 'AI'} · 第 ${bIdx + 1} 張已重跑`;
           renderAiCopilotMessages();
-          showToast(`✓ 第 ${bIdx + 1} 批已由「${keyLabel} (${r.model || ''})」重新辨識完成！`);
+          showToast(`✓ 第 ${bIdx + 1} 張已由「${keyLabel} (${r.model || ''})」重新辨識完成！`);
         } catch (err) {
-          showToast(`重跑第 ${bIdx + 1} 批失敗：${err.message}`);
+          msg.batches[bIdx] = { ...batch, error: err.message || '辨識失敗' };
+          renderAiCopilotMessages();
+          showToast(`重跑第 ${bIdx + 1} 張失敗：${err.message}`);
         } finally {
           aiCopilotBusy = false;
         }
@@ -14780,8 +14921,13 @@
           thumbsEl.replaceChildren();
           return;
         }
-        thumbsEl.innerHTML = aiCopilotStagedImgs.map((im) => `<img src="${im.previewUrl}" class="w-11 h-11 object-cover rounded-md hairline" />`).join('') +
-          `<button type="button" id="btn-copilot-rm-imgs" class="text-[11px] text-zinc-500 underline ml-1">清除圖片</button>`;
+        thumbsEl.innerHTML = aiCopilotStagedImgs.map((im, i) => `
+          <div class="relative">
+            <img src="${im.previewUrl}" class="w-11 h-11 object-cover rounded-md hairline" />
+            <span class="absolute bottom-0 left-0 px-1 rounded-tr bg-black/65 text-white text-[9px] font-mono-num">#${i + 1}</span>
+            <button type="button" data-copilot-rm-one="${i}" class="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-zinc-900 text-white text-[10px] leading-none flex items-center justify-center">×</button>
+          </div>
+        `).join('') + `<button type="button" id="btn-copilot-rm-imgs" class="text-[11px] text-zinc-500 underline ml-1">清除全部 (${aiCopilotStagedImgs.length})</button>`;
       };
 
       const btnCopilotFab = document.getElementById('btn-ai-copilot-fab');
@@ -14826,9 +14972,9 @@
             e.preventDefault();
             try {
               const imgs = await Promise.all(imgFiles.map((f) => compressImageToBase64(f)));
-              aiCopilotStagedImgs = [...aiCopilotStagedImgs, ...imgs].slice(0, 5);
+              aiCopilotStagedImgs = [...aiCopilotStagedImgs, ...imgs].slice(0, 8);
               renderCopilotStagedThumbs();
-              showToast(`已貼上 ${imgs.length} 張截圖`);
+              showToast(`已貼上 ${imgs.length} 張截圖（共 ${aiCopilotStagedImgs.length} 張）`);
             } catch (err) {
               showToast(`貼上圖片失敗：${err.message}`);
             }
@@ -14843,9 +14989,9 @@
           if (clip.files.length > 0) {
             try {
               const imgs = await Promise.all(clip.files.map((f) => compressImageToBase64(f)));
-              aiCopilotStagedImgs = [...aiCopilotStagedImgs, ...imgs].slice(0, 5);
+              aiCopilotStagedImgs = [...aiCopilotStagedImgs, ...imgs].slice(0, 8);
               renderCopilotStagedThumbs();
-              showToast(`已從剪貼簿貼上 ${imgs.length} 張截圖！點「送出」即可辨識`);
+              showToast(`已從剪貼簿貼上 ${imgs.length} 張截圖（共 ${aiCopilotStagedImgs.length} 張）！點「送出」即可辨識`);
             } catch (err) {
               showToast(`貼上截圖失敗：${err.message}`);
             }
@@ -14870,11 +15016,11 @@
       const copilotFileEl = document.getElementById('ai-copilot-file');
       if (copilotFileEl) {
         copilotFileEl.addEventListener('change', async (ev) => {
-          const files = [...(ev.target.files || [])].slice(0, 5);
+          const files = [...(ev.target.files || [])].slice(0, 8);
           if (!files.length) return;
           try {
             const imgs = await Promise.all(files.map((f) => compressImageToBase64(f)));
-            aiCopilotStagedImgs = [...aiCopilotStagedImgs, ...imgs].slice(0, 5);
+            aiCopilotStagedImgs = [...aiCopilotStagedImgs, ...imgs].slice(0, 8);
             renderCopilotStagedThumbs();
           } catch (err) {
             showToast(err.message);
@@ -14889,6 +15035,12 @@
           if (ev.target.id === 'btn-copilot-rm-imgs') {
             aiCopilotStagedImgs = [];
             copilotThumbsEl.replaceChildren();
+            return;
+          }
+          const rmIdx = ev.target.dataset.copilotRmOne;
+          if (rmIdx !== undefined) {
+            aiCopilotStagedImgs.splice(Number(rmIdx), 1);
+            renderCopilotStagedThumbs();
           }
         });
       }
