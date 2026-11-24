@@ -1890,46 +1890,89 @@
   </button>
 
   <div id="ai-copilot-drawer" class="fixed inset-0 z-50 hidden justify-end modal-backdrop">
-    <div class="bg-white w-full max-w-md h-full shadow-2xl hairline-l flex flex-col">
-      <!-- Drawer Header -->
-      <div class="px-4 py-3 hairline-b flex items-center justify-between gap-2 bg-[#fafaf9] shrink-0">
-        <div class="min-w-0">
-          <div class="flex items-center gap-2">
-            <span class="text-sm font-semibold text-zinc-900">AI 財務總管</span>
-            <span id="ai-copilot-model-badge" class="text-[10px] font-mono-num px-1.5 py-0.5 rounded bg-zinc-100 text-zinc-600 truncate max-w-[150px]">未設定</span>
-          </div>
-          <p class="text-[11px] text-zinc-500 mt-0.5">自然語言或附圖記帳、轉帳、查帳、設預算與分析</p>
+    <div class="bg-white w-full max-w-md h-full shadow-2xl hairline-l flex flex-col relative">
+      <!-- Gemini-style Minimal Header -->
+      <div class="px-3.5 py-2.5 hairline-b flex items-center justify-between gap-2 bg-white shrink-0 relative z-20">
+        <button id="btn-ai-copilot-go-settings" type="button" title="切換 AI 模型與 API Key 設定" class="btn-focus min-w-0 inline-flex items-center gap-1.5 px-2 py-1 rounded-full hover:bg-zinc-100 transition-colors text-left">
+          <span class="text-sm font-semibold text-zinc-900 shrink-0">AI 總管</span>
+          <span id="ai-copilot-model-badge" class="text-[11px] font-mono-num text-zinc-500 truncate max-w-[135px]">未設定</span>
+          <svg class="w-3.5 h-3.5 text-zinc-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+        </button>
+
+        <div class="inline-flex items-center gap-0.5 rounded-full bg-[#f7f7f5] hairline px-1 py-0.5 shrink-0">
+          <button id="btn-ai-copilot-clear" type="button" title="開新對話" class="btn-focus w-8 h-8 rounded-full hover:bg-zinc-200/70 text-zinc-700 flex items-center justify-center transition-colors">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          </button>
+          <button id="btn-ai-copilot-header-more" type="button" title="更多選項" class="btn-focus w-8 h-8 rounded-full hover:bg-zinc-200/70 text-zinc-700 flex items-center justify-center transition-colors">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>
+          </button>
+          <button id="btn-ai-copilot-close" type="button" title="關閉助理" class="btn-focus w-8 h-8 rounded-full hover:bg-zinc-200/70 text-zinc-500 hover:text-zinc-900 flex items-center justify-center text-lg leading-none transition-colors">&times;</button>
         </div>
-        <div class="flex items-center gap-1.5 shrink-0">
-          <button id="btn-ai-copilot-clear" type="button" class="h-7 px-2 rounded-md text-[11px] text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100">清空</button>
-          <button id="btn-ai-copilot-close" type="button" class="w-7 h-7 rounded-md text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 text-lg leading-none">&times;</button>
+
+        <!-- Header More Popover Menu -->
+        <div id="ai-copilot-header-menu" class="hidden absolute right-3.5 top-12 w-64 rounded-2xl bg-white shadow-xl hairline p-2 space-y-1 text-xs z-30">
+          <label class="flex items-start gap-2.5 px-2.5 py-2 rounded-xl hover:bg-[#f7f7f5] cursor-pointer select-none">
+            <input id="ai-copilot-auto-exec" type="checkbox" class="mt-0.5 rounded border-zinc-300 text-zinc-900" />
+            <span class="leading-snug">
+              <span class="block font-medium text-zinc-900">自動執行記帳與設定</span>
+              <span class="block text-[10px] text-zinc-500 mt-0.5">辨識後自動入帳（刪除仍需手動確認）</span>
+            </span>
+          </label>
+          <button id="btn-ai-copilot-menu-models" type="button" class="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl hover:bg-[#f7f7f5] text-zinc-800 text-left">
+            <svg class="w-4 h-4 text-zinc-500 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+            <span>切換 AI 模型 / API Key 設定</span>
+          </button>
+          <button id="btn-ai-copilot-menu-clear" type="button" class="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl hover:bg-rose-50 text-rose-700 text-left">
+            <svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
+            <span>清空全部對話紀錄</span>
+          </button>
         </div>
       </div>
 
-      <!-- Safety Toggle -->
-      <div class="px-4 py-2 hairline-b bg-white flex items-center justify-between gap-2 text-[11px] text-zinc-600 shrink-0">
-        <label class="inline-flex items-center gap-1.5 cursor-pointer select-none">
-          <input id="ai-copilot-auto-exec" type="checkbox" class="rounded border-zinc-300 text-zinc-900" />
-          <span>自動執行記帳／設定類操作（刪除仍需手動確認）</span>
-        </label>
-        <button id="btn-ai-copilot-go-settings" type="button" class="text-zinc-500 hover:text-zinc-900 underline shrink-0">換模型</button>
+      <!-- Chat Messages + Floating Scroll-to-Bottom Button -->
+      <div class="relative flex-1 min-h-0 flex flex-col bg-[#f7f7f5]">
+        <div id="ai-copilot-messages" class="flex-1 overflow-y-auto px-4 py-4 space-y-4 scroll-smooth"></div>
+        <button id="btn-ai-copilot-scroll-bottom" type="button" title="捲動到最新訊息" class="hidden absolute bottom-3 left-1/2 -translate-x-1/2 z-10 w-8 h-8 rounded-full bg-white/95 hover:bg-white shadow-md hairline text-zinc-700 flex items-center justify-center transition-all active:scale-95">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M19 12l-7 7-7-7"/></svg>
+        </button>
       </div>
 
-      <!-- Chat Messages -->
-      <div id="ai-copilot-messages" class="flex-1 overflow-y-auto p-4 space-y-3 bg-[#f7f7f5]"></div>
+      <!-- Gemini-style Floating Pill Composer -->
+      <div class="px-3 pt-2 pb-3 bg-white hairline-t space-y-2 shrink-0 relative z-20">
+        <!-- Edit Mode Indicator -->
+        <div id="ai-copilot-edit-banner" class="hidden flex items-center justify-between gap-2 px-3 py-1.5 rounded-xl bg-amber-50 border border-amber-200/80 text-[11px] text-amber-900">
+          <span id="ai-copilot-edit-label">✏️ 正在編輯先前訊息（送出後將重新生成回覆）</span>
+          <button id="btn-ai-copilot-cancel-edit" type="button" class="font-medium underline shrink-0">取消</button>
+        </div>
 
-      <!-- Composer -->
-      <div class="p-3 hairline-t bg-white space-y-2 shrink-0">
-        <div id="ai-copilot-thumbs" class="flex flex-wrap items-center gap-1.5 empty:hidden"></div>
-        <div class="flex items-end gap-1.5">
-          <label title="附加收據／截圖（最多 8 張，每張獨立辨識不漏單）" class="btn-focus h-9 w-9 rounded-lg hairline bg-[#f7f7f5] hover:bg-zinc-100 flex items-center justify-center cursor-pointer shrink-0 text-zinc-700">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+        <!-- Staged Image Thumbnails -->
+        <div id="ai-copilot-thumbs" class="flex flex-wrap items-center gap-1.5 empty:hidden px-1"></div>
+
+        <!-- Floating + Attachment Menu -->
+        <div id="ai-copilot-plus-menu" class="hidden absolute left-3 bottom-16 w-60 rounded-2xl bg-white shadow-xl hairline p-1.5 space-y-0.5 text-xs z-30">
+          <label class="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl hover:bg-[#f7f7f5] text-zinc-800 cursor-pointer">
+            <svg class="w-4 h-4 text-zinc-600 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+            <span>選擇照片／截圖（最多 8 張）</span>
             <input id="ai-copilot-file" type="file" accept="image/*" multiple class="hidden" />
           </label>
-          <button id="btn-ai-copilot-paste" type="button" title="一鍵貼上剪貼簿截圖或刷卡簡訊" class="btn-focus h-9 w-9 rounded-lg hairline bg-[#f7f7f5] hover:bg-zinc-100 flex items-center justify-center shrink-0 text-zinc-700 text-xs">📋</button>
-          <button id="btn-ai-copilot-voice" type="button" title="語音開口記帳（再點一下停止）" class="btn-focus h-9 w-9 rounded-lg hairline bg-[#f7f7f5] hover:bg-zinc-100 flex items-center justify-center shrink-0 text-zinc-700 text-xs">🎙️</button>
-          <textarea id="ai-copilot-input" rows="1" placeholder="開口說、貼截圖或輸入記帳指令..." class="flex-1 min-w-0 max-h-28 px-3 py-2 rounded-lg hairline bg-white text-xs text-zinc-900 resize-none"></textarea>
-          <button id="btn-ai-copilot-send" type="button" class="btn-focus h-9 px-3.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-medium shrink-0">送出</button>
+          <button id="btn-ai-copilot-paste" type="button" class="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl hover:bg-[#f7f7f5] text-zinc-800 text-left">
+            <svg class="w-4 h-4 text-zinc-600 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>
+            <span>貼上剪貼簿截圖或刷卡簡訊</span>
+          </button>
+        </div>
+
+        <!-- Pill Input Bar -->
+        <div class="flex items-end gap-1.5 rounded-[26px] bg-[#f7f7f5] hairline px-2 py-1.5 focus-within:bg-white focus-within:ring-2 focus-within:ring-zinc-900/10 transition-all">
+          <button id="btn-ai-copilot-plus" type="button" title="附加圖片或貼上剪貼簿" class="btn-focus w-9 h-9 rounded-full hover:bg-zinc-200/70 text-zinc-700 flex items-center justify-center shrink-0 transition-colors">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </button>
+          <textarea id="ai-copilot-input" rows="1" placeholder="問問 AI 財務總管..." class="flex-1 min-w-0 max-h-28 py-2 px-1 bg-transparent text-xs sm:text-sm text-zinc-900 placeholder:text-zinc-400 resize-none focus:outline-none leading-5"></textarea>
+          <button id="btn-ai-copilot-voice" type="button" title="語音開口記帳（再點一下停止）" class="btn-focus w-9 h-9 rounded-full hover:bg-zinc-200/70 text-zinc-600 flex items-center justify-center shrink-0 transition-colors">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+          </button>
+          <button id="btn-ai-copilot-send" type="button" title="送出訊息" class="btn-focus w-9 h-9 rounded-full bg-zinc-900 hover:bg-zinc-800 text-white flex items-center justify-center shrink-0 transition-all active:scale-95">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
+          </button>
         </div>
       </div>
     </div>
@@ -14575,9 +14618,38 @@
         return { ok: false, msg: `不支援的操作：${t}` };
       }
 
-      function renderAiCopilotMessages() {
+      let copilotOpenUserMenuIdx = -1;
+      let copilotEditingUserIdx = -1;
+      let copilotSpeakingIdx = -1;
+
+      function formatCopilotTextHtml(raw) {
+        return escapeHtml(String(raw || ''))
+          .replace(/\*\*([^*]+)\*\*/g, '<strong class="font-semibold text-zinc-900">$1</strong>');
+      }
+
+      function setCopilotEditMode(uIdx = -1) {
+        copilotEditingUserIdx = uIdx;
+        const banner = document.getElementById('ai-copilot-edit-banner');
+        if (!banner) return;
+        if (uIdx >= 0) {
+          banner.classList.remove('hidden');
+        } else {
+          banner.classList.add('hidden');
+        }
+      }
+
+      function updateCopilotScrollBtn() {
+        const box = document.getElementById('ai-copilot-messages');
+        const btn = document.getElementById('btn-ai-copilot-scroll-bottom');
+        if (!box || !btn) return;
+        const distFromBottom = box.scrollHeight - box.scrollTop - box.clientHeight;
+        btn.classList.toggle('hidden', distFromBottom < 80);
+      }
+
+      function renderAiCopilotMessages(preserveScroll = false) {
         const box = document.getElementById('ai-copilot-messages');
         if (!box) return;
+        const prevScrollTop = box.scrollTop;
         if (aiCopilotHistory.length === 0) {
           const quickPrompts = [
             '幫我記一筆今天午餐 150 元',
@@ -14586,28 +14658,48 @@
             '把餐飲美食本月預算設成 15000'
           ];
           box.innerHTML = `
-            <div class="bg-white rounded-xl p-4 hairline space-y-3 text-xs text-zinc-700">
-              <div class="font-semibold text-zinc-900">👋 你好！我是你的 AI 財務總管</div>
-              <p class="leading-relaxed text-zinc-600">你可以直接用自然語言、<strong>🎙️ 語音開口說</strong>、<strong>📋 貼上截圖／簡訊</strong>或附多張照片叫我幫你：<strong>記收支、固定帳單、帳戶轉帳、改現金餘額、股票買賣配息、設預算、團帳記帳、查帳分析</strong>。</p>
-              <div class="space-y-1.5 pt-1">
-                <div class="text-[11px] text-zinc-400">點一下快速試試：</div>
-                <div class="flex flex-wrap gap-1.5">
-                  ${quickPrompts.map((q) => `<button type="button" data-copilot-quick="${escapeHtml(q)}" class="px-2.5 py-1.5 rounded-lg bg-[#f7f7f5] hover:bg-zinc-200/70 hairline text-[11px] text-zinc-800 text-left">${escapeHtml(q)}</button>`).join('')}
-                </div>
+            <div class="py-6 space-y-5">
+              <div class="space-y-1.5 px-1">
+                <div class="text-lg font-semibold text-zinc-900 tracking-tight">你好，需要幫忙記帳或查帳嗎？</div>
+                <p class="text-xs text-zinc-500 leading-relaxed">點左下角 <strong>＋</strong> 傳多張收據截圖或貼上簡訊，或直接點 <strong>🎙️</strong> 開口記帳。點擊自己發過的訊息可隨時複製、編輯或重試。</p>
+              </div>
+              <div class="flex flex-wrap gap-2">
+                ${quickPrompts.map((q) => `<button type="button" data-copilot-quick="${escapeHtml(q)}" class="px-3.5 py-2 rounded-2xl bg-white hover:bg-zinc-50 hairline text-xs text-zinc-800 text-left shadow-[0_1px_2px_rgba(0,0,0,0.03)] transition-colors">${escapeHtml(q)}</button>`).join('')}
               </div>
             </div>
           `;
+          updateCopilotScrollBtn();
           return;
         }
+
+        const lastAssistantIdx = aiCopilotHistory.reduce((acc, m, idx) => (m.role === 'assistant' ? idx : acc), -1);
 
         box.innerHTML = aiCopilotHistory.map((msg, mIdx) => {
           if (msg.role === 'user') {
             const imgsHtml = (msg.thumbs && msg.thumbs.length)
-              ? `<div class="flex flex-wrap gap-1 mb-1.5">${msg.thumbs.map((u) => `<img src="${u}" class="w-12 h-12 object-cover rounded-md border border-white/20" />`).join('')}</div>`
+              ? `<div class="flex flex-wrap gap-1.5 mb-2">${msg.thumbs.map((u) => `<img src="${u}" class="w-12 h-12 object-cover rounded-lg border border-white/20" />`).join('')}</div>`
               : '';
+            const menuOpen = copilotOpenUserMenuIdx === mIdx;
+            const userMenuHtml = menuOpen ? `
+              <div class="mt-2 w-48 rounded-2xl bg-white shadow-xl hairline p-1.5 space-y-0.5 text-xs text-zinc-800">
+                <button type="button" data-copilot-user-action="copy:${mIdx}" class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-[#f7f7f5] text-left">
+                  <svg class="w-4 h-4 text-zinc-500 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                  <span>複製文字</span>
+                </button>
+                <button type="button" data-copilot-user-action="edit:${mIdx}" class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-[#f7f7f5] text-left">
+                  <svg class="w-4 h-4 text-zinc-500 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                  <span>編輯</span>
+                </button>
+                <button type="button" data-copilot-user-action="retry:${mIdx}" class="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl hover:bg-[#f7f7f5] text-left">
+                  <svg class="w-4 h-4 text-zinc-500 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                  <span>重試</span>
+                </button>
+              </div>
+            ` : '';
             return `
-              <div class="flex justify-end">
-                <div class="max-w-[85%] rounded-2xl rounded-br-sm bg-zinc-900 text-white px-3.5 py-2.5 text-xs leading-relaxed whitespace-pre-wrap">${imgsHtml}${escapeHtml(msg.text)}</div>
+              <div class="flex flex-col items-end">
+                <div data-copilot-user-bubble="${mIdx}" title="點一下可複製、編輯或重試" class="max-w-[85%] rounded-[20px] rounded-br-md bg-zinc-900 text-white px-4 py-2.5 text-xs sm:text-[13px] leading-relaxed whitespace-pre-wrap cursor-pointer select-text active:scale-[0.99] transition-transform">${imgsHtml}${escapeHtml(msg.text)}</div>
+                ${userMenuHtml}
               </div>
             `;
           }
@@ -14617,7 +14709,7 @@
           const hasDoneExpense = actions.some((a) => a._status === 'done' && a.type === 'add_expense');
           const hasDoneIncome = actions.some((a) => a._status === 'done' && a.type === 'add_income');
           const batchesHtml = batches.length > 0 ? `
-            <div class="mt-2 pt-2 hairline-t space-y-1.5 text-[11px]">
+            <div class="mt-2.5 pt-2.5 hairline-t space-y-1.5 text-[11px]">
               <div class="font-medium text-zinc-600">🤖 ${batches.length > 1 ? `各張圖片獨立辨識模組（共 ${batches.length} 張，每張獨立辨識不漏單）` : '辨識模組與重新辨識'}</div>
               ${batches.map((b, bIdx) => {
                 const imgCount = Array.isArray(b.imgs) ? b.imgs.length : 0;
@@ -14693,27 +14785,47 @@
               ` : ''}
             </div>
           ` : '';
-          const retryHtml = msg._retryPayload ? `
-            <div class="mt-2 pt-2 hairline-t flex flex-wrap items-center justify-end gap-1.5">
-              ${msg._noActionImg ? '<button type="button" data-copilot-open-expense="1" class="btn-focus h-7 px-2.5 rounded-lg bg-white hover:bg-zinc-50 text-zinc-800 hairline text-[11px] font-medium">➕ 手動新增支出</button>' : ''}
-              <button type="button" data-copilot-retry="${mIdx}:0" class="btn-focus h-7 px-2.5 rounded-lg bg-white hover:bg-zinc-50 text-zinc-800 hairline text-[11px] font-medium">🔄 重新辨識</button>
-              <button type="button" data-copilot-retry="${mIdx}:1" class="btn-focus h-7 px-2.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white text-[11px] font-medium">⚡ 換組重新開始</button>
+          const isSpeaking = copilotSpeakingIdx === mIdx;
+          const isThinking = !msg.meta && !msg._retryPayload && /^(思考與分析中|正在重新發送|• 第 )/.test(String(msg.text || ''));
+          const iconBarHtml = !isThinking ? `
+            <div class="mt-1.5 flex items-center gap-0.5 text-zinc-500">
+              <button type="button" data-copilot-msg-copy="${mIdx}" title="複製回覆文字" class="w-8 h-8 rounded-full hover:bg-zinc-200/70 hover:text-zinc-900 flex items-center justify-center transition-colors">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              </button>
+              <button type="button" data-copilot-msg-speak="${mIdx}" title="${isSpeaking ? '停止朗讀' : '語音朗讀回覆'}" class="w-8 h-8 rounded-full hover:bg-zinc-200/70 ${isSpeaking ? 'text-zinc-900 bg-zinc-200/80' : 'hover:text-zinc-900'} flex items-center justify-center transition-colors">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
+              </button>
+              ${msg._retryPayload ? `
+                <button type="button" data-copilot-retry="${mIdx}:0" title="重新生成" class="w-8 h-8 rounded-full hover:bg-zinc-200/70 hover:text-zinc-900 flex items-center justify-center transition-colors">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                </button>
+                <button type="button" data-copilot-retry="${mIdx}:1" title="切換另一組 AI 模型重試" class="h-7 px-2 rounded-full hover:bg-zinc-200/70 text-[11px] font-medium text-zinc-600 hover:text-zinc-900 inline-flex items-center gap-1 transition-colors">
+                  <span>⚡ 換模型</span>
+                </button>
+              ` : ''}
+              ${msg._noActionImg ? `<button type="button" data-copilot-open-expense="1" class="h-7 px-2 rounded-full hover:bg-zinc-200/70 text-[11px] font-medium text-zinc-600 hover:text-zinc-900">➕ 手動記帳</button>` : ''}
             </div>
           ` : '';
           return `
-            <div class="flex justify-start">
-              <div class="max-w-[92%] rounded-2xl rounded-bl-sm bg-white hairline px-3.5 py-2.5 text-xs text-zinc-800 leading-relaxed">
-                <div class="whitespace-pre-wrap">${escapeHtml(msg.text)}</div>
+            <div class="flex flex-col items-start">
+              <div class="w-full rounded-2xl bg-white hairline px-4 py-3 text-xs sm:text-[13px] text-zinc-800 leading-relaxed shadow-[0_1px_2px_rgba(0,0,0,0.02)]">
+                <div class="whitespace-pre-wrap">${formatCopilotTextHtml(msg.text)}</div>
                 ${batchesHtml}
                 ${actionsHtml}
-                ${retryHtml}
-                ${msg.meta ? `<div class="mt-1.5 text-[10px] font-mono-num text-zinc-400">${escapeHtml(msg.meta)}</div>` : ''}
+                ${msg.meta ? `<div class="mt-2 text-[10px] font-mono-num text-zinc-400">${escapeHtml(msg.meta)}</div>` : ''}
               </div>
+              ${iconBarHtml}
+              ${mIdx === lastAssistantIdx && !isThinking ? '<div class="mt-1 px-1 text-[10px] text-zinc-400">AI 可能會出錯，記帳前請核對重要金額。</div>' : ''}
             </div>
           `;
         }).join('');
         saveAiCopilotHistory();
-        box.scrollTop = box.scrollHeight;
+        if (preserveScroll) {
+          box.scrollTop = prevScrollTop;
+        } else {
+          box.scrollTop = box.scrollHeight;
+        }
+        updateCopilotScrollBtn();
       }
 
       function tryLocalFastCopilot(rawText) {
@@ -14971,16 +15083,51 @@
         const imgsToSend = isRetry ? [...(retryOpts.imgs || [])] : [...aiCopilotStagedImgs];
         if (!text && imgsToSend.length === 0) return;
 
+        copilotOpenUserMenuIdx = -1;
+        const plusMenu = document.getElementById('ai-copilot-plus-menu');
+        const hdrMenu = document.getElementById('ai-copilot-header-menu');
+        if (plusMenu) plusMenu.classList.add('hidden');
+        if (hdrMenu) hdrMenu.classList.add('hidden');
+
         if (!isRetry) {
+          // If editing a previous user turn, undo auto-added actions from that turn onward and branch cleanly
+          if (copilotEditingUserIdx >= 0 && copilotEditingUserIdx < aiCopilotHistory.length) {
+            const removed = aiCopilotHistory.slice(copilotEditingUserIdx);
+            let didUndo = false;
+            removed.forEach((m) => {
+              (m.actions || []).forEach((act) => {
+                if (act._status === 'done' && act._createdId) {
+                  const cid = act._createdId;
+                  if (act.type === 'add_expense') {
+                    state.randomExpenses = (state.randomExpenses || []).filter((x) => x.id !== cid);
+                    markDeletedId(state, cid);
+                    didUndo = true;
+                  } else if (act.type === 'add_income') {
+                    state.incomeReceipts = (state.incomeReceipts || []).filter((x) => x.id !== cid);
+                    markDeletedId(state, cid);
+                    didUndo = true;
+                  }
+                }
+              });
+            });
+            if (didUndo) { saveState(); renderAll(); }
+            aiCopilotHistory = aiCopilotHistory.slice(0, copilotEditingUserIdx);
+            setCopilotEditMode(-1);
+          }
+
           aiCopilotStagedImgs = [];
           const thumbsEl = document.getElementById('ai-copilot-thumbs');
           if (thumbsEl) thumbsEl.replaceChildren();
-          if (inputEl && !overrideText) inputEl.value = '';
+          if (inputEl && !overrideText) {
+            inputEl.value = '';
+            inputEl.style.height = 'auto';
+          }
 
           aiCopilotHistory.push({
             role: 'user',
             text: text || '（附圖辨識與處理）',
-            thumbs: imgsToSend.map((x) => x.previewUrl)
+            thumbs: imgsToSend.map((x) => x.previewUrl),
+            _imgs: imgsToSend
           });
 
           // 0ms Local Fast-Path for simple commands & queries (no images attached)
@@ -15016,7 +15163,11 @@
         renderAiCopilotMessages();
 
         aiCopilotBusy = true;
-        if (sendBtn) { sendBtn.disabled = true; sendBtn.textContent = '處理中'; }
+        const origSendHtml = sendBtn ? sendBtn.innerHTML : '';
+        if (sendBtn) {
+          sendBtn.disabled = true;
+          sendBtn.innerHTML = '<svg class="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="9" stroke-opacity="0.25"/><path d="M21 12a9 9 0 0 0-9-9"/></svg>';
+        }
         const t0 = performance.now();
 
         try {
@@ -15166,7 +15317,7 @@
           renderAiCopilotMessages();
         } finally {
           aiCopilotBusy = false;
-          if (sendBtn) { sendBtn.disabled = false; sendBtn.textContent = '送出'; }
+          if (sendBtn) { sendBtn.disabled = false; if (origSendHtml) sendBtn.innerHTML = origSendHtml; }
         }
       }
 
@@ -15295,35 +15446,110 @@
         `).join('') + `<button type="button" id="btn-copilot-rm-imgs" class="text-[11px] text-zinc-500 underline ml-1">清除全部 (${aiCopilotStagedImgs.length})</button>`;
       };
 
+      const closeCopilotPopovers = () => {
+        const pm = document.getElementById('ai-copilot-plus-menu');
+        const hm = document.getElementById('ai-copilot-header-menu');
+        if (pm) pm.classList.add('hidden');
+        if (hm) hm.classList.add('hidden');
+      };
+
+      const startNewCopilotChat = () => {
+        if (window.speechSynthesis) { try { window.speechSynthesis.cancel(); } catch (e) {} }
+        copilotSpeakingIdx = -1;
+        copilotOpenUserMenuIdx = -1;
+        setCopilotEditMode(-1);
+        aiCopilotHistory = [];
+        try { localStorage.removeItem(COPILOT_HIST_KEY); } catch (e) {}
+        closeCopilotPopovers();
+        renderAiCopilotMessages();
+        showToast('已開啟新對話');
+      };
+
       const btnCopilotFab = document.getElementById('btn-ai-copilot-fab');
       if (btnCopilotFab) btnCopilotFab.addEventListener('click', openAiCopilotDrawer);
       const btnCopilotClose = document.getElementById('btn-ai-copilot-close');
-      if (btnCopilotClose) btnCopilotClose.addEventListener('click', closeAiCopilotDrawer);
+      if (btnCopilotClose) btnCopilotClose.addEventListener('click', () => { closeCopilotPopovers(); closeAiCopilotDrawer(); });
       const copilotDrawerEl = document.getElementById('ai-copilot-drawer');
       if (copilotDrawerEl) {
         copilotDrawerEl.addEventListener('click', (ev) => {
-          if (ev.target === copilotDrawerEl) closeAiCopilotDrawer();
+          if (ev.target === copilotDrawerEl) {
+            closeCopilotPopovers();
+            closeAiCopilotDrawer();
+            return;
+          }
+          if (!ev.target.closest('#ai-copilot-plus-menu') && !ev.target.closest('#btn-ai-copilot-plus')) {
+            const pm = document.getElementById('ai-copilot-plus-menu');
+            if (pm) pm.classList.add('hidden');
+          }
+          if (!ev.target.closest('#ai-copilot-header-menu') && !ev.target.closest('#btn-ai-copilot-header-more')) {
+            const hm = document.getElementById('ai-copilot-header-menu');
+            if (hm) hm.classList.add('hidden');
+          }
         });
       }
       const btnCopilotClear = document.getElementById('btn-ai-copilot-clear');
-      if (btnCopilotClear) {
-        btnCopilotClear.addEventListener('click', () => {
-          aiCopilotHistory = [];
-          try { localStorage.removeItem(COPILOT_HIST_KEY); } catch (e) {}
-          renderAiCopilotMessages();
+      if (btnCopilotClear) btnCopilotClear.addEventListener('click', startNewCopilotChat);
+      const btnCopilotMenuClear = document.getElementById('btn-ai-copilot-menu-clear');
+      if (btnCopilotMenuClear) btnCopilotMenuClear.addEventListener('click', startNewCopilotChat);
+
+      const btnCopilotHeaderMore = document.getElementById('btn-ai-copilot-header-more');
+      if (btnCopilotHeaderMore) {
+        btnCopilotHeaderMore.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          const hm = document.getElementById('ai-copilot-header-menu');
+          const pm = document.getElementById('ai-copilot-plus-menu');
+          if (pm) pm.classList.add('hidden');
+          if (hm) hm.classList.toggle('hidden');
         });
       }
+      const btnCopilotPlus = document.getElementById('btn-ai-copilot-plus');
+      if (btnCopilotPlus) {
+        btnCopilotPlus.addEventListener('click', (ev) => {
+          ev.stopPropagation();
+          const pm = document.getElementById('ai-copilot-plus-menu');
+          const hm = document.getElementById('ai-copilot-header-menu');
+          if (hm) hm.classList.add('hidden');
+          if (pm) pm.classList.toggle('hidden');
+        });
+      }
+
+      const goCopilotModelSettings = () => {
+        closeCopilotPopovers();
+        closeAiCopilotDrawer();
+        switchTab('settings');
+      };
       const btnCopilotGoSet = document.getElementById('btn-ai-copilot-go-settings');
-      if (btnCopilotGoSet) {
-        btnCopilotGoSet.addEventListener('click', () => {
-          closeAiCopilotDrawer();
-          switchTab('settings');
+      if (btnCopilotGoSet) btnCopilotGoSet.addEventListener('click', goCopilotModelSettings);
+      const btnCopilotMenuModels = document.getElementById('btn-ai-copilot-menu-models');
+      if (btnCopilotMenuModels) btnCopilotMenuModels.addEventListener('click', goCopilotModelSettings);
+
+      const btnCopilotCancelEdit = document.getElementById('btn-ai-copilot-cancel-edit');
+      if (btnCopilotCancelEdit) {
+        btnCopilotCancelEdit.addEventListener('click', () => {
+          setCopilotEditMode(-1);
+          aiCopilotStagedImgs = [];
+          renderCopilotStagedThumbs();
+          const inp = document.getElementById('ai-copilot-input');
+          if (inp) { inp.value = ''; inp.style.height = 'auto'; }
         });
       }
+
+      const btnCopilotScrollBottom = document.getElementById('btn-ai-copilot-scroll-bottom');
+      if (btnCopilotScrollBottom) {
+        btnCopilotScrollBottom.addEventListener('click', () => {
+          const box = document.getElementById('ai-copilot-messages');
+          if (box) box.scrollTo({ top: box.scrollHeight, behavior: 'smooth' });
+        });
+      }
+
       const btnCopilotSend = document.getElementById('btn-ai-copilot-send');
       if (btnCopilotSend) btnCopilotSend.addEventListener('click', () => sendAiCopilotMessage());
       const copilotInputEl = document.getElementById('ai-copilot-input');
       if (copilotInputEl) {
+        copilotInputEl.addEventListener('input', () => {
+          copilotInputEl.style.height = 'auto';
+          copilotInputEl.style.height = `${Math.min(112, copilotInputEl.scrollHeight)}px`;
+        });
         copilotInputEl.addEventListener('keydown', (e) => {
           if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && e.keyCode !== 229) {
             e.preventDefault();
@@ -15350,19 +15576,21 @@
       const btnCopilotPaste = document.getElementById('btn-ai-copilot-paste');
       if (btnCopilotPaste) {
         btnCopilotPaste.addEventListener('click', async () => {
+          closeCopilotPopovers();
           const clip = await readClipboardImagesOrText();
           if (clip.files.length > 0) {
             try {
               const imgs = await Promise.all(clip.files.map((f) => compressImageToBase64(f)));
               aiCopilotStagedImgs = [...aiCopilotStagedImgs, ...imgs].slice(0, 8);
               renderCopilotStagedThumbs();
-              showToast(`已從剪貼簿貼上 ${imgs.length} 張截圖（共 ${aiCopilotStagedImgs.length} 張）！點「送出」即可辨識`);
+              showToast(`已從剪貼簿貼上 ${imgs.length} 張截圖（共 ${aiCopilotStagedImgs.length} 張）！點送出即可辨識`);
             } catch (err) {
               showToast(`貼上截圖失敗：${err.message}`);
             }
           } else if (clip.text) {
             if (copilotInputEl) {
               copilotInputEl.value = copilotInputEl.value ? `${copilotInputEl.value}\n${clip.text}` : clip.text;
+              copilotInputEl.dispatchEvent(new Event('input'));
               showToast('已貼上剪貼簿文字！');
             }
           } else {
@@ -15381,6 +15609,7 @@
       const copilotFileEl = document.getElementById('ai-copilot-file');
       if (copilotFileEl) {
         copilotFileEl.addEventListener('change', async (ev) => {
+          closeCopilotPopovers();
           const files = [...(ev.target.files || [])].slice(0, 8);
           if (!files.length) return;
           try {
@@ -15411,7 +15640,114 @@
       }
       const copilotMsgBox = document.getElementById('ai-copilot-messages');
       if (copilotMsgBox) {
+        copilotMsgBox.addEventListener('scroll', updateCopilotScrollBtn);
         copilotMsgBox.addEventListener('click', (ev) => {
+          const userActBtn = ev.target.closest('[data-copilot-user-action]');
+          if (userActBtn) {
+            const [actType, idxStr] = String(userActBtn.dataset.copilotUserAction || '').split(':');
+            const uIdx = Number(idxStr);
+            const uMsg = aiCopilotHistory[uIdx];
+            copilotOpenUserMenuIdx = -1;
+            if (!uMsg) { renderAiCopilotMessages(true); return; }
+            if (actType === 'copy') {
+              if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(uMsg.text || '').then(() => showToast('已複製訊息文字')).catch(() => showToast('複製失敗'));
+              }
+              renderAiCopilotMessages(true);
+              return;
+            }
+            if (actType === 'edit') {
+              setCopilotEditMode(uIdx);
+              if (copilotInputEl) {
+                copilotInputEl.value = uMsg.text === '（附圖辨識與處理）' ? '' : (uMsg.text || '');
+                copilotInputEl.dispatchEvent(new Event('input'));
+                copilotInputEl.focus();
+              }
+              if (Array.isArray(uMsg._imgs) && uMsg._imgs.length > 0) {
+                aiCopilotStagedImgs = [...uMsg._imgs];
+                renderCopilotStagedThumbs();
+              }
+              renderAiCopilotMessages(true);
+              return;
+            }
+            if (actType === 'retry') {
+              const nextMsg = aiCopilotHistory[uIdx + 1];
+              const retryImgs = (Array.isArray(uMsg._imgs) && uMsg._imgs.length > 0)
+                ? uMsg._imgs
+                : ((nextMsg && nextMsg._retryPayload && Array.isArray(nextMsg._retryPayload.imgs)) ? nextMsg._retryPayload.imgs : []);
+              const retryText = uMsg.text === '（附圖辨識與處理）' ? '' : (uMsg.text || '');
+              if (nextMsg && nextMsg.role === 'assistant') {
+                (nextMsg.actions || []).forEach((act) => {
+                  if (act._status === 'done' && act._createdId) {
+                    const cid = act._createdId;
+                    if (act.type === 'add_expense') {
+                      state.randomExpenses = (state.randomExpenses || []).filter((x) => x.id !== cid);
+                      markDeletedId(state, cid);
+                    } else if (act.type === 'add_income') {
+                      state.incomeReceipts = (state.incomeReceipts || []).filter((x) => x.id !== cid);
+                      markDeletedId(state, cid);
+                    }
+                  }
+                });
+                saveState();
+                renderAll();
+                sendAiCopilotMessage('', { replaceIdx: uIdx + 1, text: retryText, imgs: retryImgs, avoidKeyId: '' });
+              } else {
+                sendAiCopilotMessage(retryText);
+              }
+              return;
+            }
+          }
+
+          const userBubble = ev.target.closest('[data-copilot-user-bubble]');
+          if (userBubble) {
+            const uIdx = Number(userBubble.dataset.copilotUserBubble);
+            copilotOpenUserMenuIdx = copilotOpenUserMenuIdx === uIdx ? -1 : uIdx;
+            renderAiCopilotMessages(true);
+            return;
+          }
+
+          if (copilotOpenUserMenuIdx >= 0) {
+            copilotOpenUserMenuIdx = -1;
+            renderAiCopilotMessages(true);
+          }
+
+          const copyMsgBtn = ev.target.closest('[data-copilot-msg-copy]');
+          if (copyMsgBtn) {
+            const mIdx = Number(copyMsgBtn.dataset.copilotMsgCopy);
+            const m = aiCopilotHistory[mIdx];
+            if (m && navigator.clipboard && navigator.clipboard.writeText) {
+              navigator.clipboard.writeText(m.text || '').then(() => showToast('已複製回覆文字')).catch(() => showToast('複製失敗'));
+            }
+            return;
+          }
+
+          const speakMsgBtn = ev.target.closest('[data-copilot-msg-speak]');
+          if (speakMsgBtn) {
+            const mIdx = Number(speakMsgBtn.dataset.copilotMsgSpeak);
+            const m = aiCopilotHistory[mIdx];
+            if (!window.speechSynthesis) {
+              showToast('此瀏覽器不支援語音朗讀');
+              return;
+            }
+            if (copilotSpeakingIdx === mIdx) {
+              window.speechSynthesis.cancel();
+              copilotSpeakingIdx = -1;
+              renderAiCopilotMessages(true);
+              return;
+            }
+            window.speechSynthesis.cancel();
+            const utter = new SpeechSynthesisUtterance(String((m && m.text) || '').replace(/\*\*/g, ''));
+            utter.lang = 'zh-TW';
+            utter.rate = 1.05;
+            utter.onend = () => { copilotSpeakingIdx = -1; renderAiCopilotMessages(true); };
+            utter.onerror = () => { copilotSpeakingIdx = -1; renderAiCopilotMessages(true); };
+            copilotSpeakingIdx = mIdx;
+            window.speechSynthesis.speak(utter);
+            renderAiCopilotMessages(true);
+            return;
+          }
+
           const quick = ev.target.closest('[data-copilot-quick]');
           if (quick) {
             sendAiCopilotMessage(quick.dataset.copilotQuick);
