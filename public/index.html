@@ -14415,7 +14415,19 @@
         badge.className = `text-[10px] font-mono-num px-1.5 py-0.5 rounded truncate max-w-[165px] ${hasKey ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-800'}`;
       }
 
-      function buildAiCopilotContext() {
+      function buildAiCopilotContext(userText = '') {
+        const q = String(userText || '').toLowerCase();
+        const wantsInvDetail = !q || /投資|專案|房地產|房產|店|分潤|回本|本金|複投|滾動|分析|健檢|配置|資產|總覽/.test(q);
+        const wantsStockDetail = !q || /股|etf|市值|損益|持股|配置|資產|分析|健檢/.test(q);
+        const compactObj = (obj) => {
+          const out = {};
+          Object.entries(obj).forEach(([k, v]) => {
+            if (v === '' || v === null || v === undefined) return;
+            if (Array.isArray(v) && v.length === 0) return;
+            out[k] = v;
+          });
+          return out;
+        };
         const totals = computeTotals(state);
         const curYm = todayISO().slice(0, 7);
         const rateOf = (cur) => (cur === 'TWD' ? 1 : safeNum(state.fx && state.fx[cur], 1));
@@ -14428,46 +14440,17 @@
         });
         const recentExp = (state.randomExpenses || [])
           .toSorted((a, b) => String(b.date || '').localeCompare(String(a.date || '')))
-          .slice(0, 10)
-          .map((e) => ({ id: e.id, date: e.date, title: e.title, category: e.category, currency: e.currency, amount: e.amount, account: e.account }));
+          .slice(0, 6)
+          .map((e) => compactObj({ id: e.id, d: e.date, t: e.title, cat: e.category, cur: e.currency, amt: e.amount, acc: e.account }));
         const recentInc = (state.incomeReceipts || [])
           .toSorted((a, b) => String(b.date || '').localeCompare(String(a.date || '')))
-          .slice(0, 5)
-          .map((r) => ({ id: r.id, date: r.date, name: r.name, category: r.category, currency: r.currency, amount: r.actualAmount, account: r.account }));
+          .slice(0, 3)
+          .map((r) => compactObj({ id: r.id, d: r.date, name: r.name, cur: r.currency, amt: r.actualAmount }));
         const unpaidFixed = (typeof getUnpaidFixedExpensesThisMonth === 'function' ? getUnpaidFixedExpensesThisMonth() : [])
-          .map((f) => ({ name: f.name, category: f.category, currency: f.currency, amount: f.amount, monthlyTWD: Math.round(f.monthlyTWD) }));
-        let fxLastSyncedAt = '';
-        let quoteLastSyncedAt = '';
-        let lastBackupAt = '';
-        try {
-          fxLastSyncedAt = localStorage.getItem('wealth_last_fx_sync_at') || '';
-          quoteLastSyncedAt = localStorage.getItem('wealth_last_quote_sync_at') || '';
-          lastBackupAt = localStorage.getItem('wealth_last_backup_at') || '';
-        } catch (e) {}
+          .map((f) => ({ name: f.name, cur: f.currency, amt: f.amount, monthlyTWD: Math.round(f.monthlyTWD) }));
         const b = state.budgets || {};
         const budgetsConfigured = Boolean(safeNum(b.monthlyTotal) > 0 || (b.byCategory && Object.values(b.byCategory).some((v) => safeNum(v) > 0)));
         const invLogs = Array.isArray(state.investmentLogs) ? state.investmentLogs : [];
-        const invAggById = new Map();
-        const invAggByName = new Map();
-        invLogs.forEach((l) => {
-          const amt = safeNum(l.amountTWD);
-          if (amt <= 0) return;
-          const isInvest = l.eventType === 'invest';
-          const touch = (map, k) => {
-            if (!k) return;
-            const cur = map.get(k) || { investedTWD: 0, returnedTWD: 0, count: 0, lastInvestDate: '' };
-            if (isInvest) {
-              cur.investedTWD += amt;
-              if (l.date && String(l.date) > cur.lastInvestDate) cur.lastInvestDate = String(l.date);
-            } else {
-              cur.returnedTWD += amt;
-            }
-            cur.count += 1;
-            map.set(k, cur);
-          };
-          touch(invAggById, l.investmentId);
-          touch(invAggByName, String(l.investmentName || '').trim());
-        });
         const addMonthsYM = (isoDate, months) => {
           const m = String(isoDate || '').match(/^(\d{4})-(\d{2})/);
           if (!m) return '';
@@ -14475,7 +14458,6 @@
           return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
         };
         const physicalInvestments = (state.investments || []).map((inv) => {
-          const agg = invAggById.get(inv.id) || invAggByName.get(String(inv.name || '').trim()) || { investedTWD: 0, returnedTWD: 0, count: 0, lastInvestDate: '' };
           const ana = computeSingleInvestmentAnalytics(inv, invLogs);
           const st = typeof getInvestmentStatus === 'function' ? getInvestmentStatus(inv) : (inv.status || 'active');
           const kind = typeof getInvestmentKind === 'function' ? getInvestmentKind(inv) : (inv.investKind || 'recurring');
@@ -14483,67 +14465,56 @@
           const cyc = Math.max(1, safeNum(inv.cycleMonths, 1));
           const minR = safeNum(inv.minRate);
           const maxR = safeNum(inv.maxRate);
-          const estMaturity = (st === 'active' && agg.lastInvestDate) ? addMonthsYM(agg.lastInvestDate, cyc) : '';
-          return {
-            id: inv.id,
+          const estMaturity = (st === 'active' && ana.lastInvestDate) ? addMonthsYM(ana.lastInvestDate, cyc) : '';
+          const base = compactObj({
             name: inv.name,
             status: st,
-            investKind: kind,
+            kind,
             principalRecoverable: ana.principalRecoverable,
-            plannedPrincipalTWD: plannedP,
+            principalTWD: plannedP,
             cycleMonths: cyc,
-            minRatePct: minR,
-            maxRatePct: maxR,
-            expectedTotalReturnMinTWD: st === 'active' ? Math.round(plannedP * (1 + minR / 100)) : 0,
-            expectedTotalReturnMaxTWD: st === 'active' ? Math.round(plannedP * (1 + maxR / 100)) : 0,
-            lastInvestDate: agg.lastInvestDate || '',
-            estimatedMaturityMonth: estMaturity,
+            ratePct: `${minR}-${maxR}%`,
+            estMaturity,
+            estReturnRangeTWD: st === 'active' && kind === 'one_time' ? `${Math.round(plannedP * (1 + minR / 100))}~${Math.round(plannedP * (1 + maxR / 100))}` : '',
             tags: Array.isArray(inv.tags) ? inv.tags : [],
-            sourceInvestmentId: inv.sourceInvestmentId || '',
-            actualInvestedTWD: ana.actualInvestedTWD,
-            actualReturnedTWD: ana.totalReturnedTWD,
+            investedTWD: ana.actualInvestedTWD,
+            returnedTWD: ana.totalReturnedTWD,
             netProfitTWD: ana.netProfitTWD,
-            logCount: agg.count,
-            analytics: {
-              operatingMonths: ana.operatingMonths,
-              operatingYears: ana.operatingYears,
-              isPaidBack: ana.isPaidBack,
-              paybackMonthsActual: ana.paybackMonthsActual,
-              remainingToPaybackTWD: ana.remainingToPaybackTWD,
-              estimatedRemainingPaybackMonths: ana.estimatedRemainingPaybackMonths,
-              totalReturnMultiple: ana.totalReturnMultiple,
-              annualizedNetRoiPct: ana.annualizedNetRoiPct,
-              allTimeMonthlyAvgTWD: ana.allTimeMonthlyAvgTWD,
-              recent6mMonthlyAvgTWD: ana.recent6mMonthlyAvgTWD,
-              recent3mMonthlyAvgTWD: ana.recent3mMonthlyAvgTWD,
-              expectedMinMonthlyTWD: ana.expectedMinMonthlyTWD,
-              expectedMaxMonthlyTWD: ana.expectedMaxMonthlyTWD,
-              payoutMonthsCount: ana.payoutMonthsCount,
-              recent12mPayoutMonthsCount: ana.recent12mPayoutMonthsCount,
-              payoutHitRatePct: ana.payoutHitRatePct,
-              currentAnnualizedYieldPct: ana.currentAnnualizedYieldPct,
-              trendStatus: ana.trendStatus
-            },
-            note: inv.note || ''
-          };
+            note: inv.note ? String(inv.note).slice(0, 60) : ''
+          });
+          if (wantsInvDetail && (ana.operatingMonths > 0 || ana.payoutMonthsCount > 0)) {
+            base.analytics = compactObj({
+              opMonths: ana.operatingMonths,
+              opYears: ana.operatingYears,
+              paidBack: ana.isPaidBack,
+              paybackMonths: ana.paybackMonthsActual,
+              estRemainPaybackMonths: ana.estimatedRemainingPaybackMonths,
+              multiple: ana.totalReturnMultiple,
+              annNetRoiPct: ana.annualizedNetRoiPct,
+              allTimeMoAvgTWD: ana.allTimeMonthlyAvgTWD || undefined,
+              recent6mMoAvgTWD: ana.recent6mMonthlyAvgTWD || undefined,
+              recent3mMoAvgTWD: ana.recent3mMonthlyAvgTWD || undefined,
+              expMinMoTWD: ana.expectedMinMonthlyTWD || undefined,
+              hitRatePct: ana.payoutHitRatePct,
+              cur6mAnnYieldPct: ana.currentAnnualizedYieldPct,
+              trend: ana.trendStatus !== 'insufficient_data' ? ana.trendStatus : undefined
+            });
+          }
+          return base;
         });
-        const packRecStats = (rs) => (rs ? {
-          totalInvestedTWD: Math.round(rs.totalInvested),
-          peakSelfFundedPrincipalTWD: Math.round(rs.peakOutflow),
-          recycledTotalTWD: Math.round(rs.recycledTotal),
+        const packRecStats = (rs) => (rs ? compactObj({
+          investedTWD: Math.round(rs.totalInvested),
+          peakSelfFundedTWD: Math.round(rs.peakOutflow),
+          recycledTWD: Math.round(rs.recycledTotal),
           recycledPct: Number(rs.recycledPct.toFixed(1)),
-          totalReturnedTWD: Math.round(rs.totalReturned),
+          returnedTWD: Math.round(rs.totalReturned),
           netCashflowTWD: Math.round(rs.netCashflow),
           netUnrecoveredPrincipalTWD: Math.max(0, Math.round(-rs.netCashflow)),
-          freshTotalTWD: Math.round(rs.freshTotal),
-          recycledPrincipalTotalTWD: Math.round(rs.recycledPrincipalTotal),
-          reinvestedProfitTotalTWD: Math.round(rs.reinvestedProfitTotal),
           moic: rs.moic !== null ? Number(rs.moic.toFixed(2)) : null
-        } : null);
+        }) : null);
         const recStats = typeof computeInvestmentRecyclingStats === 'function' ? computeInvestmentRecyclingStats(state) : null;
-        // Build isolated per-tag recycling stats (e.g., 房地產 alone) so multi-tag portfolios never cross-contaminate
         const invRecyclingByTag = {};
-        if (typeof computeInvestmentRecyclingStats === 'function') {
+        if (wantsInvDetail && typeof computeInvestmentRecyclingStats === 'function') {
           const tagToInvSet = new Map();
           (state.investments || []).forEach((inv) => {
             const tags = typeof normalizeInvTags === 'function' ? normalizeInvTags(inv.tags) : (Array.isArray(inv.tags) ? inv.tags : []);
@@ -14556,115 +14527,65 @@
           });
           tagToInvSet.forEach((sets, tag) => {
             const subLogs = invLogs.filter((l) => sets.ids.has(l.investmentId) || sets.names.has(String(l.investmentName || '').trim()));
-            if (subLogs.length > 0) {
-              invRecyclingByTag[tag] = packRecStats(computeInvestmentRecyclingStats({ investmentLogs: subLogs }));
-            }
+            if (subLogs.length > 0) invRecyclingByTag[tag] = packRecStats(computeInvestmentRecyclingStats({ investmentLogs: subLogs }));
           });
         }
-        const recentInvestmentLogs = invLogs
-          .toSorted((a, b) => String(b.date || '').localeCompare(String(a.date || '')))
-          .slice(0, 25)
-          .map((l) => ({
-            date: l.date,
-            investmentName: l.investmentName || '',
-            eventType: l.eventType,
-            amountTWD: Math.round(safeNum(l.amountTWD)),
-            fundingSource: l.fundingSource || '',
-            note: l.note || ''
-          }));
-        const fixedExpensesList = (state.fixedExpenses || []).map((f) => ({
-          name: f.name,
-          category: f.category,
-          currency: f.currency || 'TWD',
-          amount: safeNum(f.amount),
-          cycleMonths: Math.max(1, safeNum(f.cycleMonths, 1)),
-          status: f.status || 'active',
-          payday: f.payday || ''
+        const recentInvestmentLogs = wantsInvDetail
+          ? invLogs
+              .toSorted((a, b) => String(b.date || '').localeCompare(String(a.date || '')))
+              .slice(0, 12)
+              .map((l) => compactObj({ d: l.date, name: l.investmentName || '', type: l.eventType, amtTWD: Math.round(safeNum(l.amountTWD)), src: l.fundingSource || '' }))
+          : [];
+        const fixedExpensesList = (state.fixedExpenses || []).filter((f) => f.status !== 'inactive').map((f) => ({
+          name: f.name, cat: f.category, cur: f.currency || 'TWD', amt: safeNum(f.amount), cyc: Math.max(1, safeNum(f.cycleMonths, 1))
         }));
         const fixedIncomesList = (state.fixedIncomes || []).map((f) => ({
-          name: f.name,
-          category: f.category,
-          currency: f.currency || 'TWD',
-          amount: safeNum(f.amount),
-          cycleMonths: Math.max(1, safeNum(f.cycleMonths, 1))
+          name: f.name, cur: f.currency || 'TWD', amt: safeNum(f.amount), cyc: Math.max(1, safeNum(f.cycleMonths, 1))
         }));
-        return {
+        return compactObj({
           today: todayISO(),
           fx: state.fx || {},
-          fxLastSyncedAt: fxLastSyncedAt || '尚未於此裝置手動刷新（使用最新已存匯率）',
-          quoteLastSyncedAt: quoteLastSyncedAt || '尚未於此裝置手動刷新',
-          lastBackupAt: lastBackupAt || '尚未於此裝置手動匯出離線檔（已登入 Google 時會自動雲端同步）',
           summaryTWD: {
-            netWorthTWD: Math.round(totals.netWorthTWD),
-            cashTWD: Math.round(totals.cashTWD),
-            stocksTWD: Math.round(totals.stocksTWD),
-            stocksPnlTWD: Math.round(totals.stocksPnlTWD),
-            plannedInvestmentsExcludedTWD: Math.round(totals.plannedInvestmentsTWD),
-            fixedIncomeMonthlyTWD: Math.round(totals.fixedIncomeMonthlyTWD),
-            fixedExpenseMonthlyTWD: Math.round(totals.fixedExpenseMonthlyTWD),
-            estimatedMonthlyExpenseTWD: Math.round(totals.estimatedMonthlyExpenseTWD),
-            actualRecordedExpenseThisMonthTWD: Math.round(totals.randomExpenseThisMonthTWD)
+            netWorth: Math.round(totals.netWorthTWD),
+            cash: Math.round(totals.cashTWD),
+            stocks: Math.round(totals.stocksTWD),
+            stocksPnl: Math.round(totals.stocksPnlTWD),
+            activeInvExcluded: Math.round(totals.plannedInvestmentsTWD),
+            fixedIncMo: Math.round(totals.fixedIncomeMonthlyTWD),
+            fixedExpMo: Math.round(totals.fixedExpenseMonthlyTWD),
+            estExpMo: Math.round(totals.estimatedMonthlyExpenseTWD),
+            actualExpThisMo: Math.round(totals.randomExpenseThisMonthTWD)
           },
           physicalInvestments,
-          investmentRecyclingSummary: recStats ? { ...packRecStats(recStats), byTag: invRecyclingByTag } : null,
+          invRecycling: recStats ? { ...packRecStats(recStats), ...(Object.keys(invRecyclingByTag).length ? { byTag: invRecyclingByTag } : {}) } : null,
           recentInvestmentLogs,
           fixedExpenses: fixedExpensesList,
           fixedIncomes: fixedIncomesList,
-          unpaidFixedExpensesThisMonth: unpaidFixed,
-          thisMonthByCategoryTWD: Object.fromEntries(Object.entries(catTotals).map(([k, v]) => [k, Math.round(v)])),
-          budgets: b,
+          unpaidFixedThisMo: unpaidFixed,
+          thisMonthByCatTWD: Object.fromEntries(Object.entries(catTotals).map(([k, v]) => [k, Math.round(v)])),
+          budgets: budgetsConfigured ? b : undefined,
           budgetsConfigured,
-          cashAccounts: (state.cash || []).map((c) => ({
-            bank: c.bank,
-            currency: c.currency,
-            amount: c.amount,
-            twdAmount: Math.round(safeNum(c.amount) * rateOf(c.currency)),
-            isDefaultDebit: Boolean(c.isDefaultDebit)
+          cashAccounts: (state.cash || []).map((c) => compactObj({
+            bank: c.bank, cur: c.currency, amt: c.amount, twd: Math.round(safeNum(c.amount) * rateOf(c.currency)), defDebit: c.isDefaultDebit ? true : undefined
           })),
-          stocks: (state.stocks || []).map((s) => ({ market: s.market, symbol: s.symbol, name: s.name, shares: s.shares, avgCost: s.avgCost, currentPrice: s.currentPrice, currency: s.currency })),
+          stocks: wantsStockDetail
+            ? (state.stocks || []).map((s) => ({ mkt: s.market, sym: s.symbol, name: s.name, sh: s.shares, avg: s.avgCost, px: s.currentPrice, cur: s.currency }))
+            : undefined,
           recentExpenses: recentExp,
           recentIncomes: recentInc,
-          userHabits: buildUserHabitContext(),
-          trips: (state.groupTrips || []).map((t) => ({ id: t.id, name: t.name, currency: t.currency, groups: (t.groups || []).map((g) => g.name) }))
-        };
+          userHabits: buildUserHabitContext().slice(0, 10),
+          trips: (state.groupTrips || []).map((t) => ({ name: t.name, cur: t.currency, groups: (t.groups || []).map((g) => g.name) }))
+        });
       }
 
       function buildAiCopilotSystemPrompt() {
         return [
-          '你是「個人資產總帳」的專屬 AI 財務總管，請一律使用繁體中文回答，簡潔、精準、務實。',
-          '你必須**只回傳合法 JSON 物件**，格式如下：',
-          '{ "reply": "給使用者的自然語言回覆（可用換行與重點符號）", "actions": [ ...可選，若只是查詢分析請回傳空陣列 [] ] }',
-          '可用的 actions 類型（僅在用戶明確要求記帳、修改、轉帳、設預算、刪單、切頁、更新報價或備份時才加入）：',
-          '1. {"type":"add_expense","date":"YYYY-MM-DD","time":"HH:MM","title":"品項","category":"15類之一","currency":"TWD","amount":150,"account":"已有帳戶或空","deductNow":false,"note":""}',
-          '2. {"type":"add_income","date":"YYYY-MM-DD","name":"收入名","category":"薪資收入|獎金|分潤|其他收入","currency":"TWD","amount":50000,"account":"已有帳戶或空","depositNow":false,"note":""}',
-          '3. {"type":"add_fixed_expense","name":"房租","category":"居住與房貸","currency":"TWD","amount":15000,"cycleMonths":1,"account":"","note":""}',
-          '4. {"type":"add_fixed_income","name":"本業薪資","category":"薪資收入","currency":"TWD","amount":60000,"cycleMonths":1,"account":"","note":""}',
-          '5. {"type":"update_cash","bank":"銀行名","currency":"TWD","amount":100000,"note":""}',
-          '6. {"type":"transfer_cash","fromBank":"轉出銀行","toBank":"轉入銀行","currency":"TWD","amount":10000,"note":""}',
-          '7. {"type":"add_stock_trade","tradeType":"BUY|SELL|DIVIDEND","date":"YYYY-MM-DD","market":"TW|US|HK","symbol":"2330","name":"台積電","shares":10,"price":1000,"currency":"TWD","fee":0,"note":""}',
-          '8. {"type":"set_budget","category":"餐飲美食","amount":15000}',
-          '9. {"type":"add_trip_expense","tripName":"旅程名或空(預設目前旅程)","date":"YYYY-MM-DD","title":"晚餐","category":"餐飲|交通|住宿|門票|購物|其他","currency":"TWD","amount":1200,"payerType":"pool|member","payerGroupName":"","note":""}',
-          '10. {"type":"delete_expense","id":"rexp_...","title":"品項"}（必須根據帳本現有 id）',
-          '11. {"type":"delete_income","id":"irec_...","name":"項目"}（必須根據帳本現有 id）',
-          '12. {"type":"navigate","tab":"overview|stocks|cash|investments|income|expenses|trips|reports|history|migrate|settings"}',
-          '13. {"type":"refresh_quotes"} 或 {"type":"export_backup"}',
-          `支出 category 必須從以下 15 類擇一：${ALL_EXPENSE_CATEGORIES.join('、')}。`,
-          '【實體投資與現金統計口徑規則（嚴禁算錯或混為一談）】：',
-          '- summaryTWD.cashTWD 是銀行目前獨立登錄的可用現金；summaryTWD.plannedInvestmentsExcludedTWD 是另計的進行中實體投資本金，兩者各自獨立（且歷史投資紀錄多為補登），嚴禁將進行中投資本金說成「包含在 cashTWD 裡導致現金只剩差額」。',
-          '- 分析實體投資（如多輪滾動專案）時，若 investmentRecyclingSummary.byTag 中有該標籤，請**直接採用該標籤的獨立統計**，並明確列出：(1) 實質最大自備本金（peakSelfFundedPrincipalTWD）與各輪補差額／先落袋金額；(2) 目前仍在場內承擔風險的淨自備本金（netUnrecoveredPrincipalTWD）與純利潤滾動部位；(3) 進行中專案的精準預計結算月份（直接採用 estimatedMaturityMonth，嚴禁猜測年底）與預估回收區間（expectedTotalReturnMinTWD～MaxTWD）；(4) 以實質自備本金計算的報酬倍數（moic）以及「下次結算優先抽回 netUnrecoveredPrincipalTWD 達成 100% 零成本純利潤滾動」的具體風險控管建議。',
-          '- 分析「本金不可收回（principalRecoverable: false，如開店、合夥現金流型）」的持續性實體投資時，請勿談「場內剩餘本金」，改以該專案的 analytics 欄位分析：(1) 已營運時間（operatingMonths / operatingYears）與真實累計年化報酬（annualizedNetRoiPct）；(2) 實際回本週期（paybackMonthsActual，或未回本時的 estimatedRemainingPaybackMonths）與總回收倍數（totalReturnMultiple）；(3) 分潤動能對比：全期月均（allTimeMonthlyAvgTWD）vs 近 6 月均（recent6mMonthlyAvgTWD）vs 近 3 月均（recent3mMonthlyAvgTWD）vs 預期低標（expectedMinMonthlyTWD），若 trendStatus 為 below_target 或 declining 必須明確發出衰退／低於預期警訊並呈現達標率（payoutHitRatePct）；(4) 近 6 月年化現金流殖利率（currentAnnualizedYieldPct）與「已進入零成本現金牛期後，若未來面臨二次增資／翻修應以近期實領分潤重估」的決策提醒。',
-          '【網頁介面已實作功能清單（回答產品評價或優化建議時必須先核對，嚴禁將以下已存在功能誤報為缺失）】：',
-          '- 總覽與銀行現金頁：皆已直接顯示各幣別即時匯率與更新時間、每個帳戶的原幣餘額與折合台幣 (TWD) 及佔比，且支援「各幣別預設扣款銀行卡」設定與一鍵刷新匯率。',
-          '- 股票頁與頂部工具列：頂部常駐「更新報價」按鈕，股票頁標題下方已顯示即時更新時間與同步筆數，並支援批次調整現價與買賣／配息紀錄。',
-          '- 支出頁：已有「月度預算管理」介面（可設每月總預算與 15 個分類各自上限，超支自動顯示進度條與紅色警示）；若摘要中 budgets 為空，僅代表使用者尚未填寫數字，不代表系統缺乏預算功能。',
-          '- 財務報告頁：已有本月「純記帳支出 vs 含固定支出預估總支出」對比條、本月尚未登記扣款的固定支出提醒清單（含一鍵登記扣款）、緊急預備金安全墊、被動收入覆蓋率、類別趨勢圖。',
-          '- 旅遊分帳頁：支援揪團家庭權重分攤與 LINE 分享；若旅程尚無成員，新增開銷時會自動建立「個人／我家」並預設個人支付，不會卡住。',
-          '- 所有明細與歷史流水：網頁上每一筆支出、收入、股票、現金、流水列皆已內建「編輯」與「刪除」按鈕及防誤刪確認彈窗（上方 delete_expense 需帶 id 僅是供你 AI 執行程式指令的格式，使用者在網頁上完全不需要知道 id）。',
-          '- 匯率與備份頁：支援 Firebase 雲端即時同步、手動一鍵下載 JSON 與 Excel (.xlsx) 備份、匯入還原，並顯示「上次手動備份時間」與超過 7 天提醒。',
-          '- AI 能力：支援多組免費 API Key 輪替冷卻、逐張獨立看圖辨識（最多 8 張）、剪貼簿貼圖、語音記帳、單張重跑與自動撤銷。',
-          '當使用者問「網頁或帳本有什麼可以優化」時，請區分「使用者個人財務數據上的改善建議（例如未設預算、有未記固定支出、現金比例過高）」與「真正尚未實作的新產品功能」，絕不可捏造或誤判上述已實作的介面功能為缺失。',
-          '請優先參考帳本即時摘要中的 userHabits（使用者歷史習慣：店家→分類/帳戶/幣別）來填入最符合使用者習慣的 category、account 與 currency。',
-          '如果圖片或文字包含多筆明細，請在 actions 陣列放入多筆對應的 action。金額一律用正數。'
+          '你是「個人資產總帳」的專屬 AI 財務總管，請一律以繁體中文簡潔精準回答，只回傳合法 JSON：{"reply":"自然語言回覆","actions":[...可選，查詢分析請回傳[]]}。',
+          '可用 actions（僅在用戶明確要求異動/查頁/刷新/備份時加入，金額一律正數）：',
+          'add_expense(date,time,title,category,currency,amount,account,deductNow,note) | add_income(date,name,category,currency,amount,account,depositNow,note) | add_fixed_expense(name,category,currency,amount,cycleMonths,account,note) | add_fixed_income(name,category,currency,amount,cycleMonths,account,note) | update_cash(bank,currency,amount,note) | transfer_cash(fromBank,toBank,currency,amount,note) | add_stock_trade(tradeType,date,market,symbol,name,shares,price,currency,fee,note) | set_budget(category,amount) | add_trip_expense(tripName,date,title,category,currency,amount,payerType,payerGroupName,note) | delete_expense(id,title) | delete_income(id,name) | navigate(tab) | refresh_quotes | export_backup。',
+          `支出 category 限 15 類：${ALL_EXPENSE_CATEGORIES.join('、')}。優先套用 userHabits。`,
+          '【實體投資與現金規則】：summaryTWD.cash 與 activeInvExcluded 各自獨立（不可說現金包含進行中投資）。分析多輪可收回本金專案優先採用 invRecycling.byTag：列出實質最大自備本金(peakSelfFundedTWD)、場內淨自備風險(netUnrecoveredPrincipalTWD)、預計結算月(estMaturity，勿猜年底)、MOIC 與「結算優先抽回 netUnrecoveredPrincipalTWD 達成零成本」建議。分析沉沒本金(principalRecoverable:false)持續分潤專案勿談場內剩餘本金，改用 analytics：營運月數/年化報酬(opMonths/annNetRoiPct)、實際回本月數(paybackMonths)與倍數(multiple)、全期vs近6月vs近3月分潤動能與預期低標對比（trend 為 below_target/declining 須明確警示並報達標率 hitRatePct）、近6月年化殖利率(cur6mAnnYieldPct)，以及零成本期若遇增資翻修須以近期分潤重估。',
+          '【網頁已實作功能（勿誤判缺失）】：總覽/現金頁已有即時匯率與時間、原幣與折合台幣、各幣別預設扣款卡；頂部與股票頁已有更新報價按鈕與時間；支出頁已有月預算與超支紅字（budgetsConfigured:false 只代表用戶尚未填數字）；報告頁已有未記固定支出提醒與對比；旅遊無成員會自動建個人組；所有紀錄列皆有編輯/刪除按鈕與確認彈窗（delete id 僅供 AI 指令用）；設定頁有 JSON/Excel 備份、上次備份時間與雲端同步。'
         ].join('\n');
       }
 
@@ -15593,13 +15514,13 @@
           } else {
             sysPrompt = buildAiCopilotSystemPrompt();
             const recentTurns = aiCopilotHistory
-              .slice(Math.max(0, targetIdx - 5), targetIdx)
+              .slice(Math.max(0, targetIdx - 3), targetIdx)
               .filter((m) => !Array.isArray(m.batches) || m.batches.length === 0)
-              .map((m) => `${m.role === 'user' ? '使用者' : '助理'}：${String(m.text || '').slice(0, 300)}`)
+              .map((m) => `${m.role === 'user' ? '使用者' : '助理'}：${String(m.text || '').slice(0, 180)}`)
               .join('\n');
             prompt = [
               '【帳本即時摘要】：',
-              JSON.stringify(buildAiCopilotContext()),
+              JSON.stringify(buildAiCopilotContext(text)),
               recentTurns ? `\n【最近對話】：\n${recentTurns}` : '',
               `\n【使用者指令】：\n${text}`
             ].filter(Boolean).join('\n');
@@ -15764,7 +15685,7 @@
             systemPrompt: isVision ? buildAiCopilotVisionSystemPrompt() : buildAiCopilotSystemPrompt(),
             prompt: isVision
               ? buildAiCopilotVisionPrompt(text)
-              : ['【帳本即時摘要】：', JSON.stringify(buildAiCopilotContext()), `\n【使用者指令】：\n${text}`].join('\n'),
+              : ['【帳本即時摘要】：', JSON.stringify(buildAiCopilotContext(text)), `\n【使用者指令】：\n${text}`].join('\n'),
             attachments: imgs.map((im) => ({ mimeType: im.mimeType, base64: im.base64 })),
             expectJson: true,
             avoidKeyId: switchKey ? (batch.usedKeyId || '') : ''

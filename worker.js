@@ -344,10 +344,10 @@ async function handleAiProxy(request, env) {
         mistral: hasImg ? 'pixtral-12b-2409' : 'mistral-small-latest'
       };
       const presetFallbacks = {
-        groq: hasImg ? [] : ['openai/gpt-oss-120b', 'openai/gpt-oss-20b'],
+        groq: hasImg ? [] : ['llama-3.3-70b-versatile', 'openai/gpt-oss-120b', 'openai/gpt-oss-20b'],
         openrouter: hasImg
           ? ['google/gemma-3-27b-it:free', 'mistralai/mistral-small-3.1-24b-instruct:free', 'qwen/qwen2.5-vl-32b-instruct:free']
-          : ['nvidia/nemotron-3.5-super-vl:free'],
+          : ['google/gemma-3-27b-it:free', 'meta-llama/llama-3.3-70b-instruct:free', 'mistralai/mistral-small-3.1-24b-instruct:free'],
         mistral: ['pixtral-12b-2409']
       };
       const baseUrl = provider === 'custom'
@@ -552,14 +552,15 @@ async function callOpenAICompat({ apiKey, baseUrl, model, fallbackModels = [], s
       }
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
-        const text = data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
-        if (text) return { text: String(text), model: m };
+        const msgObj = data && data.choices && data.choices[0] && data.choices[0].message;
+        const text = msgObj && msgObj.content ? String(msgObj.content).trim() : '';
+        if (text) return { text, model: m };
         lastErr = '模型未回傳任何文字內容';
         break;
       }
       const msg = (data && data.error && data.error.message) || `API 錯誤 (${res.status})`;
-      // Retry once after 1.25s on 429 burst limit (e.g. Mistral 1 RPS free tier)
-      if (res.status === 429 && attempt === 0 && !/quota|credit|daily|insufficient/i.test(msg)) {
+      // Retry once after 1.25s on 429 burst limit (e.g. Mistral 1 RPS free tier), but NOT on quota/ITPM/too-large errors
+      if (res.status === 429 && attempt === 0 && !/quota|credit|daily|insufficient|ITPM|too large|tokens per minute/i.test(msg)) {
         await new Promise((r) => setTimeout(r, 1250));
         continue;
       }
@@ -572,7 +573,8 @@ async function callOpenAICompat({ apiKey, baseUrl, model, fallbackModels = [], s
       if (res.status === 400 && attachments.length > 0 && i + 1 < candidates.length) {
         break;
       }
-      if (res.status !== 429 && res.status !== 503 && res.status !== 404) {
+      // Allow falling back to next candidate on 413 (ITPM / payload too large), 429, 503, 404
+      if (res.status !== 413 && res.status !== 429 && res.status !== 503 && res.status !== 404) {
         throw new Error(msg);
       }
       break;
