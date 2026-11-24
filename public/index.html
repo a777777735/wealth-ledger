@@ -3651,11 +3651,19 @@
         document.getElementById('cash-currency-pills').innerHTML = curList.map((c) => {
           const nativeAmt = totals.cashByCurrency[c.code] || 0;
           const twdAmt = nativeAmt * rateOf(c.code);
+          const explicitDef = getDefaultDebitCashRecord(c.code, false);
+          const autoDef = explicitDef || getDefaultDebitCashRecord(c.code, true);
+          const defLine = explicitDef
+            ? `<div class="mt-1.5 text-[11px] text-emerald-700 font-medium truncate" title="預設扣款帳戶：${escapeHtml(explicitDef.bank)}">⭐ 預設扣款：${escapeHtml(explicitDef.bank)}</div>`
+            : (autoDef
+                ? `<div class="mt-1.5 text-[11px] text-zinc-400 truncate" title="未指定，目前自動預設：${escapeHtml(autoDef.bank)}">預設扣款：${escapeHtml(autoDef.bank)}（自動）</div>`
+                : `<div class="mt-1.5 text-[11px] text-zinc-400">尚未設定預設扣款</div>`);
           return `
             <div class="p-4 rounded-lg bg-[#f7f7f5] hairline">
               <div class="text-xs text-zinc-500">${c.label} · ${c.code}</div>
               <div class="mt-1 text-base font-semibold text-zinc-900 font-mono-num">${nativeAmt.toLocaleString('zh-TW', { maximumFractionDigits: 2 })}</div>
               <div class="text-[11px] text-zinc-500 font-mono-num mt-0.5">≈ ${fmtTWD(twdAmt)}</div>
+              ${defLine}
             </div>
           `;
         }).join('');
@@ -3670,15 +3678,22 @@
           const amt = safeNum(c.amount);
           const twd = amt * rateOf(c.currency);
           const pct = (twd / totalCash) * 100;
+          const defBadge = c.isDefaultDebit
+            ? `<span class="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 text-[10px] font-medium align-middle">⭐ ${escapeHtml(c.currency)} 預設扣款</span>`
+            : '';
+          const defBtn = c.isDefaultDebit
+            ? `<button type="button" data-action="unset-default-cash" data-id="${escapeHtml(c.id)}" class="text-emerald-700 hover:text-zinc-600 text-xs font-medium mr-2.5">取消預設</button>`
+            : `<button type="button" data-action="set-default-cash" data-id="${escapeHtml(c.id)}" class="text-zinc-500 hover:text-emerald-700 text-xs font-medium mr-2.5">設為預設扣款</button>`;
           return `
             <tr class="hover:bg-[#f7f7f5] transition-colors duration-150">
-              <td class="py-3 px-2 font-sans font-medium text-zinc-900">${escapeHtml(c.bank)}</td>
+              <td class="py-3 px-2 font-sans font-medium text-zinc-900">${escapeHtml(c.bank)}${defBadge}</td>
               <td class="py-3 px-2 text-xs text-zinc-500">${escapeHtml(c.currency)}</td>
               <td class="py-3 px-2 text-right text-zinc-800">${amt.toLocaleString('zh-TW', { maximumFractionDigits: 2 })}</td>
               <td class="py-3 px-2 text-right font-medium text-zinc-900">${fmtTWD(twd)}</td>
               <td class="py-3 px-2 text-right text-zinc-500">${pct.toFixed(1)}%</td>
               <td class="py-3 px-2 font-sans text-zinc-500 text-xs">${escapeHtml(c.note || '')}</td>
               <td class="py-3 px-2 text-right whitespace-nowrap font-sans">
+                ${defBtn}
                 <button type="button" data-action="edit-cash" data-id="${escapeHtml(c.id)}" class="text-zinc-600 hover:text-zinc-900 text-xs font-medium mr-2.5">編輯</button>
                 <button type="button" data-action="del-cash" data-id="${escapeHtml(c.id)}" class="text-zinc-400 hover:text-rose-700 text-xs font-medium">刪除</button>
               </td>
@@ -5877,6 +5892,41 @@
         return list.map((code) => `<option value="${code}" ${cur === code ? 'selected' : ''}>${code}${CURRENCY_NAMES[code] ? ' · ' + CURRENCY_NAMES[code] : ''}</option>`).join('');
       }
 
+      // Per-currency default debit account helpers (synced automatically with state.cash)
+      function getDefaultDebitCashRecord(currency, allowFallback = true) {
+        const cur = String(currency || 'TWD').toUpperCase();
+        const list = (state.cash || []).filter((c) => String(c.currency || 'TWD').toUpperCase() === cur && c.bank);
+        if (!list.length) return null;
+        const explicit = list.find((c) => Boolean(c.isDefaultDebit));
+        if (explicit) return explicit;
+        return allowFallback ? list[0] : null;
+      }
+
+      function getDefaultDebitAccountForCurrency(currency, fallbackToCash = true) {
+        const cur = String(currency || 'TWD').toUpperCase();
+        const rec = getDefaultDebitCashRecord(cur, true);
+        if (rec) return rec.bank;
+        return fallbackToCash ? `現金（${cur}）` : '';
+      }
+
+      function setDefaultDebitAccount(cashId, enable = true) {
+        const target = (state.cash || []).find((c) => c.id === cashId);
+        if (!target) return;
+        const cur = String(target.currency || 'TWD').toUpperCase();
+        state.cash = (state.cash || []).map((c) => {
+          if (c.id === cashId) {
+            return { ...c, isDefaultDebit: Boolean(enable) };
+          }
+          if (enable && String(c.currency || 'TWD').toUpperCase() === cur && c.isDefaultDebit) {
+            return { ...c, isDefaultDebit: false };
+          }
+          return c;
+        });
+        saveState();
+        renderAll();
+        showToast(enable ? `已將「${target.bank}」設為 ${cur} 預設扣款帳戶` : `已取消「${target.bank}」的 ${cur} 預設扣款設定`);
+      }
+
       // Dynamic Account Selector Helper (groups matching currency bank cards with balances + Cash + Credit Card)
       function buildAccountOptionsHtml(currency, selectedValue) {
         const cur = currency || 'TWD';
@@ -5888,6 +5938,7 @@
             matchingBanks.push(c);
           }
         });
+        matchingBanks.sort((a, b) => (b.isDefaultDebit ? 1 : 0) - (a.isDefaultDebit ? 1 : 0));
         const cashOpt = `現金（${cur}）`;
         const creditOpt = `信用卡（${cur}）`;
         const validValues = new Set([
@@ -5896,7 +5947,7 @@
           creditOpt,
           '信用卡'
         ]);
-        const targetVal = selectedValue || (matchingBanks.length ? matchingBanks[0].bank : cashOpt);
+        const targetVal = selectedValue || getDefaultDebitAccountForCurrency(cur, true);
         const isCustom = Boolean(selectedValue && !validValues.has(selectedValue));
 
         let html = '';
@@ -5904,7 +5955,9 @@
           html += `<optgroup label="${escapeHtml(cur)} 銀行卡／帳戶（可自動扣款）">` +
             matchingBanks.map((b) => {
               const balStr = safeNum(b.amount).toLocaleString('zh-TW', { maximumFractionDigits: 2 });
-              return `<option value="${escapeHtml(b.bank)}" ${targetVal === b.bank ? 'selected' : ''}>${escapeHtml(b.bank)}（餘額 ${escapeHtml(cur)} ${balStr}）</option>`;
+              const prefix = b.isDefaultDebit ? '⭐ ' : '';
+              const defTag = b.isDefaultDebit ? '預設扣款 · ' : '';
+              return `<option value="${escapeHtml(b.bank)}" ${targetVal === b.bank ? 'selected' : ''}>${prefix}${escapeHtml(b.bank)}（${defTag}餘額 ${escapeHtml(cur)} ${balStr}）</option>`;
             }).join('') +
             '</optgroup>';
         }
@@ -6362,24 +6415,43 @@
 
       function openCashModal(item = null) {
         const isEdit = Boolean(item);
-        const c = item || { bank: '', currency: 'TWD', amount: 0, note: '' };
+        const c = item || { bank: '', currency: 'TWD', amount: 0, isDefaultDebit: false, note: '' };
         const html = `
           <div><label class="block text-xs font-medium text-zinc-600 mb-1">銀行 / 帳戶名稱</label><input name="bank" required value="${escapeHtml(c.bank)}" class="w-full h-9 px-3 rounded-lg hairline text-sm" /></div>
           <div class="grid grid-cols-2 gap-3">
             <div><label class="block text-xs font-medium text-zinc-600 mb-1">幣別</label><select name="currency" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white">${buildCurrencyOptionsHtml(c.currency, true)}</select></div>
             <div><label class="block text-xs font-medium text-zinc-600 mb-1">原幣餘額</label><input name="amount" type="number" step="0.01" required value="${safeNum(c.amount)}" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" /></div>
           </div>
+          <label class="flex items-start gap-2 rounded-lg bg-[#f7f7f5] hairline px-3 py-2.5 text-xs text-zinc-700 cursor-pointer select-none">
+            <input name="isDefaultDebit" type="checkbox" value="1" ${c.isDefaultDebit ? 'checked' : ''} class="mt-0.5 rounded border-zinc-300 text-zinc-900" />
+            <span>
+              <span class="font-medium text-zinc-900">設為此幣別的預設扣款帳戶</span>
+              <span class="block text-[11px] text-zinc-500 mt-0.5">新增支出、AI 記帳、拍照批次辨識與一鍵扣款時，同幣別將自動優先使用此帳戶（每種幣別限設 1 組）</span>
+            </span>
+          </label>
           <div><label class="block text-xs font-medium text-zinc-600 mb-1">備註</label><input name="note" value="${escapeHtml(c.note)}" class="w-full h-9 px-3 rounded-lg hairline text-sm" /></div>
         `;
         openFormModal(isEdit ? '編輯銀行現金' : '新增銀行現金', html, (fd) => {
+          const cur = String(fd.get('currency') || 'TWD');
+          const isDef = fd.get('isDefaultDebit') === '1';
           const record = {
             id: isEdit ? c.id : uid('c'),
             bank: String(fd.get('bank')).trim(),
-            currency: String(fd.get('currency')),
+            currency: cur,
             amount: safeNum(fd.get('amount')),
+            isDefaultDebit: isDef,
             note: String(fd.get('note')).trim()
           };
-          state.cash = isEdit ? state.cash.map((x) => (x.id === c.id ? record : x)) : [...state.cash, record];
+          let nextCash = isEdit ? state.cash.map((x) => (x.id === c.id ? record : x)) : [...state.cash, record];
+          if (isDef) {
+            const curUpper = cur.toUpperCase();
+            nextCash = nextCash.map((x) => (
+              x.id !== record.id && String(x.currency || 'TWD').toUpperCase() === curUpper && x.isDefaultDebit
+                ? { ...x, isDefaultDebit: false }
+                : x
+            ));
+          }
+          state.cash = nextCash;
           saveState();
           renderAll();
           showToast(isEdit ? '已更新現金帳戶' : '已新增現金帳戶');
@@ -7327,7 +7399,7 @@
         const curDefault = isEdit ? (editRec.currency || 'TWD') : (template ? (template.currency || 'TWD') : 'TWD');
         const expectedAmt = isEdit ? safeNum(editRec.expectedAmount) : (template ? safeNum(template.amount) : 0);
         const actualDefault = isEdit ? safeNum(editRec.actualAmount) : (expectedAmt > 0 ? expectedAmt : '');
-        const accDefault = isEdit ? (editRec.account || '') : (template ? (template.account || `現金（${curDefault}）`) : `現金（${curDefault}）`);
+        const accDefault = isEdit ? (editRec.account || '') : (template ? (template.account || getDefaultDebitAccountForCurrency(curDefault)) : getDefaultDebitAccountForCurrency(curDefault));
         const nameDefault = isEdit ? (editRec.name || '') : (template ? template.name : '');
         const catDefault = isEdit ? (editRec.category || '薪資收入') : (template ? (template.category || '薪資收入') : '薪資收入');
         const dateDefault = isEdit ? (editRec.date || todayISO()) : todayISO();
@@ -7538,7 +7610,7 @@
 
       function openRandomExpenseModal(item = null) {
         const isEdit = Boolean(item && item.id);
-        const r = item || { date: todayISO(), category: '餐飲美食', title: '', currency: 'TWD', amount: 0, account: '現金（TWD）', deductStatus: 'unpaid', note: '' };
+        const r = item || { date: todayISO(), category: '餐飲美食', title: '', currency: 'TWD', amount: 0, account: getDefaultDebitAccountForCurrency('TWD'), deductStatus: 'unpaid', note: '' };
         const html = `
           ${buildPhotoAutofillBarHtml('拍收據／發票／消費截圖 AI 自動填單')}
           <div class="grid grid-cols-2 gap-3">
@@ -9009,6 +9081,8 @@
           const t = (state.stockTrades || []).find((x) => x.id === id);
           if (t) openConfirmModal('刪除股票交易紀錄', '確定要刪除此筆交易紀錄嗎？', () => { state.stockTrades = (state.stockTrades || []).filter((x) => x.id !== id); saveState(); renderAll(); showToast('已刪除股票交易紀錄'); });
         }
+        else if (action === 'set-default-cash') { setDefaultDebitAccount(id, true); }
+        else if (action === 'unset-default-cash') { setDefaultDebitAccount(id, false); }
         else if (action === 'edit-cash') { const item = state.cash.find((x) => x.id === id); if (item) openCashModal(item); }
         else if (action === 'del-cash') { openConfirmModal('刪除現金帳戶', '確定要刪除此現金帳戶嗎？', () => { state.cash = state.cash.filter((x) => x.id !== id); saveState(); renderAll(); showToast('已刪除現金帳戶'); }); }
         else if (action === 'edit-inv') { const item = state.investments.find((x) => x.id === id); if (item) openInvModal(item); }
@@ -9154,9 +9228,11 @@
             const cur = item.currency || 'TWD';
             const amt = safeNum(item.amount);
             const rate = cur === 'TWD' ? 1 : safeNum(state.fx[cur], 1);
-            const bank = (state.cash || []).find((c) => c.bank === item.account && c.currency === cur);
+            const bank = (state.cash || []).find((c) => c.bank === item.account && c.currency === cur)
+              || (!item.account ? getDefaultDebitCashRecord(cur, true) : null);
             if (bank) {
               bank.amount = Number((safeNum(bank.amount) - amt).toFixed(2));
+              if (!item.account) item.account = bank.bank;
             }
             item.deductStatus = 'paid';
             state.ledger.push({ id: uid('led'), date: item.date || todayISO(), type: '其他收支', title: `${item.title} 支出扣款`, amountTWD: -Math.round(amt * rate), note: item.account ? `從 ${item.account} 扣款` : '' });
@@ -10580,37 +10656,41 @@
 
         selected.forEach((it) => {
           if (it.kind === 'expense') {
+            const cur = it.currency || 'TWD';
+            const acc = it.account || getDefaultDebitAccountForCurrency(cur, false);
             state.randomExpenses.push({
               id: uid('rexp'),
               date: it.date,
               category: it.category || '其他',
               title: it.title,
-              currency: it.currency || 'TWD',
+              currency: cur,
               amount: it.amount,
-              account: it.account || '',
+              account: acc,
               deductStatus: 'paid',
               note: it.note ? `${it.note}（搬家匯入）` : '搬家匯入'
             });
-            if (!historyOnly && it.account) {
-              const bank = state.cash.find((c) => c.bank === it.account && c.currency === (it.currency || 'TWD'));
+            if (!historyOnly && acc) {
+              const bank = state.cash.find((c) => c.bank === acc && c.currency === cur);
               if (bank) bank.amount = Number((safeNum(bank.amount) - safeNum(it.amount)).toFixed(2));
             }
             cExp += 1;
           } else if (it.kind === 'income') {
+            const cur = it.currency || 'TWD';
+            const acc = it.account || getDefaultDebitAccountForCurrency(cur, false);
             state.incomeReceipts.push({
               id: uid('irec'),
               date: it.date,
               name: it.title,
               category: it.category || '其他收入',
-              currency: it.currency || 'TWD',
+              currency: cur,
               expectedAmount: 0,
               actualAmount: it.amount,
-              account: it.account || '',
+              account: acc,
               depositMode: historyOnly ? 'already_in_bank' : 'new_deposit',
               note: it.note ? `${it.note}（搬家匯入）` : '搬家匯入'
             });
-            if (!historyOnly && it.account) {
-              const bank = state.cash.find((c) => c.bank === it.account && c.currency === (it.currency || 'TWD'));
+            if (!historyOnly && acc) {
+              const bank = state.cash.find((c) => c.bank === acc && c.currency === cur);
               if (bank) bank.amount = Number((safeNum(bank.amount) + safeNum(it.amount)).toFixed(2));
             }
             cInc += 1;
@@ -12144,12 +12224,15 @@
             if (!byCur.has(cur)) byCur.set(cur, []);
             if (!byCur.get(cur).some((x) => x.bank === c.bank)) byCur.get(cur).push(c);
           });
-          let out = '<option value="">（依各筆幣別自動對應）</option>';
+          let out = '<option value="">（依各筆幣別自動對應預設扣款帳戶）</option>';
           byCur.forEach((banks, cur) => {
+            const sortedBanks = [...banks].sort((a, b) => (b.isDefaultDebit ? 1 : 0) - (a.isDefaultDebit ? 1 : 0));
             out += `<optgroup label="${escapeHtml(cur)} 已有帳戶">` +
-              banks.map((b) => {
+              sortedBanks.map((b) => {
                 const balStr = safeNum(b.amount).toLocaleString('zh-TW', { maximumFractionDigits: 2 });
-                return `<option value="${escapeHtml(cur)}::${escapeHtml(b.bank)}">[${escapeHtml(cur)}] ${escapeHtml(b.bank)}（餘額 ${balStr}）</option>`;
+                const prefix = b.isDefaultDebit ? '⭐ ' : '';
+                const defTag = b.isDefaultDebit ? '預設扣款 · ' : '';
+                return `<option value="${escapeHtml(cur)}::${escapeHtml(b.bank)}">[${escapeHtml(cur)}] ${prefix}${escapeHtml(b.bank)}（${defTag}餘額 ${balStr}）</option>`;
               }).join('') +
               `<option value="${escapeHtml(cur)}::現金（${escapeHtml(cur)}）">[${escapeHtml(cur)}] 現金（${escapeHtml(cur)}）</option>` +
               `<option value="${escapeHtml(cur)}::信用卡（${escapeHtml(cur)}）">[${escapeHtml(cur)}] 信用卡（${escapeHtml(cur)}）</option>` +
@@ -12351,11 +12434,7 @@
           }
         });
 
-        const defaultAccountForCurrency = (cur) => {
-          const c = cur || 'TWD';
-          const match = (state.cash || []).find((b) => b.currency === c && b.bank);
-          return match ? match.bank : `現金（${c}）`;
-        };
+        const defaultAccountForCurrency = (cur) => getDefaultDebitAccountForCurrency(cur || 'TWD', true);
         const isKnownAccountForCurrency = (cur, acc) => {
           const c = cur || 'TWD';
           if (!acc) return true;
@@ -14014,10 +14093,7 @@
         if (!act || !act.type) return { ok: false, msg: '無效的操作指令' };
         const t = act.type;
         const cur = normalizeAiCurrencyCode(act.currency, act.amount);
-        const defaultAcc = (c) => {
-          const found = (state.cash || []).find((b) => b.currency === c && b.bank);
-          return found ? found.bank : `現金（${c}）`;
-        };
+        const defaultAcc = (c) => getDefaultDebitAccountForCurrency(c || 'TWD', true);
 
         if (t === 'add_expense') {
           const amt = Math.abs(parseFlexibleNumber(act.amount));
