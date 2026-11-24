@@ -14202,6 +14202,72 @@
         } catch (e) {}
         const b = state.budgets || {};
         const budgetsConfigured = Boolean(safeNum(b.monthlyTotal) > 0 || (b.byCategory && Object.values(b.byCategory).some((v) => safeNum(v) > 0)));
+        const invLogs = Array.isArray(state.investmentLogs) ? state.investmentLogs : [];
+        const invAggById = new Map();
+        const invAggByName = new Map();
+        invLogs.forEach((l) => {
+          const amt = safeNum(l.amountTWD);
+          if (amt <= 0) return;
+          const isInvest = l.eventType === 'invest';
+          const touch = (map, k) => {
+            if (!k) return;
+            const cur = map.get(k) || { investedTWD: 0, returnedTWD: 0, count: 0 };
+            if (isInvest) cur.investedTWD += amt;
+            else cur.returnedTWD += amt;
+            cur.count += 1;
+            map.set(k, cur);
+          };
+          touch(invAggById, l.investmentId);
+          touch(invAggByName, String(l.investmentName || '').trim());
+        });
+        const physicalInvestments = (state.investments || []).map((inv) => {
+          const agg = invAggById.get(inv.id) || invAggByName.get(String(inv.name || '').trim()) || { investedTWD: 0, returnedTWD: 0, count: 0 };
+          return {
+            id: inv.id,
+            name: inv.name,
+            status: typeof getInvestmentStatus === 'function' ? getInvestmentStatus(inv) : (inv.status || 'active'),
+            investKind: typeof getInvestmentKind === 'function' ? getInvestmentKind(inv) : (inv.investKind || 'recurring'),
+            plannedPrincipalTWD: Math.round(safeNum(inv.principal)),
+            cycleMonths: safeNum(inv.cycleMonths, 1),
+            minRatePct: safeNum(inv.minRate),
+            maxRatePct: safeNum(inv.maxRate),
+            tags: Array.isArray(inv.tags) ? inv.tags : [],
+            sourceInvestmentId: inv.sourceInvestmentId || '',
+            actualInvestedTWD: Math.round(agg.investedTWD),
+            actualReturnedTWD: Math.round(agg.returnedTWD),
+            netProfitTWD: Math.round(agg.returnedTWD - agg.investedTWD),
+            logCount: agg.count,
+            note: inv.note || ''
+          };
+        });
+        const recStats = typeof computeInvestmentRecyclingStats === 'function' ? computeInvestmentRecyclingStats(state) : null;
+        const recentInvestmentLogs = invLogs
+          .toSorted((a, b) => String(b.date || '').localeCompare(String(a.date || '')))
+          .slice(0, 25)
+          .map((l) => ({
+            date: l.date,
+            investmentName: l.investmentName || '',
+            eventType: l.eventType,
+            amountTWD: Math.round(safeNum(l.amountTWD)),
+            fundingSource: l.fundingSource || '',
+            note: l.note || ''
+          }));
+        const fixedExpensesList = (state.fixedExpenses || []).map((f) => ({
+          name: f.name,
+          category: f.category,
+          currency: f.currency || 'TWD',
+          amount: safeNum(f.amount),
+          cycleMonths: Math.max(1, safeNum(f.cycleMonths, 1)),
+          status: f.status || 'active',
+          payday: f.payday || ''
+        }));
+        const fixedIncomesList = (state.fixedIncomes || []).map((f) => ({
+          name: f.name,
+          category: f.category,
+          currency: f.currency || 'TWD',
+          amount: safeNum(f.amount),
+          cycleMonths: Math.max(1, safeNum(f.cycleMonths, 1))
+        }));
         return {
           today: todayISO(),
           fx: state.fx || {},
@@ -14219,6 +14285,17 @@
             estimatedMonthlyExpenseTWD: Math.round(totals.estimatedMonthlyExpenseTWD),
             actualRecordedExpenseThisMonthTWD: Math.round(totals.randomExpenseThisMonthTWD)
           },
+          physicalInvestments,
+          investmentRecyclingSummary: recStats ? {
+            totalInvestedTWD: Math.round(recStats.totalInvested),
+            peakSelfFundedPrincipalTWD: Math.round(recStats.peakOutflow),
+            recycledTotalTWD: Math.round(recStats.recycledTotal),
+            totalReturnedTWD: Math.round(recStats.totalReturned),
+            moic: recStats.moic !== null ? Number(recStats.moic.toFixed(2)) : null
+          } : null,
+          recentInvestmentLogs,
+          fixedExpenses: fixedExpensesList,
+          fixedIncomes: fixedIncomesList,
           unpaidFixedExpensesThisMonth: unpaidFixed,
           thisMonthByCategoryTWD: Object.fromEntries(Object.entries(catTotals).map(([k, v]) => [k, Math.round(v)])),
           budgets: b,
