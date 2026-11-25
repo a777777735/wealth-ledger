@@ -2078,15 +2078,46 @@
         return Number.isFinite(n) ? n : fallback;
       }
 
+      // 策略化提醒價：每檔持股的提醒價由所選策略決定（預設芒格式）。
+      // strategy：munger（芒格式）／ted（Ted 趨勢）／technical（技術位）／manual（手動）。
+      // 芒格式另有內在價值 intrinsicValue、 安全邊際 marginOfSafety（%）、
+      // 賣出條件 sellConditions（陣列，見 SELL_CONDITION_OPTIONS）與論述備註 thesisNotes。
+      const STRATEGY_META = {
+        munger: { label: '芒格式', cls: 'bg-amber-50 text-amber-800' },
+        ted: { label: 'Ted 趨勢', cls: 'bg-sky-50 text-sky-700' },
+        technical: { label: '技術位', cls: 'bg-violet-50 text-violet-700' },
+        manual: { label: '手動', cls: 'bg-zinc-100 text-zinc-600' }
+      };
+      const STRATEGY_VALUES = ['munger', 'ted', 'technical', 'manual'];
+      const SELL_CONDITION_OPTIONS = [
+        { value: 'moat', label: '護城河弱化' },
+        { value: 'fcf', label: '自由現金流轉負' },
+        { value: 'debt', label: '負債失控' },
+        { value: 'management', label: '管理層誠信問題' },
+        { value: 'opportunity', label: '出現更好機會' }
+      ];
+
       // 持股提醒價／報價詮釋資料正規化（舊資料、JSON／Excel 匯入皆走這裡補預設值）
       // buyPrice/stopPrice/takeProfitPrice：0 代表未設定；quoteSource：yahoo/twse/csv/finnhub/manual；
       // quoteDate：報價所屬交易日 YYYY-MM-DD；quoteUpdatedAt：本次成功更新的 ISO 時間；
       // alertState：各提醒是否已處於觸發狀態（避免重複寫入同一事件）
+      // strategy：提醒策略，未填或不合法一律預設 munger；intrinsicValue：內在價值估計（每股）；
+      // marginOfSafety：安全邊際 %（預設 30，上限 90）；sellConditions：芒格式賣出條件陣列；
+      // thesisNotes：論述備註（自由文字）
       function normalizeStockRecord(s) {
         if (!s || typeof s !== 'object') return s;
         s.buyPrice = safeNum(s.buyPrice, 0);
         s.stopPrice = safeNum(s.stopPrice, 0);
         s.takeProfitPrice = safeNum(s.takeProfitPrice, 0);
+        s.strategy = STRATEGY_VALUES.includes(s.strategy) ? s.strategy : 'munger';
+        s.intrinsicValue = safeNum(s.intrinsicValue, 0);
+        s.marginOfSafety = (s.marginOfSafety === undefined || s.marginOfSafety === null || s.marginOfSafety === '')
+          ? 30
+          : Math.min(90, Math.max(0, safeNum(s.marginOfSafety, 30)));
+        s.sellConditions = Array.isArray(s.sellConditions)
+          ? s.sellConditions.filter((v) => SELL_CONDITION_OPTIONS.some((o) => o.value === v))
+          : [];
+        s.thesisNotes = String(s.thesisNotes || '');
         s.quoteSource = String(s.quoteSource || '');
         s.quoteDate = String(s.quoteDate || '');
         s.quoteUpdatedAt = String(s.quoteUpdatedAt || '');
@@ -4158,7 +4189,18 @@
             .filter((t) => alertSt[t])
             .map((t) => `<span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${ALERT_TYPE_META[t].cls}">${ALERT_TYPE_META[t].label}</span>`)
             .join(' ');
-          const alertSetLine = [safeNum(s.buyPrice) > 0 ? `買 ${fmtNum(s.buyPrice, 2)}` : '', safeNum(s.stopPrice) > 0 ? `停 ${fmtNum(s.stopPrice, 2)}` : '', safeNum(s.takeProfitPrice) > 0 ? `利 ${fmtNum(s.takeProfitPrice, 2)}` : ''].filter(Boolean).join(' · ');
+          // 策略徽章；芒格式且未設停損價時，提醒摘要顯示「停損：看基本面」而非空白
+          const stratMeta = STRATEGY_META[s.strategy] || STRATEGY_META.munger;
+          const strategyBadge = `<span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${stratMeta.cls}">${stratMeta.label}</span>`;
+          const alertParts = [
+            safeNum(s.buyPrice) > 0 ? `買 ${fmtNum(s.buyPrice, 2)}` : '',
+            safeNum(s.stopPrice) > 0 ? `停 ${fmtNum(s.stopPrice, 2)}` : '',
+            safeNum(s.takeProfitPrice) > 0 ? `利 ${fmtNum(s.takeProfitPrice, 2)}` : ''
+          ].filter(Boolean);
+          if ((s.strategy || 'munger') === 'munger' && safeNum(s.stopPrice) <= 0 && alertParts.length > 0) {
+            alertParts.splice(1, 0, '停損：看基本面');
+          }
+          const alertSetLine = alertParts.join(' · ');
           // 報價來源／交易日／舊資料徽章
           const qf = quoteFreshness(s);
           const qSource = QUOTE_SOURCE_NAMES[s.quoteSource] || (s.quoteSource ? escapeHtml(s.quoteSource) : '');
@@ -4171,7 +4213,7 @@
           return `
             <tr class="hover:bg-[#f7f7f5] transition-colors duration-150">
               <td class="py-3 px-2 font-sans">
-                <div class="font-medium text-zinc-900">${escapeHtml(s.symbol)}</div>
+                <div class="font-medium text-zinc-900">${escapeHtml(s.symbol)} ${strategyBadge}</div>
                 <div class="text-xs text-zinc-500">${escapeHtml(s.name)}</div>
                 ${alertBadges ? `<div class="flex flex-wrap gap-1 mt-1">${alertBadges}</div>` : ''}
                 ${alertSetLine ? `<div class="text-[11px] text-zinc-400 mt-0.5">提醒 ${escapeHtml(alertSetLine)}</div>` : ''}
@@ -7193,18 +7235,53 @@
           </div>
           <div class="pt-1">
             <div class="text-xs font-semibold text-zinc-800">🔔 價格提醒 <span class="font-normal text-zinc-400">（選填，留空代表不設定；報價更新時自動比對並記錄事件）</span></div>
+            <div class="grid grid-cols-2 gap-3 mt-2">
+              <div><label class="block text-xs font-medium text-zinc-600 mb-1">提醒策略</label><select name="strategy" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white">
+                <option value="munger" ${(!s.strategy || s.strategy === 'munger') ? 'selected' : ''}>芒格式（價值）</option>
+                <option value="ted" ${s.strategy === 'ted' ? 'selected' : ''}>Ted 趨勢</option>
+                <option value="technical" ${s.strategy === 'technical' ? 'selected' : ''}>技術位</option>
+                <option value="manual" ${s.strategy === 'manual' ? 'selected' : ''}>手動</option>
+              </select></div>
+              <div><label class="block text-xs font-medium text-zinc-600 mb-1">策略說明</label><div id="stock-strategy-hint" class="h-9 flex items-center text-[11px] text-zinc-500 leading-snug">芒格式：低於內在價值買進，基本面變壞才賣出</div></div>
+            </div>
+            <div id="stock-munger-panel" class="mt-3 rounded-lg bg-[#f7f7f5] hairline p-3 space-y-3">
+              <div class="grid grid-cols-2 gap-3">
+                <div><label class="block text-xs font-medium text-zinc-600 mb-1">內在價值估計（每股，${escapeHtml(s.currency || 'TWD')}）</label><input name="intrinsicValue" type="number" step="0.0001" min="0" value="${safeNum(s.intrinsicValue) > 0 ? safeNum(s.intrinsicValue) : ''}" placeholder="例如 100" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num bg-white" /></div>
+                <div><label class="block text-xs font-medium text-zinc-600 mb-1">安全邊際（%）</label><input name="marginOfSafety" type="number" step="1" min="0" max="90" value="${(s.marginOfSafety === undefined || s.marginOfSafety === null || s.marginOfSafety === '') ? 30 : safeNum(s.marginOfSafety, 30)}" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num bg-white" /></div>
+              </div>
+              <div class="flex flex-wrap items-center gap-2 text-xs text-zinc-700">
+                <span>建議買進價 <span id="stock-munger-suggest-buy" class="font-mono-num font-semibold text-zinc-900">—</span></span>
+                <span class="text-zinc-400">·</span>
+                <span>建議停利價 <span id="stock-munger-suggest-tp" class="font-mono-num font-semibold text-zinc-900">—</span></span>
+                <button type="button" id="btn-apply-munger-suggest" class="btn-focus h-7 px-3 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white text-[11px] font-medium">套用建議價</button>
+              </div>
+              <p class="text-[11px] text-zinc-500 leading-relaxed">建議買進價 ＝ 內在價值 ×（1 − 安全邊際）；建議停利價 ＝ 內在價值（漲到內在價值就不便宜了）。套用後會填入下方買進價與停利價。</p>
+              <div>
+                <div class="text-xs font-medium text-zinc-600 mb-1.5">賣出條件（基本面變壞才賣，勾選適用者）</div>
+                <div class="flex flex-wrap gap-2">
+                  ${SELL_CONDITION_OPTIONS.map((o) => `<label class="inline-flex items-center gap-1.5 text-xs text-zinc-700 cursor-pointer"><input type="checkbox" name="sellConditions" value="${o.value}" ${(Array.isArray(s.sellConditions) && s.sellConditions.includes(o.value)) ? 'checked' : ''} class="rounded border-zinc-300" />${o.label}</label>`).join('')}
+                </div>
+              </div>
+              <div><label class="block text-xs font-medium text-zinc-600 mb-1">論述備註（為什麼值得買／什麼情況下會改變看法）</label><textarea name="thesisNotes" rows="2" placeholder="例如：護城河是品牌與規模，自由現金流穩定；若市佔率連續下滑就重新評估" class="w-full px-3 py-2 rounded-lg hairline text-sm bg-white">${escapeHtml(s.thesisNotes || '')}</textarea></div>
+              <label class="inline-flex items-center gap-2 text-xs text-zinc-700 cursor-pointer select-none"><input type="checkbox" name="hardStop" id="stock-hard-stop-toggle" ${safeNum(s.stopPrice) > 0 ? 'checked' : ''} class="rounded border-zinc-300" />另設硬性停損價（可選）</label>
+            </div>
             <div class="grid grid-cols-3 gap-3 mt-2">
               <div><label class="block text-xs font-medium text-zinc-600 mb-1">買進價</label><input name="buyPrice" type="number" step="0.0001" min="0" value="${safeNum(s.buyPrice) > 0 ? safeNum(s.buyPrice) : ''}" placeholder="未設定" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" /></div>
-              <div><label class="block text-xs font-medium text-zinc-600 mb-1">停損價</label><input name="stopPrice" type="number" step="0.0001" min="0" value="${safeNum(s.stopPrice) > 0 ? safeNum(s.stopPrice) : ''}" placeholder="未設定" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" /></div>
+              <div id="stock-stop-wrap"><label class="block text-xs font-medium text-zinc-600 mb-1">停損價</label><input name="stopPrice" type="number" step="0.0001" min="0" value="${safeNum(s.stopPrice) > 0 ? safeNum(s.stopPrice) : ''}" placeholder="未設定" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" /></div>
               <div><label class="block text-xs font-medium text-zinc-600 mb-1">停利價</label><input name="takeProfitPrice" type="number" step="0.0001" min="0" value="${safeNum(s.takeProfitPrice) > 0 ? safeNum(s.takeProfitPrice) : ''}" placeholder="未設定" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" /></div>
             </div>
-            <p class="text-[11px] text-zinc-400 mt-1.5">買進價應高於停損價；現價觸及任一價格時會在持股列顯示徽章並寫入「價格提醒事件」，不會自動交易。</p>
+            <p id="stock-alert-hint" class="text-[11px] text-zinc-400 mt-1.5">買進價應高於停損價（有設停損價時）；現價觸及任一價格時會在持股列顯示徽章並寫入「價格提醒事件」，不會自動交易。</p>
           </div>
         `;
         openFormModal(isEdit ? '編輯股票持倉' : '新增股票持倉', html, (fd) => {
+          const strategyRaw = String(fd.get('strategy') || 'munger');
+          const strategy = STRATEGY_VALUES.includes(strategyRaw) ? strategyRaw : 'munger';
           const buyPrice = safeNum(fd.get('buyPrice'));
-          const stopPrice = safeNum(fd.get('stopPrice'));
+          // 芒格式預設不用價格停損（看基本面賣出）：未勾「另設硬性停損價」時停損價一律為 0，
+          // 提醒引擎與走勢圖本來就只處理 > 0 的停損價，因此不會發停損提醒、不畫停損線。
+          const stopPrice = strategy === 'munger' && fd.get('hardStop') !== 'on' ? 0 : safeNum(fd.get('stopPrice'));
           const takeProfitPrice = safeNum(fd.get('takeProfitPrice'));
+          // 停損價為空（0）時不做「買進價應高於停損價」的檢查，必須能正常儲存
           if (buyPrice > 0 && stopPrice > 0 && buyPrice <= stopPrice) {
             showToast('買進價應高於停損價（否則一買進就同時觸發停損），請修正後再儲存');
             return;
@@ -7222,7 +7299,12 @@
             currentPrice: safeNum(fd.get('currentPrice')),
             buyPrice,
             stopPrice,
-            takeProfitPrice
+            takeProfitPrice,
+            strategy,
+            intrinsicValue: safeNum(fd.get('intrinsicValue')),
+            marginOfSafety: Math.min(90, Math.max(0, safeNum(fd.get('marginOfSafety'), 30))),
+            sellConditions: fd.getAll('sellConditions').map((v) => String(v)).filter((v) => SELL_CONDITION_OPTIONS.some((o) => o.value === v)),
+            thesisNotes: String(fd.get('thesisNotes') || '').trim()
           });
           // 提醒價改過後，對應的觸發狀態歸零，讓下次比對重新判斷（避免舊狀態殘留）
           if (isEdit) {
@@ -7235,6 +7317,68 @@
           renderAll();
           showToast(isEdit ? '已更新股票持倉' : '已新增股票持倉');
         });
+
+        // 策略化提醒價：策略切換、芒格式建議價即時推導、硬性停損開關
+        const stratForm = document.getElementById('modal-form');
+        const stratSel = stratForm ? stratForm.querySelector('select[name="strategy"]') : null;
+        const stratHint = document.getElementById('stock-strategy-hint');
+        const mungerPanel = document.getElementById('stock-munger-panel');
+        const stopWrap = document.getElementById('stock-stop-wrap');
+        const hardStopToggle = document.getElementById('stock-hard-stop-toggle');
+        const ivInput = stratForm ? stratForm.querySelector('input[name="intrinsicValue"]') : null;
+        const mosInput = stratForm ? stratForm.querySelector('input[name="marginOfSafety"]') : null;
+        const suggestBuyEl = document.getElementById('stock-munger-suggest-buy');
+        const suggestTpEl = document.getElementById('stock-munger-suggest-tp');
+        const applySuggestBtn = document.getElementById('btn-apply-munger-suggest');
+        const buyInput = stratForm ? stratForm.querySelector('input[name="buyPrice"]') : null;
+        const tpInput = stratForm ? stratForm.querySelector('input[name="takeProfitPrice"]') : null;
+        const stopInput = stratForm ? stratForm.querySelector('input[name="stopPrice"]') : null;
+        const alertHintEl = document.getElementById('stock-alert-hint');
+        const STRATEGY_HINTS = {
+          munger: '芒格式：低於內在價值買進，基本面變壞才賣出',
+          ted: 'Ted 趨勢：跟著趨勢進出（本版先手動填價）',
+          technical: '技術位：支撐附近買、壓力附近賣（本版先手動填價）',
+          manual: '手動：三個價格都自己填'
+        };
+        const calcMungerSuggest = () => {
+          const iv = safeNum(ivInput && ivInput.value);
+          const mos = Math.min(90, Math.max(0, safeNum(mosInput && mosInput.value, 30)));
+          return { buy: iv > 0 ? iv * (1 - mos / 100) : 0, tp: iv };
+        };
+        const updateMungerSuggest = () => {
+          const sug = calcMungerSuggest();
+          if (suggestBuyEl) suggestBuyEl.textContent = sug.buy > 0 ? fmtNum(sug.buy, 2) : '—';
+          if (suggestTpEl) suggestTpEl.textContent = sug.tp > 0 ? fmtNum(sug.tp, 2) : '—';
+        };
+        const syncStrategyUI = () => {
+          const strat = stratSel ? stratSel.value : 'munger';
+          const isMunger = strat === 'munger';
+          if (stratHint) stratHint.textContent = STRATEGY_HINTS[strat] || STRATEGY_HINTS.munger;
+          if (mungerPanel) mungerPanel.classList.toggle('hidden', !isMunger);
+          const showStop = !isMunger || (hardStopToggle && hardStopToggle.checked);
+          if (stopWrap) stopWrap.classList.toggle('hidden', !showStop);
+          if (alertHintEl) {
+            alertHintEl.textContent = (isMunger && !(hardStopToggle && hardStopToggle.checked))
+              ? '芒格式看基本面賣出，不用價格停損；現價觸及買進價或停利價時會在持股列顯示徽章並寫入「價格提醒事件」，不會自動交易。'
+              : '買進價應高於停損價（有設停損價時）；現價觸及任一價格時會在持股列顯示徽章並寫入「價格提醒事件」，不會自動交易。';
+          }
+          if (isMunger) updateMungerSuggest();
+        };
+        if (stratSel) stratSel.addEventListener('change', syncStrategyUI);
+        if (hardStopToggle) hardStopToggle.addEventListener('change', () => {
+          if (!hardStopToggle.checked && stopInput) stopInput.value = '';
+          syncStrategyUI();
+        });
+        if (ivInput) ivInput.addEventListener('input', updateMungerSuggest);
+        if (mosInput) mosInput.addEventListener('input', updateMungerSuggest);
+        if (applySuggestBtn) applySuggestBtn.addEventListener('click', () => {
+          const sug = calcMungerSuggest();
+          if (sug.tp <= 0) { showToast('請先填寫內在價值估計'); return; }
+          if (buyInput) buyInput.value = String(Number(sug.buy.toFixed(4)));
+          if (tpInput) tpInput.value = String(Number(sug.tp.toFixed(4)));
+          showToast('已套用建議價：買進價與停利價已填入');
+        });
+        syncStrategyUI();
       }
 
       function applyStockTradeRecord(rec) {
@@ -9504,7 +9648,7 @@
               title: '匯入 JSON 備份預覽',
               intro: `備份檔匯出於 ${parsed.exportedAt ? String(parsed.exportedAt).slice(0, 10) : '未知時間'}，以下內容將覆蓋目前帳本：`,
               rows: [
-                { label: '股票持倉', count: next.stocks.length, note: '含買進／停損／停利提醒價' },
+                { label: '股票持倉', count: next.stocks.length, note: '含提醒策略、買進／停損／停利提醒價' },
                 { label: '價格提醒事件', count: next.alertEvents.length, note: '隨備份一起還原' },
                 { label: '銀行現金', count: next.cash.length, note: '' },
                 { label: '實體投資', count: next.investments.length, note: '' },
