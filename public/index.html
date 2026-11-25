@@ -504,7 +504,7 @@
                   <h3 class="text-xs font-medium text-zinc-500">結構圓環對照</h3>
                   <span class="text-[11px] font-mono-num text-zinc-400">TWD</span>
                 </div>
-                <div class="relative h-36">
+                <div class="relative h-48">
                   <canvas id="chart-allocation"></canvas>
                 </div>
               </div>
@@ -1303,7 +1303,7 @@
                   </div>
                   <label class="btn-focus inline-flex items-center h-8 px-3.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-medium cursor-pointer">
                     <span>選擇檔案</span>
-                    <input id="migrate-file-input" type="file" accept=".csv,.xlsx,.xls,text/csv" class="hidden" />
+                    <input id="migrate-file-input" type="file" accept=".csv,.xlsx,.xls,text/csv" class="sr-only" />
                   </label>
                 </div>
                 <div id="migrate-table-file-info" class="hidden pt-2 border-t border-zinc-900/[0.06] flex flex-wrap items-center justify-between gap-2 text-xs">
@@ -1354,7 +1354,7 @@
                     </select>
                     <label class="btn-focus inline-flex items-center h-8 px-3.5 rounded-lg bg-white hover:bg-zinc-50 hairline text-zinc-800 text-xs font-medium cursor-pointer">
                       <span>選擇圖片</span>
-                      <input id="migrate-img-input" type="file" accept="image/*" multiple class="hidden" />
+                      <input id="migrate-img-input" type="file" accept="image/*" multiple class="sr-only" />
                     </label>
                     <button id="btn-migrate-img-paste" type="button" class="btn-focus h-8 px-3 rounded-lg bg-white hover:bg-zinc-50 hairline text-zinc-800 text-xs font-medium" title="直接貼上剪貼簿截圖">📋 貼上截圖</button>
                     <button id="btn-migrate-img-run" type="button" class="btn-focus h-8 px-3.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-medium">AI 辨識截圖</button>
@@ -1378,7 +1378,7 @@
                   <div class="flex flex-wrap items-center gap-2">
                     <label class="btn-focus inline-flex items-center h-8 px-3.5 rounded-lg bg-white hover:bg-zinc-50 hairline text-zinc-800 text-xs font-medium cursor-pointer">
                       <span>選擇 PDF</span>
-                      <input id="migrate-pdf-input" type="file" accept="application/pdf" class="hidden" />
+                      <input id="migrate-pdf-input" type="file" accept="application/pdf" class="sr-only" />
                     </label>
                     <button id="btn-migrate-pdf-run" type="button" class="btn-focus h-8 px-3.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-medium">AI 解析對帳單</button>
                   </div>
@@ -1674,7 +1674,7 @@
                 <span id="cfg-ai-key-count" class="text-[11px] font-mono-num text-zinc-400">0 組</span>
               </div>
               <label class="inline-flex items-center gap-2 text-xs text-zinc-700 cursor-pointer select-none">
-                <input id="cfg-ai-sync-cloud" type="checkbox" checked class="rounded border-zinc-300 text-zinc-900" />
+                <input id="cfg-ai-sync-cloud" type="checkbox" class="rounded border-zinc-300 text-zinc-900" />
                 <span>同步多組 API Key 至我的私人 Google 雲端（換瀏覽器／手機登入自動帶回，匯出 JSON 備份仍會排除金鑰）</span>
               </label>
               <div id="cfg-ai-key-list" class="space-y-2"></div>
@@ -1815,7 +1815,7 @@
                 <button id="btn-export-json" type="button" class="btn-focus h-8 px-3.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-medium transition-colors duration-150">下載 JSON 備份檔</button>
                 <label class="h-8 px-3.5 rounded-lg bg-white hover:bg-zinc-50 text-zinc-800 hairline text-xs font-medium inline-flex items-center cursor-pointer transition-colors duration-150">
                   <span>匯入 JSON 檔案</span>
-                  <input id="input-import-json" type="file" accept=".json,application/json" class="hidden" />
+                  <input id="input-import-json" type="file" accept=".json,application/json" class="sr-only" />
                 </label>
               </div>
             </div>
@@ -1829,7 +1829,7 @@
                 <button id="btn-export-xlsx" type="button" class="btn-focus h-8 px-3.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-medium transition-colors duration-150">下載 Excel (.xlsx)</button>
                 <label class="h-8 px-3.5 rounded-lg bg-white hover:bg-zinc-50 text-zinc-800 hairline text-xs font-medium inline-flex items-center cursor-pointer transition-colors duration-150">
                   <span>匯入 Excel (.xlsx)</span>
-                  <input id="input-import-xlsx" type="file" accept=".xlsx,.xls" class="hidden" />
+                  <input id="input-import-xlsx" type="file" accept=".xlsx,.xls" class="sr-only" />
                 </label>
               </div>
             </div>
@@ -1992,7 +1992,7 @@
           <label class="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl hover:bg-[#f7f7f5] text-zinc-800 cursor-pointer">
             <svg class="w-4 h-4 text-zinc-600 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
             <span>選擇照片／截圖（最多 8 張）</span>
-            <input id="ai-copilot-file" type="file" accept="image/*" multiple class="hidden" />
+            <input id="ai-copilot-file" type="file" accept="image/*" multiple class="sr-only" />
           </label>
           <button id="btn-ai-copilot-paste" type="button" class="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl hover:bg-[#f7f7f5] text-zinc-800 text-left">
             <svg class="w-4 h-4 text-zinc-600 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>
@@ -2973,7 +2973,7 @@
       }
 
       function mergeAndApplyRemoteAiKeys(docData) {
-        if (appConfig.syncAiKeysToCloud === false) return { localHadNewerKeys: false, remoteHadNewerKeys: false };
+        if (appConfig.syncAiKeysToCloud !== true) return { localHadNewerKeys: false, remoteHadNewerKeys: false };
         if (!docData || !docData.aiKeysPayload) {
           const localKeys = (typeof ensureAiKeysPool === 'function') ? ensureAiKeysPool() : (appConfig.aiKeys || []);
           return { localHadNewerKeys: localKeys.length > 0, remoteHadNewerKeys: false };
@@ -3211,7 +3211,7 @@
           }
         } else if (fbAuth) {
           authLabel.textContent = 'Google 登入';
-          statusEl.textContent = '雲端已就緒 · 點右側 Google 登入同步私人帳本';
+          statusEl.textContent = '尚未登入雲端 · 點右側 Google 登入同步私人帳本';
           badge.textContent = '待登入';
           badge.className = 'text-xs font-mono-num text-zinc-700';
           dot.className = 'w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0';
@@ -3318,7 +3318,7 @@
             email: currentUser.email || '',
             payload: JSON.stringify(payloadObj)
           };
-          if (appConfig.syncAiKeysToCloud !== false) {
+          if (appConfig.syncAiKeysToCloud === true) {
             const keysToSync = (typeof ensureAiKeysPool === 'function') ? ensureAiKeysPool() : (appConfig.aiKeys || []);
             const keysTs = Math.max(safeNum(appConfig.aiKeysUpdatedAtMs, 0), pushTs);
             docWrite.aiKeysPayload = JSON.stringify({
@@ -3825,7 +3825,28 @@
             maintainAspectRatio: false,
             cutout: '68%',
             plugins: {
-              legend: { display: false },
+              // 圖例直接顯示各項佔比，不必再對照上方文字清單
+              legend: {
+                display: true,
+                position: 'bottom',
+                labels: {
+                  boxWidth: 10,
+                  font: { size: 11 },
+                  padding: 10,
+                  generateLabels: (chart) => chart.data.labels.map((label, i) => {
+                    const val = chart.data.datasets[0].data[i] || 0;
+                    const pct = totals.netWorthTWD > 0 ? ((val / totals.netWorthTWD) * 100).toFixed(1) : '0.0';
+                    return {
+                      text: `${label} ${pct}%`,
+                      fillStyle: chart.data.datasets[0].backgroundColor[i],
+                      strokeStyle: '#ffffff',
+                      lineWidth: 2,
+                      hidden: false,
+                      index: i
+                    };
+                  })
+                }
+              },
               tooltip: {
                 callbacks: {
                   label: (ctx) => {
@@ -3838,6 +3859,8 @@
             }
           }
         });
+        // E2E 測試掛鉤：供 Playwright 驗證圓環圖例百分比，不影響一般使用
+        window.__allocationChartDetail = chartAllocation;
 
         // Restrained Currency Exposure Bar Chart (Lead bar ink, others quiet neutral)
         const ctxCur = document.getElementById('chart-currency').getContext('2d');
@@ -5620,6 +5643,21 @@
           }
         }
 
+        // 淨值快照稀疏時在副標題加提示（僅總覽模式：淨值線以最近快照延伸）
+        if (!isHistoryPage && trendMode === 'overview' && snapPoints.length <= 1) {
+          const barEl = document.getElementById('ov-trend-delta-bar');
+          if (barEl) barEl.innerHTML += ` <span class="text-zinc-400">· 淨值快照僅 ${snapPoints.length} 筆，曲線以最近快照延伸</span>`;
+        }
+
+        // 淨值快照稀疏時，以最近一筆快照向前延伸，讓淨值線連續可見（圖例標示「最近快照」以明示語意；快照前的空白期仍為 null）
+        const forwardFillNw = (vals) => {
+          let last = null;
+          return vals.map((v) => {
+            if (v !== null && v !== undefined) last = v;
+            return last;
+          });
+        };
+
         const ptRadius = points.length > 24 ? 2 : 3.5;
         let chartType = 'line';
         let datasets = [];
@@ -5627,12 +5665,12 @@
 
         if (trendMode === 'total') {
           datasets = [{
-            label: '總資產淨值 (TWD)',
-            data: points.map((s) => s.totalTWD),
+            label: '總資產淨值（最近快照）',
+            data: forwardFillNw(points.map((s) => s.totalTWD)),
             borderColor: '#18181b',
             backgroundColor: 'rgba(24, 24, 27, 0.07)',
-            borderWidth: 2,
-            pointRadius: ptRadius,
+            borderWidth: 3,
+            pointRadius: 4,
             pointBackgroundColor: '#18181b',
             fill: true,
             spanGaps: true,
@@ -5731,12 +5769,12 @@
             },
             {
               type: 'line',
-              label: '總資產淨值',
-              data: points.map((s) => s.totalTWD),
+              label: '總資產淨值（最近快照）',
+              data: forwardFillNw(points.map((s) => s.totalTWD)),
               borderColor: '#18181b',
               backgroundColor: 'rgba(24, 24, 27, 0.06)',
-              borderWidth: 2.2,
-              pointRadius: ptRadius,
+              borderWidth: 3,
+              pointRadius: 4,
               pointBackgroundColor: '#18181b',
               spanGaps: true,
               tension: 0.3,
@@ -5769,9 +5807,12 @@
           }
         };
         if (useDualAxis) {
+          // 雙軸對照：左軸為收支流量、右軸為淨值存量，軸標題寫明以免誤讀
+          scales.y.title = { display: true, text: '收支', color: '#71717a', font: { size: 11, family: 'JetBrains Mono' } };
           scales.y1 = {
             position: 'right',
             grid: { drawOnChartArea: false },
+            title: { display: true, text: '淨值', color: '#18181b', font: { size: 11, family: 'JetBrains Mono' } },
             ticks: {
               color: '#18181b',
               font: { size: 11, family: 'JetBrains Mono' },
@@ -5832,6 +5873,8 @@
 
         if (isHistoryPage) chartHistoryTrend = chartInst;
         else chartTrend = chartInst;
+        // E2E 測試掛鉤：供 Playwright 驗證淨值線資料（是否向前延伸、是否連續），不影響一般使用
+        window.__trendChartDetail = chartInst;
         syncTrendControlButtons();
       }
 
@@ -10954,6 +10997,8 @@
         anthropic: 'claude-sonnet-4-20250514',
         custom: ''
       };
+      // 預設 AI 供應商唯一來源：設定頁與無 Key 時的 AI 呼叫 fallback 共用，勿在各處寫死 'groq' 或 'gemini'
+      const AI_DEFAULT_PROVIDER = 'groq';
       const AI_PROVIDER_GUIDE = {
         groq: {
           name: 'Groq',
@@ -11230,10 +11275,20 @@
             <span>🔓 保險庫已解鎖（僅保留於本次瀏覽，關閉分頁即失效）。</span>
             <button type="button" data-vault-act="lock" class="h-7 px-3 rounded-lg bg-white hairline text-xs font-medium">上鎖</button>
           </div>`;
+        } else if (aiVaultUnlocked && aiVaultPassphrase) {
+          // 已設定加密密碼、尚無加密 Key：保險庫就緒，之後新增的 Key 會自動加密
+          el.className = 'rounded-lg border border-emerald-200 bg-emerald-50 px-3.5 py-3 text-xs text-emerald-900';
+          el.innerHTML = `<div class="flex flex-wrap items-center justify-between gap-2">
+            <span>🔒 保險庫已就緒（已設定加密密碼，之後新增的 Key 會自動以 AES-GCM 加密存放；密碼僅保留於本次瀏覽）。</span>
+            <button type="button" data-vault-act="lock" class="h-7 px-3 rounded-lg bg-white hairline text-xs font-medium">上鎖</button>
+          </div>`;
         } else {
-          el.classList.add('hidden');
-          el.innerHTML = '';
-          return;
+          // 0 組 Key 且尚未設定密碼：常駐顯示設定入口，先設密碼再輸 Key
+          el.className = 'rounded-lg border border-zinc-200 bg-[#f7f7f5] px-3.5 py-3 text-xs text-zinc-700';
+          el.innerHTML = `<div class="flex flex-wrap items-center justify-between gap-2">
+            <span>🔒 金鑰保險庫尚未設定加密密碼（目前 0 組 Key）。先設定密碼，之後新增的 Key 會自動以 AES-GCM 加密存放。</span>
+            <button type="button" data-vault-act="setup" class="h-7 px-3 rounded-lg bg-zinc-900 text-white text-xs font-medium shrink-0">設定加密密碼</button>
+          </div>`;
         }
         el.classList.remove('hidden');
       }
@@ -11242,7 +11297,7 @@
         if (act === 'setup') {
           const plainCount = countPlaintextKeys();
           openFormModal('設定金鑰加密密碼', `
-            <p class="text-xs text-zinc-600">設定後，現有 ${plainCount} 組明文 Key 將以 AES-GCM 加密存放；之後新增的 Key 也會自動加密。密碼只用來在本機解密，忘記密碼將無法取回已加密的 Key（需重新申請新的 Key）。</p>
+            <p class="text-xs text-zinc-600">${plainCount > 0 ? `設定後，現有 ${plainCount} 組明文 Key 將以 AES-GCM 加密存放；之後新增的 Key 也會自動加密。` : '目前沒有已加入的 Key。設定後，之後新增的 Key 會自動以 AES-GCM 加密存放。'}密碼只用來在本機解密，忘記密碼將無法取回已加密的 Key（需重新申請新的 Key）。</p>
             <div><label class="block text-xs font-medium text-zinc-600 mb-1">加密密碼（至少 8 碼）</label><input name="pw1" type="password" autocomplete="new-password" class="w-full h-9 px-3 rounded-lg hairline text-sm" /></div>
             <div><label class="block text-xs font-medium text-zinc-600 mb-1">再輸入一次</label><input name="pw2" type="password" autocomplete="new-password" class="w-full h-9 px-3 rounded-lg hairline text-sm" /></div>
           `, async (fd) => {
@@ -11261,7 +11316,7 @@
               aiVaultUnlocked = true;
               markAiKeysDirtyAndSync();
               syncAiConfigUI();
-              showToast('已完成加密遷移，保險庫已解鎖');
+              showToast(plainCount > 0 ? '已完成加密遷移，保險庫已解鎖' : '加密密碼已設定，之後新增的 Key 將自動加密存放');
             } catch (err) {
               showToast('加密遷移失敗：' + (err.message || err));
             }
@@ -11447,12 +11502,12 @@
       function syncAiConfigUI() {
         const keys = ensureAiKeysPool();
         const enabledKeys = keys.filter((k) => k.enabled !== false);
-        const provider = (document.getElementById('cfg-ai-provider') && document.getElementById('cfg-ai-provider').value) || appConfig.aiProvider || 'groq';
+        const provider = (document.getElementById('cfg-ai-provider') && document.getElementById('cfg-ai-provider').value) || appConfig.aiProvider || AI_DEFAULT_PROVIDER;
         const provEl = document.getElementById('cfg-ai-provider');
         const modelEl = document.getElementById('cfg-ai-model');
         const baseWrap = document.getElementById('cfg-ai-baseurl-wrap');
         if (provEl && !provEl.dataset.initialized) {
-          provEl.value = appConfig.aiProvider || 'groq';
+          provEl.value = appConfig.aiProvider || AI_DEFAULT_PROVIDER;
           provEl.dataset.initialized = '1';
           if (modelEl) {
             modelEl.value = AI_PROVIDER_DEFAULTS[provEl.value] || '';
@@ -11462,7 +11517,7 @@
         const curProv = (provEl && provEl.value) || provider;
         if (baseWrap) baseWrap.classList.toggle('hidden', curProv !== 'custom');
         const syncChk = document.getElementById('cfg-ai-sync-cloud');
-        if (syncChk) syncChk.checked = appConfig.syncAiKeysToCloud !== false;
+        if (syncChk) syncChk.checked = appConfig.syncAiKeysToCloud === true;
         updateAiProviderGuide(curProv);
         renderAiKeyPool();
         renderAiVaultBanner();
@@ -12018,7 +12073,7 @@
           throw err;
         }
         return withAiKeyConcurrencyGate(kId, async () => {
-          const provider = (keyEntry && keyEntry.provider) || appConfig.aiProvider || 'gemini';
+          const provider = (keyEntry && keyEntry.provider) || appConfig.aiProvider || AI_DEFAULT_PROVIDER;
           const idToken = provider === 'cloudflare' ? await getCurrentFirebaseIdToken() : '';
           const res = await fetch(apiUrl('/api/ai'), {
             method: 'POST',
@@ -12058,6 +12113,8 @@
           apiKey: '',
           baseUrl: ''
         };
+        // 候選 Key 鏈：有舊版單一 Key 時沿用其供應商（舊版預設為 Gemini，見 ensureAiKeysPool 的遷移邏輯）；
+        // 完全無 Key 時以 AI_DEFAULT_PROVIDER（與設定頁一致）為預設候選。
         let rawCandidates = keys.length > 0
           ? keys.slice()
           : (appConfig.aiApiKey
@@ -12073,9 +12130,9 @@
                   ? [cfFallback]
                   : [{
                       id: 'default',
-                      label: AI_PROV_NAMES[appConfig.aiProvider || 'gemini'] || (appConfig.aiProvider || 'gemini'),
-                      provider: appConfig.aiProvider || 'gemini',
-                      model: appConfig.aiModel || AI_PROVIDER_DEFAULTS[appConfig.aiProvider || 'gemini'] || '',
+                      label: AI_PROV_NAMES[appConfig.aiProvider || AI_DEFAULT_PROVIDER] || (appConfig.aiProvider || AI_DEFAULT_PROVIDER),
+                      provider: appConfig.aiProvider || AI_DEFAULT_PROVIDER,
+                      model: appConfig.aiModel || AI_PROVIDER_DEFAULTS[appConfig.aiProvider || AI_DEFAULT_PROVIDER] || '',
                       apiKey: '',
                       baseUrl: appConfig.aiBaseUrl || ''
                     }]));
@@ -12590,7 +12647,7 @@
         ensureAiKeysPool();
         appConfig.aiKeysUpdatedAtMs = Date.now();
         saveConfig();
-        if (currentUser && fbDb && appConfig.syncAiKeysToCloud !== false) {
+        if (currentUser && fbDb && appConfig.syncAiKeysToCloud === true) {
           scheduleCloudPush();
         }
       }
@@ -12658,7 +12715,7 @@
           if (keyEl) keyEl.value = '';
           if (lblEl) lblEl.value = '';
           syncAiConfigUI();
-          showToast(`已加入「${label}」至輪替清單（共 ${keys.length} 組${currentUser && appConfig.syncAiKeysToCloud !== false ? '，已同步雲端' : ''}）`);
+          showToast(`已加入「${label}」至輪替清單（共 ${keys.length} 組${currentUser && appConfig.syncAiKeysToCloud === true ? '，已同步雲端' : ''}）`);
         });
       }
 
@@ -13875,7 +13932,7 @@
               <button id="btn-modal-photo-paste" type="button" class="btn-focus h-7 px-2.5 rounded-lg bg-white hover:bg-zinc-50 hairline text-zinc-800 text-[11px] font-medium" title="直接貼上剪貼簿截圖">📋 貼上截圖</button>
               <label class="btn-focus inline-flex items-center h-7 px-3 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white text-[11px] font-medium cursor-pointer">
                 <span>拍照／選圖</span>
-                <input id="modal-photo-ai-input" type="file" accept="image/*" class="hidden" />
+                <input id="modal-photo-ai-input" type="file" accept="image/*" class="sr-only" />
               </label>
             </div>
           </div>
@@ -14145,7 +14202,7 @@
                 <div class="flex flex-wrap items-center gap-1.5 shrink-0">
                   <label class="btn-focus inline-flex items-center h-8 px-3 rounded-lg bg-white hover:bg-zinc-50 hairline text-zinc-800 text-xs font-medium cursor-pointer">
                     <span>選擇／拍攝照片</span>
-                    <input id="qpb-file-input" type="file" accept="image/*" multiple class="hidden" />
+                    <input id="qpb-file-input" type="file" accept="image/*" multiple class="sr-only" />
                   </label>
                   <button id="btn-qpb-paste-img" type="button" class="btn-focus h-8 px-2.5 rounded-lg bg-white hover:bg-zinc-50 hairline text-zinc-800 text-xs font-medium" title="貼上剪貼簿截圖或文字">📋 貼上</button>
                   <button id="btn-qpb-voice" type="button" class="btn-focus h-8 px-2.5 rounded-lg bg-white hover:bg-zinc-50 hairline text-zinc-800 text-xs font-medium" title="語音口述補充說明">🎙️ 語音</button>
