@@ -4,6 +4,7 @@
 // 以固定假資料攔截（AAPL 固定 200 美元、匯率固定、走勢 60 筆固定收盤價）。
 // 測試只斷言畫面行為：列表出現、徽章出現、localStorage 寫入、彈窗流程。
 import { test, expect } from '@playwright/test';
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
@@ -442,5 +443,221 @@ test('11. 手機版排版：390×844 視窗下總覽、持股、現金頁無橫�
   await assertNoHorizontalOverflow();
   await page.screenshot({ path: 'test-results/mobile-cash.png' });
 
+  expect(errors).toEqual([]);
+});
+
+// 1x1 白色 PNG（照片上傳測試共用），避免測試依賴外部圖片檔
+const TINY_PNG_BASE64 =
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+
+test('12. 照片上傳：AI 助理點 label 會開出檔案選擇器，選檔後縮圖出現', async ({ page }) => {
+  const errors = trackPageErrors(page);
+  await gotoApp(page, { seed: blankState() });
+
+  const pngPath = test.info().outputPath('tiny.png');
+  fs.writeFileSync(pngPath, Buffer.from(TINY_PNG_BASE64, 'base64'));
+
+  await page.locator('#btn-ai-copilot-fab').click();
+  await expect(page.locator('#ai-copilot-drawer')).toBeVisible();
+  await page.locator('#btn-ai-copilot-plus').click();
+  await expect(page.locator('#ai-copilot-plus-menu')).toBeVisible();
+
+  // 關鍵斷言：點包著 file input 的 label 必須開出檔案選擇器
+  //（舊版 input 用 display:none，Chrome 點 label 完全沒反應）
+  const [fileChooser] = await Promise.all([
+    page.waitForEvent('filechooser'),
+    page.locator('#ai-copilot-plus-menu label:has(#ai-copilot-file)').click(),
+  ]);
+  await fileChooser.setFiles(pngPath);
+  await expect(page.locator('#ai-copilot-thumbs img')).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
+test('13. 照片上傳：搬家、拍照批次、記帳照片三處點 label 都會開出檔案選擇器', async ({
+  page,
+}) => {
+  const errors = trackPageErrors(page);
+  await gotoApp(page, { seed: blankState() });
+
+  const pngPath = test.info().outputPath('tiny.png');
+  fs.writeFileSync(pngPath, Buffer.from(TINY_PNG_BASE64, 'base64'));
+  const pickFile = async (labelSelector) => {
+    const [fc] = await Promise.all([
+      page.waitForEvent('filechooser'),
+      page.locator(labelSelector).click(),
+    ]);
+    await fc.setFiles(pngPath);
+  };
+
+  // 搬家頁：選擇圖片
+  await goToTab(page, 'migrate');
+  await pickFile('label:has(#migrate-img-input)');
+
+  // 支出頁：拍照批次記帳（彈窗）
+  await goToTab(page, 'expenses');
+  await page.locator('#btn-photo-batch-expense').click();
+  await expect(page.locator('#modal-title')).toContainText('拍照批次');
+  await pickFile('label:has(#qpb-file-input)');
+  await expect(page.locator('#qpb-thumbs img')).toBeVisible();
+  await page.locator('#btn-modal-cancel').click();
+  await expect(page.locator('#form-modal')).toBeHidden();
+
+  // 記帳照片：新增隨機支出彈窗內的拍照／選圖
+  await page.locator('#btn-add-random-exp').click();
+  await expect(page.locator('#modal-title')).toHaveText('新增隨機支出');
+  await pickFile('#form-modal label:has(#modal-photo-ai-input)');
+  // 選檔後會嘗試 AI 辨識（無 Key 會失敗並顯示提示），只斷言狀態有變化、無 JS 錯誤
+  await expect(page.locator('#modal-photo-ai-status')).not.toHaveText(
+    '支援拍發票、收據、帳單或貼上截圖，自動填入下方欄位',
+    { timeout: 15000 },
+  );
+  expect(errors).toEqual([]);
+});
+
+test('14. 加密入口常駐：0 組 Key 也能先設加密密碼，設好後新增的 Key 自動加密', async ({
+  page,
+}) => {
+  await gotoApp(page, { seed: blankState() });
+  await goToTab(page, 'settings');
+
+  // 0 組 Key 時加密橫幅仍顯示、可設定密碼（舊版直接隱藏，整頁找不到入口）
+  const banner = page.locator('#cfg-ai-vault-banner');
+  await expect(banner).toBeVisible();
+  await expect(banner).toContainText('尚未設定加密密碼');
+  await banner.locator('button[data-vault-act="setup"]').click();
+  await expect(page.locator('#modal-title')).toHaveText('設定金鑰加密密碼');
+  await page.locator('#modal-form input[name="pw1"]').fill('playwright-test-passphrase');
+  await page.locator('#modal-form input[name="pw2"]').fill('playwright-test-passphrase');
+  await page.locator('#modal-form button[type="submit"]').click();
+  await expect(banner).toContainText('保險庫已就緒');
+
+  // 先設密碼再輸 Key：新增的 Key 應自動加密存放，localStorage 沒有明文
+  await page.locator('#cfg-ai-key').fill('sk-playwright-e2e-test-key-9f8e7d6c5b4a');
+  await page.locator('#btn-save-ai-cfg').click();
+  await expect(page.locator('#cfg-ai-key-list')).toContainText('已加密存放');
+  const rawCfg = await readRawConfig(page);
+  expect(rawCfg).not.toContain('sk-playwright-e2e-test-key-9f8e7d6c5b4a');
+  expect(rawCfg).toContain('enc1.');
+});
+
+test('15. 雲端同步預設不勾：未設定過的使用者預設不勾選，明確勾選後才持久化', async ({
+  page,
+}) => {
+  await gotoApp(page, { seed: blankState() });
+  await goToTab(page, 'settings');
+
+  const syncChk = page.locator('#cfg-ai-sync-cloud');
+  await expect(syncChk).not.toBeChecked();
+
+  // 明確勾選後會寫入設定，重整後仍勾選（已明確的選擇要維持）
+  await syncChk.check();
+  await page.reload();
+  await goToTab(page, 'settings');
+  await expect(page.locator('#cfg-ai-sync-cloud')).toBeChecked();
+});
+
+test('16. 預設模型一致：無 Key 時助理預設走 Groq（與設定頁預設供應商一致），而非 Gemini', async ({
+  page,
+}) => {
+  const errors = trackPageErrors(page);
+  await gotoApp(page, { seed: blankState() });
+  await goToTab(page, 'settings');
+  await expect(page.locator('#cfg-ai-provider')).toHaveValue('groq');
+
+  await page.locator('#btn-ai-copilot-fab').click();
+  await expect(page.locator('#ai-copilot-drawer')).toBeVisible();
+  await expect(page.locator('#ai-copilot-model-badge')).toHaveText('尚未設定 Key');
+
+  // 無 Key 提問：worker 會直接回「尚未填寫 API Key」（不連外網），
+  // 錯誤訊息應標示預設供應商 Groq，不應再出現 Gemini
+  await page.locator('#ai-copilot-input').fill('我目前持有 0050 多少股？');
+  await page.locator('#btn-ai-copilot-send').click();
+  const messages = page.locator('#ai-copilot-messages');
+  await expect(messages).toContainText('連線失敗：#1 Groq', { timeout: 15000 });
+  await expect(messages).not.toContainText('Gemini');
+  expect(errors).toEqual([]);
+});
+
+test('17. 總覽圖表：圓環圖例顯示百分比，淨值線以最近快照延伸、不只剩一個點', async ({
+  page,
+}) => {
+  await gotoApp(page, {
+    seed: blankState({
+      stocks: [makeStock()],
+      snapshots: [
+        {
+          id: 'snap-e2e-1',
+          date: '2026-09-01',
+          cashTWD: 1500000,
+          stocksTWD: 1500000,
+          investmentsTWD: 0,
+          totalTWD: 3000000,
+          note: '',
+        },
+        {
+          id: 'snap-e2e-2',
+          date: '2026-11-25',
+          cashTWD: 2020498,
+          stocksTWD: 1791935,
+          investmentsTWD: 4800000,
+          totalTWD: 3812433,
+          note: '',
+        },
+      ],
+    }),
+  });
+  await goToTab(page, 'overview');
+
+  // 圓環圖例直接顯示百分比
+  await page.waitForFunction(() => window.__allocationChartDetail, null, { timeout: 15000 });
+  const legendTexts = await page.evaluate(() => {
+    const c = window.__allocationChartDetail;
+    return c.options.plugins.legend.labels.generateLabels(c).map((l) => l.text);
+  });
+  expect(legendTexts.some((t) => t.includes('%'))).toBe(true);
+  expect(legendTexts.join(' ')).toContain('銀行與券商現金');
+  expect(legendTexts.join(' ')).toContain('股票與黃金 ETF');
+
+  // 淨值線：以最近快照向前延伸，區間內每個點都有值（舊版大多是 null、只剩一個點）
+  await page.waitForFunction(() => window.__trendChartDetail, null, { timeout: 15000 });
+  const nw = await page.evaluate(() => {
+    const c = window.__trendChartDetail;
+    const ds = c.data.datasets.find((d) => String(d.label || '').includes('總資產淨值'));
+    return {
+      label: ds.label,
+      nulls: ds.data.filter((v) => v === null || v === undefined).length,
+      total: ds.data.length,
+      last: ds.data[ds.data.length - 1],
+    };
+  });
+  expect(nw.label).toContain('最近快照');
+  expect(nw.total).toBeGreaterThan(1);
+  expect(nw.nulls).toBe(0);
+  expect(nw.last).toBe(3812433);
+});
+
+test('18. 上傳入口同類修復：搬家 CSV／PDF、備份 JSON／Excel 四處點 label 都會開出檔案選擇器', async ({
+  page,
+}) => {
+  const errors = trackPageErrors(page);
+  await gotoApp(page, { seed: blankState() });
+
+  // 這四處與照片上傳是同一個 bug（label 包 display:none 的 input，Chrome 點了沒反應），
+  // 同批改為 sr-only；只斷言選擇器會開啟，不實際選檔（避免觸發匯入解析）
+  const openChooser = async (labelSelector) => {
+    const [fc] = await Promise.all([
+      page.waitForEvent('filechooser'),
+      page.locator(labelSelector).click(),
+    ]);
+    return fc;
+  };
+
+  await goToTab(page, 'migrate');
+  await openChooser('label:has(#migrate-file-input)');
+  await openChooser('label:has(#migrate-pdf-input)');
+
+  await goToTab(page, 'settings');
+  await openChooser('label:has(#input-import-json)');
+  await openChooser('label:has(#input-import-xlsx)');
   expect(errors).toEqual([]);
 });
