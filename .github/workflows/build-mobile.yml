@@ -14,6 +14,7 @@ on:
       - 'public/**'
       - 'capacitor.config.json'
       - 'package.json'
+      - '.github/workflows/build-mobile.yml'
 
 jobs:
   build-android:
@@ -43,12 +44,24 @@ jobs:
           npx cap sync android
 
       - name: Apply App Launcher Icons
+        # mipmap-anydpi-v26 已有 ic_launcher.xml / ic_launcher_round.xml
+        #（adaptive icon，`cap add android` 產生）；同目錄再放同名 .png
+        # 會造成「Duplicate resources」導致 :app:mergeDebugResources 失敗。
+        # 所以該目錄只覆寫前景圖 ic_launcher_foreground.png（XML 沒有同名檔，
+        # 且 XML 正是引用 @mipmap/ic_launcher_foreground），其餘目錄三張都覆寫。
         run: |
           for dir in android/app/src/main/res/mipmap-*; do
             if [ -d "$dir" ]; then
-              cp public/icons/icon-512.png "$dir/ic_launcher.png" || true
-              cp public/icons/icon-512.png "$dir/ic_launcher_round.png" || true
-              cp public/icons/icon-512.png "$dir/ic_launcher_foreground.png" || true
+              case "$dir" in
+                *mipmap-anydpi-v26)
+                  cp public/icons/icon-512.png "$dir/ic_launcher_foreground.png" || true
+                  ;;
+                *)
+                  cp public/icons/icon-512.png "$dir/ic_launcher.png" || true
+                  cp public/icons/icon-512.png "$dir/ic_launcher_round.png" || true
+                  cp public/icons/icon-512.png "$dir/ic_launcher_foreground.png" || true
+                  ;;
+              esac
             fi
           done
 
