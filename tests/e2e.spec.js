@@ -83,9 +83,13 @@ test('3. 提醒設定：設定買進／停損／停利價，重整後還在；�
   });
 
   // 買進價 210 高於 mock 現價 200（買進條件：現價 ≤ 買進價），停損 190，停利 250
+  // 芒格式預設不用價格停損：要填停損價需先勾「另設硬性停損價」，停損輸入框才會顯示
   await stockRow(page, 'AAPL').locator('button[data-action="edit-stock"]').click();
   await expect(page.locator('#modal-title')).toHaveText('編輯股票持倉');
   const form = page.locator('#modal-form');
+  await expect(page.locator('#stock-stop-wrap')).toBeHidden();
+  await form.locator('#stock-hard-stop-toggle').check();
+  await expect(page.locator('#stock-stop-wrap')).toBeVisible();
   await form.locator('input[name="buyPrice"]').fill('210');
   await form.locator('input[name="stopPrice"]').fill('190');
   await form.locator('input[name="takeProfitPrice"]').fill('250');
@@ -288,4 +292,155 @@ test('8. API Key 加密存放：設定 passphrase 後，localStorage 沒有 Key 
   expect(rawCfg).not.toContain(fakeKey);
   expect(rawCfg).toContain('enc1.');
   await expect(page.locator('#cfg-ai-key-list')).toContainText('已加密存放');
+});
+
+test('9. 芒格式策略：IV=100、安全邊際 30 → 建議買進 70、停利 100；套用後儲存，圖表只畫兩條線、無停損線', async ({
+  page,
+}) => {
+  await gotoApp(page, { seed: blankState() });
+  await addStockViaUI(page, {
+    symbol: 'AAPL',
+    name: 'Apple',
+    market: 'US',
+    currency: 'USD',
+    shares: 10,
+    avgCost: 180,
+    currentPrice: 90,
+  });
+
+  await stockRow(page, 'AAPL').locator('button[data-action="edit-stock"]').click();
+  await expect(page.locator('#modal-title')).toHaveText('編輯股票持倉');
+  const form = page.locator('#modal-form');
+  // 策略預設為芒格式；芒格式面板顯示、停損輸入框預設隱藏
+  await expect(form.locator('select[name="strategy"]')).toHaveValue('munger');
+  await expect(page.locator('#stock-munger-panel')).toBeVisible();
+  await expect(page.locator('#stock-stop-wrap')).toBeHidden();
+
+  await form.locator('input[name="intrinsicValue"]').fill('100');
+  await form.locator('input[name="marginOfSafety"]').fill('30');
+  await expect(page.locator('#stock-munger-suggest-buy')).toHaveText('70.00');
+  await expect(page.locator('#stock-munger-suggest-tp')).toHaveText('100.00');
+
+  await page.locator('#btn-apply-munger-suggest').click();
+  await expect(form.locator('input[name="buyPrice"]')).toHaveValue('70');
+  await expect(form.locator('input[name="takeProfitPrice"]')).toHaveValue('100');
+
+  await form.locator('input[name="sellConditions"][value="moat"]').check();
+  await form.locator('input[name="sellConditions"][value="fcf"]').check();
+  await form.locator('textarea[name="thesisNotes"]').fill('護城河是品牌與規模');
+  await form.locator('button[type="submit"]').click();
+  await expect(page.locator('#form-modal')).toBeHidden();
+
+  // 儲存結果：停損價為空、策略與芒格式欄位齊全；列表顯示策略徽章與「停損：看基本面」
+  const state = await readState(page);
+  const aapl = state.stocks.find((s) => s.symbol === 'AAPL');
+  expect(aapl.strategy).toBe('munger');
+  expect(aapl.intrinsicValue).toBe(100);
+  expect(aapl.marginOfSafety).toBe(30);
+  expect(aapl.buyPrice).toBe(70);
+  expect(aapl.takeProfitPrice).toBe(100);
+  expect(aapl.stopPrice).toBe(0);
+  expect(aapl.sellConditions).toEqual(['moat', 'fcf']);
+  expect(aapl.thesisNotes).toBe('護城河是品牌與規模');
+  const row = stockRow(page, 'AAPL');
+  await expect(row).toContainText('芒格式');
+  await expect(row).toContainText('停損：看基本面');
+  await expect(row).toContainText('提醒 買 70.00 · 停損：看基本面 · 利 100.00');
+
+  // 走勢圖：只畫買進＋停利兩條虛線，沒有停損線
+  await row.locator('button[data-action="chart-stock"]').click();
+  await expect(page.locator('#stock-chart-modal')).toBeVisible();
+  await page.waitForFunction(() => window.__stockChartDetail, null, { timeout: 15000 });
+  await expect(page.locator('#stock-chart-sub')).toContainText('買進 70.00');
+  await expect(page.locator('#stock-chart-sub')).toContainText('停利 100.00');
+  await expect(page.locator('#stock-chart-sub')).not.toContainText('停損');
+  const chartInfo = await page.evaluate(() => {
+    const c = window.__stockChartDetail;
+    return {
+      labels: c.data.datasets.map((d) => d.label),
+      dashedLabels: c.data.datasets.filter((d) => d.borderDash).map((d) => d.label),
+    };
+  });
+  expect(chartInfo.dashedLabels).toHaveLength(2);
+  expect(chartInfo.labels).toContain('買進 70.00');
+  expect(chartInfo.labels).toContain('停利 100.00');
+  await page.locator('#btn-close-stock-chart').click();
+});
+
+test('10. 策略持久化：芒格式欄位重整後仍存在，編輯表單正確回填', async ({ page }) => {
+  await gotoApp(page, {
+    seed: blankState({
+      stocks: [
+        makeStock({
+          strategy: 'munger',
+          intrinsicValue: 100,
+          marginOfSafety: 30,
+          buyPrice: 70,
+          takeProfitPrice: 100,
+          stopPrice: 0,
+          sellConditions: ['moat', 'debt'],
+          thesisNotes: '護城河是品牌與規模',
+          currentPrice: 90,
+        }),
+      ],
+    }),
+  });
+  await goToTab(page, 'stocks');
+  await expect(stockRow(page, 'AAPL')).toContainText('芒格式');
+  await expect(stockRow(page, 'AAPL')).toContainText('停損：看基本面');
+
+  await page.reload();
+  await goToTab(page, 'stocks');
+  const state = await readState(page);
+  const aapl = state.stocks.find((s) => s.symbol === 'AAPL');
+  expect(aapl.strategy).toBe('munger');
+  expect(aapl.intrinsicValue).toBe(100);
+  expect(aapl.marginOfSafety).toBe(30);
+  expect(aapl.buyPrice).toBe(70);
+  expect(aapl.takeProfitPrice).toBe(100);
+  expect(aapl.stopPrice).toBe(0);
+  expect(aapl.sellConditions).toEqual(['moat', 'debt']);
+  expect(aapl.thesisNotes).toBe('護城河是品牌與規模');
+
+  // 編輯表單回填：策略、IV、安全邊際、賣出條件、備註、停損隱藏、建議價重算
+  await stockRow(page, 'AAPL').locator('button[data-action="edit-stock"]').click();
+  const form = page.locator('#modal-form');
+  await expect(form.locator('select[name="strategy"]')).toHaveValue('munger');
+  await expect(form.locator('input[name="intrinsicValue"]')).toHaveValue('100');
+  await expect(form.locator('input[name="marginOfSafety"]')).toHaveValue('30');
+  await expect(form.locator('input[name="sellConditions"][value="moat"]')).toBeChecked();
+  await expect(form.locator('input[name="sellConditions"][value="debt"]')).toBeChecked();
+  await expect(form.locator('input[name="sellConditions"][value="fcf"]')).not.toBeChecked();
+  await expect(form.locator('textarea[name="thesisNotes"]')).toHaveValue('護城河是品牌與規模');
+  await expect(page.locator('#stock-stop-wrap')).toBeHidden();
+  await expect(page.locator('#stock-munger-suggest-buy')).toHaveText('70.00');
+  await expect(page.locator('#stock-munger-suggest-tp')).toHaveText('100.00');
+});
+
+test('11. 手機版排版：390×844 視窗下總覽、持股、現金頁無橫向溢出', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const errors = trackPageErrors(page);
+  await gotoApp(page, { seed: blankState({ stocks: [makeStock()] }) });
+
+  const assertNoHorizontalOverflow = async () => {
+    const overflow = await page.evaluate(() => ({
+      scrollWidth: document.documentElement.scrollWidth,
+      innerWidth: window.innerWidth,
+    }));
+    expect(overflow.scrollWidth).toBeLessThanOrEqual(overflow.innerWidth + 1);
+  };
+
+  await goToTab(page, 'overview');
+  await assertNoHorizontalOverflow();
+  await page.screenshot({ path: 'test-results/mobile-overview.png' });
+
+  await goToTab(page, 'stocks');
+  await assertNoHorizontalOverflow();
+  await page.screenshot({ path: 'test-results/mobile-stocks.png' });
+
+  await goToTab(page, 'cash');
+  await assertNoHorizontalOverflow();
+  await page.screenshot({ path: 'test-results/mobile-cash.png' });
+
+  expect(errors).toEqual([]);
 });
