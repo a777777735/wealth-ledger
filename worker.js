@@ -22,6 +22,10 @@ export default {
       return withCors(await handleQuotes(url));
     }
 
+    if (url.pathname === '/api/history') {
+      return withCors(await handleHistory(url));
+    }
+
     if (url.pathname === '/api/fx') {
       return withCors(await handleFx(url));
     }
@@ -102,7 +106,9 @@ async function fetchYahooPrice(ticker) {
       if (meta) {
         const price = Number(meta.regularMarketPrice ?? meta.previousClose ?? meta.chartPreviousClose);
         if (Number.isFinite(price) && price > 0) {
-          return price;
+          // regularMarketTime 為該報價所屬交易日的 Unix 秒數（週末／假日仍為最後一個交易日）
+          const t = Number(meta.regularMarketTime);
+          return { price, time: Number.isFinite(t) && t > 0 ? t : Math.floor(Date.now() / 1000) };
         }
       }
     } catch (e) {
@@ -135,7 +141,7 @@ async function fetchTwsePrice(rawSymbol) {
       const candidates = [row.z, row.y, row.o];
       for (const c of candidates) {
         const num = Number(c);
-        if (Number.isFinite(num) && num > 0) return num;
+        if (Number.isFinite(num) && num > 0) return { price: num, time: Math.floor(Date.now() / 1000) };
       }
     }
   } catch (e) {
@@ -157,8 +163,8 @@ async function handleFx(url) {
   await Promise.all(
     codes.map(async (code) => {
       const p = await fetchYahooPrice(`${code}TWD=X`);
-      if (p !== null && p > 0) {
-        rates[code] = Number(p.toFixed(6));
+      if (p !== null && p.price > 0) {
+        rates[code] = Number(p.price.toFixed(6));
       }
     })
   );
@@ -204,6 +210,8 @@ async function handleQuotes(url) {
   const rawItems = (url.searchParams.get('items') || '').split(',').map((x) => x.trim()).filter(Boolean);
   const items = rawItems.slice(0, 40);
   const prices = {};
+  // meta: 每檔報價的來源與所屬交易日（ISO 日期），供前端顯示來源／舊資料徽章／休市提示
+  const meta = {};
 
   await Promise.all(
     items.map(async (item) => {
@@ -212,21 +220,28 @@ async function handleQuotes(url) {
       const symbol = idx > 0 ? item.slice(idx + 1).toUpperCase() : item.toUpperCase();
       const candidates = toYahooCandidates(market, symbol);
       let found = null;
+      let source = '';
       for (const ticker of candidates) {
         found = await fetchYahooPrice(ticker);
-        if (found !== null) break;
+        if (found !== null) { source = 'yahoo'; break; }
       }
       if (found === null && market === 'TW') {
         found = await fetchTwsePrice(symbol);
+        if (found !== null) source = 'twse';
       }
       if (found !== null) {
-        prices[`${market}:${symbol}`] = found;
+        prices[`${market}:${symbol}`] = found.price;
+        meta[`${market}:${symbol}`] = {
+          source,
+          marketTime: new Date(found.time * 1000).toISOString(),
+          marketDate: new Date(found.time * 1000).toISOString().slice(0, 10)
+        };
       }
     })
   );
 
   return new Response(
-    JSON.stringify({ ok: true, updatedAt: new Date().toISOString(), prices }),
+    JSON.stringify({ ok: true, updatedAt: new Date().toISOString(), prices, meta }),
     {
       status: 200,
       headers: {
@@ -235,6 +250,61 @@ async function handleQuotes(url) {
       }
     }
   );
+}
+
+// GET /api/history?market=TW&symbol=2330
+// 回傳約 3 個月日收盤價，供持股走勢圖（含均線與提醒價虛線）使用
+async function handleHistory(url) {
+  const market = (url.searchParams.get('market') || 'US').toUpperCase();
+  const symbol = (url.searchParams.get('symbol') || '').trim().toUpperCase();
+  if (!symbol) {
+    return new Response(JSON.stringify({ ok: false, error: '缺少 symbol 參數' }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }
+    });
+  }
+  const candidates = toYahooCandidates(market, symbol);
+  for (const ticker of candidates) {
+    try {
+      const res = await fetch(
+        `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1d&range=3mo`,
+        {
+          headers: { 'User-Agent': BROWSER_UA, 'Accept': 'application/json,text/plain,*/*' },
+          cf: { cacheTtl: 300, cacheEverything: true }
+        }
+      );
+      if (!res.ok) continue;
+      const data = await res.json();
+      const result = data && data.chart && data.chart.result && data.chart.result[0];
+      if (!result || !Array.isArray(result.timestamp)) continue;
+      const closes = result.indicators && result.indicators.quote && result.indicators.quote[0] && result.indicators.quote[0].close;
+      if (!Array.isArray(closes)) continue;
+      const dates = [];
+      const prices = [];
+      result.timestamp.forEach((ts, i) => {
+        const c = Number(closes[i]);
+        if (Number.isFinite(c) && c > 0) {
+          dates.push(new Date(ts * 1000).toISOString().slice(0, 10));
+          prices.push(c);
+        }
+      });
+      if (prices.length > 0) {
+        return new Response(
+          JSON.stringify({ ok: true, market, symbol, ticker, source: 'yahoo', dates, closes: prices }),
+          {
+            status: 200,
+            headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'public, max-age=300' }
+          }
+        );
+      }
+    } catch (e) {
+      // try next candidate
+    }
+  }
+  return new Response(JSON.stringify({ ok: false, error: '查無歷史走勢資料' }), {
+    status: 404,
+    headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }
+  });
 }
 
 function jsonResp(obj, status = 200) {
