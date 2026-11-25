@@ -3698,6 +3698,9 @@
         });
 
         renderAll();
+
+        // 切換分頁後回到最上方，避免停在上一個分頁捲到的位置
+        window.scrollTo(0, 0);
       }
 
       function formatFxSyncTimeLabel() {
