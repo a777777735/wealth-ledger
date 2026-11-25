@@ -669,3 +669,31 @@ test('18. 上傳入口同類修復：搬家 CSV／PDF、備份 JSON／Excel 四�
   await openChooser('label:has(#input-import-xlsx)');
   expect(errors).toEqual([]);
 });
+
+test('19. 切換分頁：捲動位置回到最上方', async ({
+  page,
+}) => {
+  const errors = trackPageErrors(page);
+  // 種 30 檔持股讓持股頁夠長、可往下捲；視窗調矮一點，讓總覽頁也一定可捲，
+  // 避免切換後 scrollY 因頁面不夠長而自然歸零、測試失去意義
+  await page.setViewportSize({ width: 1280, height: 600 });
+  const stocks = Array.from({ length: 30 }, (_, i) =>
+    makeStock({ id: `s-e2e-scroll-${i}`, symbol: `SC${String(i).padStart(2, '0')}` }),
+  );
+  await gotoApp(page, { seed: blankState({ stocks }) });
+
+  await goToTab(page, 'stocks');
+  await expect(page.locator('#stocks-tbody tr')).toHaveCount(30);
+  await page.evaluate(() => window.scrollTo(0, 500));
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
+
+  // 切換到總覽頁，捲動位置應回到頂部
+  await goToTab(page, 'overview');
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
+  // 總覽頁本身可捲：若不可捲，上一行即使沒有修復也會是 0，測不到東西
+  const overviewScrollable = await page.evaluate(
+    () => document.documentElement.scrollHeight > window.innerHeight,
+  );
+  expect(overviewScrollable).toBe(true);
+  expect(errors).toEqual([]);
+});
