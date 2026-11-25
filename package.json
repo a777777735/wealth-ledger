@@ -2,6 +2,7 @@
   "name": "wealth-ledger",
   "version": "1.5.0",
   "private": true,
+  "type": "module",
   "description": "Personal Wealth Ledger Web PWA + Capacitor Android/iOS App",
   "scripts": {
     "cap:add:android": "cap add android",
