@@ -489,8 +489,10 @@ test('13. 照片上傳：搬家、拍照批次、記帳照片三處點 label 都
     await fc.setFiles(pngPath);
   };
 
-  // 搬家頁：選擇圖片
+  // 搬家頁：選擇圖片（image 子面板預設隱藏，須先點「2. 截圖／照片」切換鈕；真實使用者也是這樣操作）
   await goToTab(page, 'migrate');
+  await page.locator('button[data-migrate-src="image"]').click();
+  await expect(page.locator('#migrate-pane-image')).toBeVisible();
   await pickFile('label:has(#migrate-img-input)');
 
   // 支出頁：拍照批次記帳（彈窗）
@@ -643,17 +645,23 @@ test('18. 上傳入口同類修復：搬家 CSV／PDF、備份 JSON／Excel 四�
   await gotoApp(page, { seed: blankState() });
 
   // 這四處與照片上傳是同一個 bug（label 包 display:none 的 input，Chrome 點了沒反應），
-  // 同批改為 sr-only；只斷言選擇器會開啟，不實際選檔（避免觸發匯入解析）
+  // 同批改為 sr-only；只斷言選擇器會開啟，不實際選檔（避免觸發匯入解析）。
+  // 注意：每開一次選擇器都要用空清單關掉它，否則未處理的選擇器會擋住下一次開啟；
+  // 四處 input 的 change handler 對空檔案清單都是 no-op，已在程式中確認。
   const openChooser = async (labelSelector) => {
     const [fc] = await Promise.all([
       page.waitForEvent('filechooser'),
       page.locator(labelSelector).click(),
     ]);
+    await fc.setFiles([]);
     return fc;
   };
 
   await goToTab(page, 'migrate');
   await openChooser('label:has(#migrate-file-input)');
+  // PDF 子面板預設隱藏，須先點「3. PDF 電子對帳單」切換鈕；真實使用者也是這樣操作
+  await page.locator('button[data-migrate-src="pdf"]').click();
+  await expect(page.locator('#migrate-pane-pdf')).toBeVisible();
   await openChooser('label:has(#migrate-pdf-input)');
 
   await goToTab(page, 'settings');
