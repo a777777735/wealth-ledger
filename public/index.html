@@ -577,6 +577,20 @@
             </div>
           </div>
 
+          <div class="bg-white rounded-xl p-6 hairline space-y-3">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 class="text-base font-semibold text-zinc-900">🔔 價格提醒事件</h2>
+                <p class="text-xs text-zinc-500 mt-0.5">報價更新時自動比對買進／停損／停利價，觸發時記錄於此；僅為提醒，不會自動交易。提醒設定與事件會隨 JSON 備份一起匯出匯入。</p>
+              </div>
+              <div class="flex items-center gap-2">
+                <span id="alert-events-count" class="text-[11px] font-mono-num text-zinc-400">0 則</span>
+                <button id="btn-clear-alert-events" type="button" class="btn-focus h-7 px-2.5 rounded-lg bg-white hover:bg-zinc-50 text-zinc-600 hairline text-[11px] font-medium">清除全部事件</button>
+              </div>
+            </div>
+            <div id="alert-events-list" class="divide-y divide-zinc-900/[0.06]"></div>
+          </div>
+
           <div class="bg-white rounded-xl p-6 hairline space-y-4">
             <div class="flex flex-wrap items-center justify-between gap-3">
               <div>
@@ -1587,7 +1601,7 @@
             <div class="flex flex-wrap items-start justify-between gap-2">
               <div>
                 <h2 class="text-base font-semibold text-zinc-900">AI 模型與多組 API Key 輪流備援設定</h2>
-                <p class="text-xs text-zinc-500 mt-0.5">可一次加入多組 Key（如 Groq＋OpenRouter＋Gemini），呼叫時依序輪流測試，第一組失敗自動無縫切換下一組；金鑰僅存於本機瀏覽器</p>
+                <p class="text-xs text-zinc-500 mt-0.5">可一次加入多組 Key（如 Groq＋OpenRouter＋Gemini），呼叫時依序輪流測試，第一組失敗自動無縫切換下一組；金鑰僅存於本機瀏覽器，可設定加密密碼以 AES-GCM 加密存放</p>
               </div>
               <span id="cfg-ai-status-badge" class="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-zinc-100 text-zinc-600">尚未設定</span>
             </div>
@@ -1650,6 +1664,9 @@
             <!-- Live Testing Status Banner -->
             <div id="cfg-ai-live-test-bar" class="hidden rounded-lg bg-amber-50 border border-amber-200/80 px-3.5 py-2 text-xs text-amber-900 font-mono-num"></div>
 
+            <!-- API Key Encryption Vault Banner -->
+            <div id="cfg-ai-vault-banner" class="hidden"></div>
+
             <!-- Saved Multi-Key Failover List -->
             <div class="pt-3 hairline-t space-y-2.5">
               <div class="flex flex-wrap items-center justify-between gap-2 text-xs">
@@ -1661,6 +1678,9 @@
                 <span>同步多組 API Key 至我的私人 Google 雲端（換瀏覽器／手機登入自動帶回，匯出 JSON 備份仍會排除金鑰）</span>
               </label>
               <div id="cfg-ai-key-list" class="space-y-2"></div>
+
+              <!-- Key Health Panel（僅存本機，不同步雲端、不寫入備份） -->
+              <div id="cfg-ai-key-health" class="hidden pt-1"></div>
             </div>
 
             <!-- Cloudflare Workers AI Approval & Admin Panel -->
@@ -1819,7 +1839,7 @@
           <div class="bg-white rounded-xl p-5 hairline flex flex-wrap items-center justify-between gap-3">
             <div>
               <h3 class="text-sm font-medium text-zinc-900">清空帳本資料</h3>
-              <p class="text-xs text-zinc-500 mt-0.5">清除目前畫面中的所有資產與收支紀錄，建議執行前先下載 JSON 或 Excel 備份</p>
+              <p class="text-xs text-zinc-500 mt-0.5">清除目前畫面中的所有資產與收支紀錄；執行前會先自動下載一份 JSON 備份，並需輸入「清空」兩字確認</p>
             </div>
             <button id="btn-clear-blank" type="button" class="btn-focus h-8 px-3.5 rounded-lg bg-white hover:bg-rose-50 text-rose-700 border border-rose-200 text-xs font-medium transition-colors duration-150">清空全部資料</button>
           </div>
@@ -1884,7 +1904,7 @@
         <div id="modal-fields" class="space-y-3"></div>
         <div class="pt-2 flex items-center justify-end gap-2">
           <button id="btn-modal-cancel" type="button" class="btn-focus h-8 px-3.5 rounded-lg bg-[#f7f7f5] hover:bg-zinc-200/70 text-zinc-700 text-xs font-medium">取消</button>
-          <button type="submit" class="btn-focus h-8 px-4 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-medium">儲存</button>
+          <button type="submit" class="btn-focus h-8 px-4 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-medium disabled:opacity-40 disabled:cursor-not-allowed">儲存</button>
         </div>
       </form>
     </div>
@@ -2000,6 +2020,25 @@
   <!-- Toast Notification -->
   <div id="toast" class="fixed bottom-5 right-5 z-50 hidden px-4 py-2.5 rounded-lg bg-zinc-900 text-white text-xs font-medium shadow-md max-w-md"></div>
 
+  <!-- Stock Trend Chart Modal（收盤價曲線＋均線＋買進／停損／停利虛線） -->
+  <div id="stock-chart-modal" class="fixed inset-0 z-50 hidden items-center justify-center p-4 modal-backdrop">
+    <div class="bg-white rounded-xl max-w-2xl w-full shadow-lg hairline overflow-hidden max-h-[90vh] flex flex-col">
+      <div class="px-5 py-4 hairline-b flex items-center justify-between">
+        <div class="min-w-0">
+          <h3 id="stock-chart-title" class="text-sm font-semibold text-zinc-900">持股走勢</h3>
+          <p id="stock-chart-sub" class="text-xs text-zinc-500 mt-0.5"></p>
+        </div>
+        <button id="btn-close-stock-chart" type="button" class="text-zinc-400 hover:text-zinc-700 text-lg leading-none shrink-0">&times;</button>
+      </div>
+      <div class="p-5 space-y-3 overflow-y-auto">
+        <div id="stock-chart-loading" class="py-8 text-center text-xs text-zinc-500">載入走勢資料中…</div>
+        <div id="stock-chart-empty" class="hidden py-8 text-center text-xs text-zinc-500"></div>
+        <div class="relative h-72"><canvas id="stock-chart-canvas"></canvas></div>
+        <p class="text-[11px] text-zinc-400">走勢為近 3 個月日收盤價；虛線為你設定的買進／停損／停利價，僅供參考，不構成投資建議。</p>
+      </div>
+    </div>
+  </div>
+
   <script>
     (function () {
       'use strict';
@@ -2013,7 +2052,7 @@
 
       function createBlankData() {
         return {
-          version: '1.4',
+          version: '1.5',
           fx: { TWD: 1, USD: 33.022, JPY: 0.2069, HKD: 4.2097, CNY: 4.9525 },
           cash: [],
           stocks: [],
@@ -2028,13 +2067,36 @@
           snapshots: [],
           ledger: [],
           budgets: { monthlyTotal: 0, byCategory: {} },
-          groupTrips: []
+          groupTrips: [],
+          // 價格提醒事件（買進／停損／停利觸發紀錄，隨 JSON 備份一起匯出匯入）
+          alertEvents: []
         };
       }
 
       function safeNum(v, fallback = 0) {
         const n = Number(v);
         return Number.isFinite(n) ? n : fallback;
+      }
+
+      // 持股提醒價／報價詮釋資料正規化（舊資料、JSON／Excel 匯入皆走這裡補預設值）
+      // buyPrice/stopPrice/takeProfitPrice：0 代表未設定；quoteSource：yahoo/twse/csv/finnhub/manual；
+      // quoteDate：報價所屬交易日 YYYY-MM-DD；quoteUpdatedAt：本次成功更新的 ISO 時間；
+      // alertState：各提醒是否已處於觸發狀態（避免重複寫入同一事件）
+      function normalizeStockRecord(s) {
+        if (!s || typeof s !== 'object') return s;
+        s.buyPrice = safeNum(s.buyPrice, 0);
+        s.stopPrice = safeNum(s.stopPrice, 0);
+        s.takeProfitPrice = safeNum(s.takeProfitPrice, 0);
+        s.quoteSource = String(s.quoteSource || '');
+        s.quoteDate = String(s.quoteDate || '');
+        s.quoteUpdatedAt = String(s.quoteUpdatedAt || '');
+        if (!s.alertState || typeof s.alertState !== 'object') s.alertState = { buy: false, stop: false, tp: false };
+        s.alertState = {
+          buy: Boolean(s.alertState.buy),
+          stop: Boolean(s.alertState.stop),
+          tp: Boolean(s.alertState.tp)
+        };
+        return s;
       }
 
       function todayISO() {
@@ -2227,6 +2289,8 @@
               if (!Array.isArray(parsed.incomeReceipts)) parsed.incomeReceipts = [];
               if (!Array.isArray(parsed.investmentLogs)) parsed.investmentLogs = [];
               if (!Array.isArray(parsed.stockTrades)) parsed.stockTrades = [];
+              if (!Array.isArray(parsed.alertEvents)) parsed.alertEvents = [];
+              if (Array.isArray(parsed.stocks)) parsed.stocks.forEach(normalizeStockRecord);
               if (!parsed.fx) parsed.fx = { TWD: 1, USD: 33.022, JPY: 0.2069, HKD: 4.2097, CNY: 4.9525 };
               if (!parsed.fx.JPY) parsed.fx.JPY = 0.2069;
               return parsed;
@@ -3447,11 +3511,16 @@
             if (apiRes.ok) {
               const apiJson = await apiRes.json();
               if (apiJson && apiJson.prices) {
+                const nowIso = new Date().toISOString();
                 state.stocks.forEach((st) => {
                   const k = `${st.market}:${String(st.symbol).trim().toUpperCase()}`;
                   const pVal = Number(apiJson.prices[k]);
                   if (Number.isFinite(pVal) && pVal > 0) {
                     st.currentPrice = pVal;
+                    const m = apiJson.meta && apiJson.meta[k];
+                    st.quoteSource = (m && m.source) || 'yahoo';
+                    st.quoteDate = (m && m.marketDate) || '';
+                    st.quoteUpdatedAt = nowIso;
                     stockUpdatedCount++;
                   }
                 });
@@ -3480,6 +3549,9 @@
                 const key = String(s.symbol).toUpperCase();
                 if (priceMap[key]) {
                   s.currentPrice = priceMap[key];
+                  s.quoteSource = 'csv';
+                  s.quoteDate = '';
+                  s.quoteUpdatedAt = new Date().toISOString();
                   stockUpdatedCount++;
                 }
               });
@@ -3507,6 +3579,9 @@
             const key = String(s.symbol).toUpperCase();
             if (s.market === 'US' && fetchedMap[key]) {
               s.currentPrice = fetchedMap[key];
+              s.quoteSource = 'finnhub';
+              s.quoteDate = '';
+              s.quoteUpdatedAt = new Date().toISOString();
               stockUpdatedCount++;
             }
           });
@@ -3529,8 +3604,10 @@
         }
 
         const nowStr = new Date().toLocaleTimeString('zh-TW', { hour12: false });
+        const qDates = [...new Set(state.stocks.map((s) => s.quoteDate).filter(Boolean))];
+        const qDateTxt = qDates.length ? ` · 報價日 ${qDates.join('、')}` : '';
         if (stockUpdatedCount > 0) {
-          document.getElementById('stock-last-updated').textContent = `${silent ? '自動更新' : '最後更新'} ${nowStr} · 已同步 ${stockUpdatedCount} 筆股價${fxUpdated ? '與即時匯率' : ''}`;
+          document.getElementById('stock-last-updated').textContent = `${silent ? '自動更新' : '最後更新'} ${nowStr} · 已同步 ${stockUpdatedCount} 筆股價${fxUpdated ? '與即時匯率' : ''}${qDateTxt}`;
           if (!silent) showToast(`已更新 ${stockUpdatedCount} 筆股價${fxUpdated ? '與最新匯率' : ''}`);
         } else if (fxUpdated) {
           if (!silent) showToast('已更新最新匯率；目前尚未連通後台股價介面（請確認已上傳 wrangler.jsonc 與 _worker.js）');
@@ -3563,6 +3640,9 @@
               const next = safeNum(val, s.currentPrice);
               if (next !== s.currentPrice) {
                 s.currentPrice = next;
+                s.quoteSource = 'manual';
+                s.quoteDate = '';
+                s.quoteUpdatedAt = new Date().toISOString();
                 changed++;
               }
             }
@@ -3764,6 +3844,247 @@
       }
 
       // Stocks Rendering
+      // ============ 價格提醒（買進／停損／停利）============
+      const ALERT_TYPE_META = {
+        buy: { label: '買進價到', cls: 'bg-emerald-50 text-emerald-700' },
+        stop: { label: '停損觸發', cls: 'bg-rose-50 text-rose-700' },
+        tp: { label: '停利到價', cls: 'bg-amber-50 text-amber-800' }
+      };
+      const QUOTE_SOURCE_NAMES = { yahoo: 'Yahoo', twse: 'TWSE', csv: '試算表', finnhub: 'Finnhub', manual: '手動' };
+      // 報價超過 6 小時未成功更新，即視為舊資料
+      const QUOTE_STALE_MS = 6 * 60 * 60 * 1000;
+
+      function getAlertStatus(s) {
+        const price = safeNum(s.currentPrice);
+        return {
+          buy: safeNum(s.buyPrice) > 0 && price > 0 && price <= safeNum(s.buyPrice),
+          stop: safeNum(s.stopPrice) > 0 && price > 0 && price <= safeNum(s.stopPrice),
+          tp: safeNum(s.takeProfitPrice) > 0 && price > 0 && price >= safeNum(s.takeProfitPrice)
+        };
+      }
+
+      // 比對全部持股的提醒價：只在「未觸發 → 已觸發」的轉換當下寫入一則事件，
+      // 之後價格仍在觸發區間內不會重複寫入；回到安全區後狀態歸零，下次再觸發會重新記錄。
+      // 僅做提醒記錄，不做任何自動交易。
+      function checkAlerts() {
+        if (!Array.isArray(state.stocks)) return;
+        if (!Array.isArray(state.alertEvents)) state.alertEvents = [];
+        let added = 0;
+        const nowIso = new Date().toISOString();
+        state.stocks.forEach((s) => {
+          normalizeStockRecord(s);
+          const st = getAlertStatus(s);
+          ['buy', 'stop', 'tp'].forEach((type) => {
+            if (st[type] && !s.alertState[type]) {
+              state.alertEvents.unshift({
+                id: uid('al'),
+                at: nowIso,
+                stockId: s.id,
+                symbol: s.symbol,
+                name: s.name || '',
+                market: s.market || '',
+                currency: s.currency || 'TWD',
+                type,
+                price: safeNum(s.currentPrice),
+                threshold: type === 'buy' ? safeNum(s.buyPrice) : type === 'stop' ? safeNum(s.stopPrice) : safeNum(s.takeProfitPrice)
+              });
+              s.alertState[type] = true;
+              added++;
+            } else if (!st[type] && s.alertState[type]) {
+              s.alertState[type] = false;
+            }
+          });
+        });
+        if (state.alertEvents.length > 200) state.alertEvents = state.alertEvents.slice(0, 200);
+        if (added > 0) {
+          saveState();
+          const latest = state.alertEvents[0];
+          showToast(`🔔 價格提醒：${latest.symbol} ${ALERT_TYPE_META[latest.type].label}（${fmtNum(latest.price, 2)}）${added > 1 ? `，共 ${added} 則新提醒` : ''}`);
+        }
+      }
+
+      function fmtAlertTime(iso) {
+        try {
+          const d = new Date(iso);
+          if (Number.isNaN(d.getTime())) return '';
+          const mm = String(d.getMonth() + 1).padStart(2, '0');
+          const dd = String(d.getDate()).padStart(2, '0');
+          const hh = String(d.getHours()).padStart(2, '0');
+          const mi = String(d.getMinutes()).padStart(2, '0');
+          return `${mm}/${dd} ${hh}:${mi}`;
+        } catch (e) {
+          return '';
+        }
+      }
+
+      function renderAlertEvents() {
+        const listEl = document.getElementById('alert-events-list');
+        const countEl = document.getElementById('alert-events-count');
+        if (!listEl) return;
+        const evs = (state.alertEvents || []).slice(0, 20);
+        if (countEl) countEl.textContent = `${(state.alertEvents || []).length} 則`;
+        if (evs.length === 0) {
+          listEl.innerHTML = '<div class="py-4 text-center text-xs text-zinc-400">尚未觸發任何提醒。為持股設定買進價、停損價或停利價後，報價更新時會自動比對並記錄在這裡。</div>';
+          return;
+        }
+        listEl.innerHTML = evs.map((ev) => {
+          const m = ALERT_TYPE_META[ev.type] || ALERT_TYPE_META.buy;
+          return `<div class="flex flex-wrap items-center justify-between gap-2 py-2 hairline-b last:border-0">
+            <div class="flex items-center gap-2 min-w-0">
+              <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium ${m.cls}">${m.label}</span>
+              <span class="text-xs font-medium text-zinc-900">${escapeHtml(ev.symbol)} ${escapeHtml(ev.name || '')}</span>
+              <span class="text-[11px] text-zinc-400">${fmtAlertTime(ev.at)}</span>
+            </div>
+            <div class="text-xs text-zinc-600 font-mono-num">現價 ${fmtNum(ev.price, 2)} ${escapeHtml(ev.currency || '')} · 觸發價 ${fmtNum(ev.threshold, 2)}</div>
+          </div>`;
+        }).join('');
+      }
+
+      // 報價新鮮度：是否超過 6 小時未更新、報價所屬交易日、週末／假日休市提示
+      function quoteFreshness(s) {
+        const now = Date.now();
+        const updatedAt = s.quoteUpdatedAt ? new Date(s.quoteUpdatedAt).getTime() : 0;
+        const isStale = !updatedAt || Number.isNaN(updatedAt) || (now - updatedAt) > QUOTE_STALE_MS;
+        const qd = String(s.quoteDate || '');
+        let marketNote = '';
+        if (qd) {
+          const qDate = new Date(qd + 'T12:00:00');
+          const today = new Date(todayISO() + 'T12:00:00');
+          const dow = new Date().getDay();
+          if (qDate < today && (dow === 0 || dow === 6)) marketNote = '休市中';
+          else if (qDate < today) marketNote = '非交易日';
+        }
+        return { isStale, marketNote, dateLabel: qd ? qd.slice(5).replace('-', '/') : '' };
+      }
+
+      // ============ 持股走勢圖（收盤價＋均線＋提醒價虛線）============
+      let chartStockDetail = null;
+      const stockHistoryCache = {}; // { 'TW:2330': { at, dates, closes } }
+
+      function calcSMA(values, period) {
+        return values.map((_, i) => {
+          if (i < period - 1) return null;
+          let sum = 0;
+          for (let j = i - period + 1; j <= i; j++) sum += values[j];
+          return sum / period;
+        });
+      }
+
+      function calcEMA(values, period) {
+        const k = 2 / (period + 1);
+        const out = new Array(values.length).fill(null);
+        if (values.length < period) return out;
+        let sum = 0;
+        for (let i = 0; i < period; i++) sum += values[i];
+        let prev = sum / period;
+        out[period - 1] = prev;
+        for (let i = period; i < values.length; i++) {
+          prev = values[i] * k + prev * (1 - k);
+          out[i] = prev;
+        }
+        return out;
+      }
+
+      async function openStockChartModal(stock) {
+        const modal = document.getElementById('stock-chart-modal');
+        const loadingEl = document.getElementById('stock-chart-loading');
+        const emptyEl = document.getElementById('stock-chart-empty');
+        const canvas = document.getElementById('stock-chart-canvas');
+        document.getElementById('stock-chart-title').textContent = `${stock.symbol} ${stock.name || ''} · 近 3 個月走勢`;
+        const th = [];
+        if (safeNum(stock.buyPrice) > 0) th.push(`買進 ${fmtNum(stock.buyPrice, 2)}`);
+        if (safeNum(stock.stopPrice) > 0) th.push(`停損 ${fmtNum(stock.stopPrice, 2)}`);
+        if (safeNum(stock.takeProfitPrice) > 0) th.push(`停利 ${fmtNum(stock.takeProfitPrice, 2)}`);
+        document.getElementById('stock-chart-sub').textContent = th.length ? `提醒價：${th.join(' · ')}（${stock.currency}）` : '尚未設定提醒價，可在「編輯」中設定買進／停損／停利價';
+        loadingEl.classList.remove('hidden');
+        emptyEl.classList.add('hidden');
+        if (chartStockDetail) { chartStockDetail.destroy(); chartStockDetail = null; }
+        window.__stockChartDetail = null;
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+
+        const cacheKey = `${stock.market}:${String(stock.symbol).trim().toUpperCase()}`;
+        let hist = stockHistoryCache[cacheKey];
+        if (!hist || (Date.now() - hist.at) > 30 * 60 * 1000) {
+          try {
+            const res = await fetch(apiUrl(`/api/history?market=${encodeURIComponent(stock.market)}&symbol=${encodeURIComponent(stock.symbol)}`));
+            const json = await res.json().catch(() => ({}));
+            if (!res.ok || !json.ok || !Array.isArray(json.closes) || json.closes.length < 5) {
+              throw new Error((json && json.error) || '查無歷史走勢資料');
+            }
+            hist = { at: Date.now(), dates: json.dates, closes: json.closes };
+            stockHistoryCache[cacheKey] = hist;
+          } catch (err) {
+            loadingEl.classList.add('hidden');
+            emptyEl.textContent = `無法載入走勢資料：${err.message || err}。請稍後再試，或確認代號與市場是否正確。`;
+            emptyEl.classList.remove('hidden');
+            return;
+          }
+        }
+        loadingEl.classList.add('hidden');
+
+        const closes = hist.closes;
+        const labels = hist.dates.map((d) => String(d).slice(5).replace('-', '/'));
+        const sma10 = calcSMA(closes, 10);
+        const sma20 = calcSMA(closes, 20);
+        const sma50 = calcSMA(closes, 50);
+        const ema21 = calcEMA(closes, 21);
+        // Y 軸範圍必須同時包含收盤價、均線與三條提醒價，避免虛線被裁掉
+        const allVals = [...closes, ...sma10, ...sma20, ...sma50, ...ema21].filter((v) => v !== null && Number.isFinite(v));
+        [stock.buyPrice, stock.stopPrice, stock.takeProfitPrice].forEach((v) => { if (safeNum(v) > 0) allVals.push(safeNum(v)); });
+        const lo = Math.min(...allVals);
+        const hi = Math.max(...allVals);
+        const pad = Math.max((hi - lo) * 0.07, hi * 0.01);
+        const yMin = Math.max(0, lo - pad);
+        const yMax = hi + pad;
+        const flatLine = (value) => labels.map(() => value);
+        const datasets = [
+          { label: '收盤價', data: closes, borderColor: '#18181b', backgroundColor: 'rgba(24,24,27,0.06)', borderWidth: 2, pointRadius: 0, tension: 0.25, fill: true },
+          { label: 'MA10', data: sma10, borderColor: '#a1a1aa', borderWidth: 1.2, pointRadius: 0, spanGaps: true, tension: 0.2 },
+          { label: 'MA20', data: sma20, borderColor: '#f59e0b', borderWidth: 1.2, pointRadius: 0, spanGaps: true, tension: 0.2 },
+          { label: 'MA50', data: sma50, borderColor: '#7c3aed', borderWidth: 1.2, pointRadius: 0, spanGaps: true, tension: 0.2 },
+          { label: 'EMA21', data: ema21, borderColor: '#0ea5e9', borderWidth: 1.4, pointRadius: 0, spanGaps: true, tension: 0.2 }
+        ];
+        if (safeNum(stock.buyPrice) > 0) datasets.push({ label: `買進 ${fmtNum(stock.buyPrice, 2)}`, data: flatLine(safeNum(stock.buyPrice)), borderColor: '#2563eb', borderDash: [6, 4], borderWidth: 1.5, pointRadius: 0, fill: false });
+        if (safeNum(stock.stopPrice) > 0) datasets.push({ label: `停損 ${fmtNum(stock.stopPrice, 2)}`, data: flatLine(safeNum(stock.stopPrice)), borderColor: '#e11d48', borderDash: [6, 4], borderWidth: 1.5, pointRadius: 0, fill: false });
+        if (safeNum(stock.takeProfitPrice) > 0) datasets.push({ label: `停利 ${fmtNum(stock.takeProfitPrice, 2)}`, data: flatLine(safeNum(stock.takeProfitPrice)), borderColor: '#047857', borderDash: [6, 4], borderWidth: 1.5, pointRadius: 0, fill: false });
+
+        chartStockDetail = new Chart(canvas.getContext('2d'), {
+          type: 'line',
+          data: { labels, datasets },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+              legend: { display: true, position: 'top', labels: { boxWidth: 10, font: { size: 11 } } },
+              tooltip: {
+                callbacks: {
+                  label: (ctx) => {
+                    if (ctx.parsed.y === null || ctx.parsed.y === undefined) return null;
+                    return ` ${ctx.dataset.label}: ${fmtNum(ctx.parsed.y, 2)}`;
+                  }
+                }
+              }
+            },
+            scales: {
+              x: { grid: { display: false }, ticks: { color: '#71717a', font: { size: 11, family: 'JetBrains Mono' }, maxRotation: 0, autoSkip: true, maxTicksLimit: 12 } },
+              y: { min: yMin, max: yMax, grid: { color: 'rgba(24,24,27,0.06)' }, ticks: { color: '#71717a', font: { size: 11, family: 'JetBrains Mono' } } }
+            }
+          }
+        });
+        // E2E 測試掛鉤：供 Playwright 驗證圖表設定（資料集標籤、虛線、Y 軸範圍），不影響一般使用
+        window.__stockChartDetail = chartStockDetail;
+      }
+
+      function closeStockChartModal() {
+        const modal = document.getElementById('stock-chart-modal');
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+        if (chartStockDetail) { chartStockDetail.destroy(); chartStockDetail = null; }
+        window.__stockChartDetail = null;
+      }
+
       function renderStocks() {
         const rateOf = (cur) => (cur === 'TWD' ? 1 : safeNum(state.fx[cur], 1));
         const filtered = state.stocks.filter((s) => stockMarketFilter === 'ALL' || s.market === stockMarketFilter);
@@ -3831,11 +4152,29 @@
           const mvTWD = mvNative * rateOf(s.currency);
           const isGain = pnlNative >= 0;
           const colorCls = isGain ? 'text-rose-700' : 'text-emerald-700';
+          // 價格提醒徽章：已觸發顯示彩色徽章；已設定未觸發顯示提醒價摘要
+          const alertSt = getAlertStatus(s);
+          const alertBadges = ['buy', 'stop', 'tp']
+            .filter((t) => alertSt[t])
+            .map((t) => `<span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${ALERT_TYPE_META[t].cls}">${ALERT_TYPE_META[t].label}</span>`)
+            .join(' ');
+          const alertSetLine = [safeNum(s.buyPrice) > 0 ? `買 ${fmtNum(s.buyPrice, 2)}` : '', safeNum(s.stopPrice) > 0 ? `停 ${fmtNum(s.stopPrice, 2)}` : '', safeNum(s.takeProfitPrice) > 0 ? `利 ${fmtNum(s.takeProfitPrice, 2)}` : ''].filter(Boolean).join(' · ');
+          // 報價來源／交易日／舊資料徽章
+          const qf = quoteFreshness(s);
+          const qSource = QUOTE_SOURCE_NAMES[s.quoteSource] || (s.quoteSource ? escapeHtml(s.quoteSource) : '');
+          const qMetaLine = qSource || qf.dateLabel
+            ? `<div class="text-[11px] text-zinc-400">${qSource ? escapeHtml(qSource) : ''}${qSource && qf.dateLabel ? ' · ' : ''}${qf.dateLabel ? '收盤 ' + escapeHtml(qf.dateLabel) : ''}${qf.marketNote ? ` · ${qf.marketNote}` : ''}</div>`
+            : '';
+          const qStaleBadge = qf.isStale
+            ? '<span class="inline-flex items-center px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 text-[10px] font-medium">舊資料</span>'
+            : '';
           return `
             <tr class="hover:bg-[#f7f7f5] transition-colors duration-150">
               <td class="py-3 px-2 font-sans">
                 <div class="font-medium text-zinc-900">${escapeHtml(s.symbol)}</div>
                 <div class="text-xs text-zinc-500">${escapeHtml(s.name)}</div>
+                ${alertBadges ? `<div class="flex flex-wrap gap-1 mt-1">${alertBadges}</div>` : ''}
+                ${alertSetLine ? `<div class="text-[11px] text-zinc-400 mt-0.5">提醒 ${escapeHtml(alertSetLine)}</div>` : ''}
               </td>
               <td class="py-3 px-2 font-sans">
                 <div class="text-xs text-zinc-700">${marketName[s.market] || escapeHtml(s.market)}</div>
@@ -3843,7 +4182,11 @@
               </td>
               <td class="py-3 px-2 text-right text-zinc-800">${shares.toLocaleString('zh-TW', { maximumFractionDigits: 4 })}</td>
               <td class="py-3 px-2 text-right text-zinc-500">${fmtNum(avg, 2)}</td>
-              <td class="py-3 px-2 text-right text-zinc-900">${fmtNum(price, 2)}</td>
+              <td class="py-3 px-2 text-right text-zinc-900">
+                <div>${fmtNum(price, 2)}</div>
+                ${qMetaLine}
+                ${qStaleBadge ? `<div class="mt-0.5">${qStaleBadge}</div>` : ''}
+              </td>
               <td class="py-3 px-2 text-right text-zinc-600">${s.currency} ${fmtNum(mvNative, 2)}</td>
               <td class="py-3 px-2 text-right font-medium text-zinc-900">${fmtTWD(mvTWD)}</td>
               <td class="py-3 px-2 text-right ${colorCls}">
@@ -3851,6 +4194,7 @@
                 <div class="text-[11px]">${costNative > 0 ? (isGain ? '+' : '') + pnlPct.toFixed(1) + '%' : '零成本'}</div>
               </td>
               <td class="py-3 px-2 text-right whitespace-nowrap font-sans">
+                <button type="button" data-action="chart-stock" data-id="${escapeHtml(s.id)}" class="text-zinc-600 hover:text-zinc-900 text-xs font-medium mr-2">走勢</button>
                 <button type="button" data-action="trade-stock-buy" data-id="${escapeHtml(s.id)}" class="text-rose-700 hover:text-rose-900 text-xs font-medium mr-2">買入</button>
                 <button type="button" data-action="trade-stock-sell" data-id="${escapeHtml(s.id)}" class="text-emerald-700 hover:text-emerald-900 text-xs font-medium mr-2">賣出</button>
                 <button type="button" data-action="trade-stock-div" data-id="${escapeHtml(s.id)}" class="text-amber-700 hover:text-amber-900 text-xs font-medium mr-2">配息</button>
@@ -3915,6 +4259,10 @@
             }).join('');
           }
         }
+
+        // 每次渲染後比對提醒價（冪等：只在「未觸發 → 已觸發」轉換時寫入事件），並刷新提醒事件清單
+        checkAlerts();
+        renderAlertEvents();
       }
 
       // Cash Rendering
@@ -6656,7 +7004,7 @@
         document.getElementById('modal-title').textContent = title;
         document.getElementById('modal-fields').innerHTML = fieldsHtml;
         const submitBtn = document.querySelector('#modal-form button[type="submit"]');
-        if (submitBtn) submitBtn.textContent = '儲存';
+        if (submitBtn) { submitBtn.textContent = '儲存'; submitBtn.disabled = false; }
         currentModalSubmit = onSubmit;
         const modal = document.getElementById('form-modal');
         modal.classList.remove('hidden');
@@ -6843,9 +7191,26 @@
             <div><label class="block text-xs font-medium text-zinc-600 mb-1">平均成本</label><input name="avgCost" type="number" step="0.0001" min="0" required value="${safeNum(s.avgCost)}" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" /></div>
             <div><label class="block text-xs font-medium text-zinc-600 mb-1">最新現價</label><input name="currentPrice" type="number" step="0.0001" min="0" required value="${safeNum(s.currentPrice)}" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" /></div>
           </div>
+          <div class="pt-1">
+            <div class="text-xs font-semibold text-zinc-800">🔔 價格提醒 <span class="font-normal text-zinc-400">（選填，留空代表不設定；報價更新時自動比對並記錄事件）</span></div>
+            <div class="grid grid-cols-3 gap-3 mt-2">
+              <div><label class="block text-xs font-medium text-zinc-600 mb-1">買進價</label><input name="buyPrice" type="number" step="0.0001" min="0" value="${safeNum(s.buyPrice) > 0 ? safeNum(s.buyPrice) : ''}" placeholder="未設定" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" /></div>
+              <div><label class="block text-xs font-medium text-zinc-600 mb-1">停損價</label><input name="stopPrice" type="number" step="0.0001" min="0" value="${safeNum(s.stopPrice) > 0 ? safeNum(s.stopPrice) : ''}" placeholder="未設定" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" /></div>
+              <div><label class="block text-xs font-medium text-zinc-600 mb-1">停利價</label><input name="takeProfitPrice" type="number" step="0.0001" min="0" value="${safeNum(s.takeProfitPrice) > 0 ? safeNum(s.takeProfitPrice) : ''}" placeholder="未設定" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" /></div>
+            </div>
+            <p class="text-[11px] text-zinc-400 mt-1.5">買進價應高於停損價；現價觸及任一價格時會在持股列顯示徽章並寫入「價格提醒事件」，不會自動交易。</p>
+          </div>
         `;
         openFormModal(isEdit ? '編輯股票持倉' : '新增股票持倉', html, (fd) => {
-          const record = {
+          const buyPrice = safeNum(fd.get('buyPrice'));
+          const stopPrice = safeNum(fd.get('stopPrice'));
+          const takeProfitPrice = safeNum(fd.get('takeProfitPrice'));
+          if (buyPrice > 0 && stopPrice > 0 && buyPrice <= stopPrice) {
+            showToast('買進價應高於停損價（否則一買進就同時觸發停損），請修正後再儲存');
+            return;
+          }
+          const record = normalizeStockRecord({
+            ...s,
             id: isEdit ? s.id : uid('s'),
             symbol: String(fd.get('symbol')).trim(),
             name: String(fd.get('name')).trim(),
@@ -6854,8 +7219,17 @@
             account: String(fd.get('account')).trim(),
             shares: safeNum(fd.get('shares')),
             avgCost: safeNum(fd.get('avgCost')),
-            currentPrice: safeNum(fd.get('currentPrice'))
-          };
+            currentPrice: safeNum(fd.get('currentPrice')),
+            buyPrice,
+            stopPrice,
+            takeProfitPrice
+          });
+          // 提醒價改過後，對應的觸發狀態歸零，讓下次比對重新判斷（避免舊狀態殘留）
+          if (isEdit) {
+            if (safeNum(s.buyPrice) !== buyPrice) record.alertState.buy = false;
+            if (safeNum(s.stopPrice) !== stopPrice) record.alertState.stop = false;
+            if (safeNum(s.takeProfitPrice) !== takeProfitPrice) record.alertState.tp = false;
+          }
           state.stocks = isEdit ? state.stocks.map((x) => (x.id === s.id ? record : x)) : [...state.stocks, record];
           saveState();
           renderAll();
@@ -9060,6 +9434,33 @@
         }
       }
 
+      // 匯入前預覽：先列出會新增／覆蓋哪些項目，確認後才寫入，避免誤匯入覆蓋整本帳
+      function showImportPreview({ title, intro, rows, onConfirm }) {
+        const html = `
+          <p class="text-xs text-zinc-600">${escapeHtml(intro)}</p>
+          <div class="rounded-lg overflow-hidden hairline">
+            <table class="w-full text-left text-xs">
+              <thead><tr class="bg-[#f7f7f5] text-zinc-500">
+                <th class="py-2 px-3 font-medium">項目</th>
+                <th class="py-2 px-3 font-medium text-right">筆數</th>
+                <th class="py-2 px-3 font-medium">說明</th>
+              </tr></thead>
+              <tbody class="divide-y divide-zinc-900/[0.06]">
+                ${rows.map((r) => `<tr>
+                  <td class="py-2 px-3 font-medium text-zinc-900">${escapeHtml(r.label)}</td>
+                  <td class="py-2 px-3 text-right font-mono-num">${r.count}</td>
+                  <td class="py-2 px-3 text-zinc-500">${escapeHtml(r.note || '')}</td>
+                </tr>`).join('')}
+              </tbody>
+            </table>
+          </div>
+          <p class="text-[11px] text-rose-700">⚠️ 匯入將完整覆蓋本機目前的對應資料（未列出的項目不受影響）。建議先下載一份 JSON 備份。</p>
+        `;
+        openFormModal(title, html, onConfirm);
+        const submitBtn = document.querySelector('#modal-form button[type="submit"]');
+        if (submitBtn) submitBtn.textContent = '確認匯入';
+      }
+
       function exportJSON() {
         downloadJson({ ...state, exportedAt: new Date().toISOString() }, `wealth_backup_${todayISO()}.json`);
         recordManualBackup('JSON');
@@ -9080,11 +9481,11 @@
               showToast('JSON 格式不符');
               return;
             }
-            state = {
-              version: parsed.version || '1.4',
+            const next = {
+              version: parsed.version || '1.5',
               fx: parsed.fx || { TWD: 1, USD: 33.022, HKD: 4.2097, CNY: 4.9525 },
               cash: parsed.cash,
-              stocks: parsed.stocks,
+              stocks: parsed.stocks.map(normalizeStockRecord),
               investments: parsed.investments,
               fixedIncomes: Array.isArray(parsed.fixedIncomes) ? parsed.fixedIncomes : [],
               fixedExpenses: Array.isArray(parsed.fixedExpenses) ? parsed.fixedExpenses : [],
@@ -9096,11 +9497,31 @@
               snapshots: Array.isArray(parsed.snapshots) ? parsed.snapshots : [],
               ledger: Array.isArray(parsed.ledger) ? parsed.ledger : [],
               budgets: (parsed.budgets && typeof parsed.budgets === 'object') ? parsed.budgets : { monthlyTotal: 0, byCategory: {} },
-              groupTrips: Array.isArray(parsed.groupTrips) ? parsed.groupTrips : []
+              groupTrips: Array.isArray(parsed.groupTrips) ? parsed.groupTrips : [],
+              alertEvents: Array.isArray(parsed.alertEvents) ? parsed.alertEvents : []
             };
-            saveState();
-            renderAll();
-            showToast('成功匯入 JSON 備份');
+            showImportPreview({
+              title: '匯入 JSON 備份預覽',
+              intro: `備份檔匯出於 ${parsed.exportedAt ? String(parsed.exportedAt).slice(0, 10) : '未知時間'}，以下內容將覆蓋目前帳本：`,
+              rows: [
+                { label: '股票持倉', count: next.stocks.length, note: '含買進／停損／停利提醒價' },
+                { label: '價格提醒事件', count: next.alertEvents.length, note: '隨備份一起還原' },
+                { label: '銀行現金', count: next.cash.length, note: '' },
+                { label: '實體投資', count: next.investments.length, note: '' },
+                { label: '固定收入／支出', count: next.fixedIncomes.length + next.fixedExpenses.length, note: '' },
+                { label: '隨機支出', count: next.randomExpenses.length, note: '' },
+                { label: '股票交易紀錄', count: next.stockTrades.length, note: '' },
+                { label: '歷史快照', count: next.snapshots.length, note: '' },
+                { label: '外幣交易', count: next.fxTrades.length, note: '' },
+                { label: '收支流水', count: next.ledger.length, note: '' }
+              ],
+              onConfirm: () => {
+                state = next;
+                saveState();
+                renderAll();
+                showToast('成功匯入 JSON 備份');
+              }
+            });
           } catch (err) {
             showToast('JSON 解析失敗');
           }
@@ -9124,8 +9545,8 @@
           { 項目: '固定支出月均 (TWD)', 金額: Math.round(totals.fixedExpenseMonthlyTWD) }
         ]), '總覽摘要');
 
-        const sRows = state.stocks.map((s) => ({ id: s.id, symbol: s.symbol, name: s.name, market: s.market, account: s.account, currency: s.currency, shares: s.shares, avgCost: s.avgCost, currentPrice: s.currentPrice }));
-        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sRows.length ? sRows : [{ id: '', symbol: '', name: '', market: '', account: '', currency: '', shares: 0, avgCost: 0, currentPrice: 0 }]), '股票持倉');
+        const sRows = state.stocks.map((s) => ({ id: s.id, symbol: s.symbol, name: s.name, market: s.market, account: s.account, currency: s.currency, shares: s.shares, avgCost: s.avgCost, currentPrice: s.currentPrice, buyPrice: safeNum(s.buyPrice), stopPrice: safeNum(s.stopPrice), takeProfitPrice: safeNum(s.takeProfitPrice) }));
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sRows.length ? sRows : [{ id: '', symbol: '', name: '', market: '', account: '', currency: '', shares: 0, avgCost: 0, currentPrice: 0, buyPrice: 0, stopPrice: 0, takeProfitPrice: 0 }]), '股票持倉');
 
         const stTrRows = (state.stockTrades || []).map((t) => ({ id: t.id, date: t.date, tradeType: t.tradeType, market: t.market, symbol: t.symbol, name: t.name || '', currency: t.currency || 'TWD', shares: t.shares, price: t.price, fee: t.fee || 0, tax: t.tax || 0, netAmount: t.netAmount || 0, realizedPnlTWD: t.realizedPnlTWD || 0, account: t.account || '', applyMode: t.applyMode || 'history_only', note: t.note || '' }));
         XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(stTrRows.length ? stTrRows : [{ id: '', date: '', tradeType: 'BUY', market: 'TW', symbol: '', name: '', currency: 'TWD', shares: 0, price: 0, fee: 0, tax: 0, netAmount: 0, realizedPnlTWD: 0, account: '', applyMode: 'history_only', note: '' }]), '股票交易紀錄');
@@ -9201,23 +9622,49 @@
               showToast('找不到相容工作表');
               return;
             }
-            if (stockSheet) state.stocks = stockSheet.filter((r) => r.symbol).map((r) => ({ id: r.id || uid('s'), symbol: String(r.symbol), name: String(r.name || r.symbol), market: String(r.market || 'US'), account: String(r.account || ''), currency: String(r.currency || 'USD'), shares: safeNum(r.shares), avgCost: safeNum(r.avgCost), currentPrice: safeNum(r.currentPrice) }));
-            if (stTradeSheet) state.stockTrades = stTradeSheet.filter((r) => r.symbol).map((r) => ({ id: r.id || uid('strd'), date: String(r.date || todayISO()), tradeType: String(r.tradeType || 'BUY'), market: String(r.market || 'TW'), symbol: String(r.symbol).toUpperCase(), name: String(r.name || ''), currency: String(r.currency || 'TWD'), shares: safeNum(r.shares), price: safeNum(r.price), fee: safeNum(r.fee), tax: safeNum(r.tax), netAmount: safeNum(r.netAmount), realizedPnlTWD: safeNum(r.realizedPnlTWD), account: String(r.account || ''), applyMode: String(r.applyMode || 'history_only'), note: String(r.note || '') }));
-            if (cashSheet) state.cash = cashSheet.filter((r) => r.bank).map((r) => ({ id: r.id || uid('c'), bank: String(r.bank), currency: String(r.currency || 'TWD'), amount: safeNum(r.amount), note: String(r.note || '') }));
-            if (invSheet) state.investments = invSheet.filter((r) => r.name).map((r) => ({ id: r.id || uid('i'), name: String(r.name), status: ['active', 'paused', 'closed'].includes(String(r.status)) ? String(r.status) : getInvestmentStatus({ tags: normalizeInvTags(r.tags ?? r['標籤']) }), investKind: String(r.investKind) === 'one_time' ? 'one_time' : 'recurring', principal: safeNum(r.principal), cycleMonths: Math.max(1, safeNum(r.cycleMonths, 12)), minRate: safeNum(r.minRate), maxRate: safeNum(r.maxRate), principalRecoverable: false, ...(r.sourceInvestmentId ? { sourceInvestmentId: String(r.sourceInvestmentId) } : {}), tags: normalizeInvTags(r.tags ?? r['標籤']), note: String(r.note || '') }));
-            if (incSheet) state.fixedIncomes = incSheet.filter((r) => r.name || r['收入名稱']).map((r) => ({ id: r.id || uid('inc'), name: String(r.name || r['收入名稱']), category: String(r.category || r['類別'] || '固定收入'), currency: String(r.currency || r['幣別'] || 'TWD'), amount: safeNum(r.amount ?? r['單期金額']), cycleMonths: Math.max(1, safeNum(r.cycleMonths ?? r['發放週期(月)'], 1)), payday: String(r.payday || r['每月發放日'] || ''), account: String(r.account || r['入帳帳戶'] || ''), status: String(r.status || 'active') === 'inactive' ? 'inactive' : 'active', note: String(r.note || r['備註'] || '') }));
-            if (irecSheet) state.incomeReceipts = irecSheet.filter((r) => r.name && safeNum(r.actualAmount) > 0).map((r) => ({ id: r.id || uid('irec'), date: String(r.date || todayISO()), name: String(r.name), category: String(r.category || '固定收入'), currency: String(r.currency || 'TWD'), expectedAmount: safeNum(r.expectedAmount, safeNum(r.actualAmount)), actualAmount: safeNum(r.actualAmount), account: String(r.account || ''), depositMode: String(r.depositMode || 'new_deposit'), note: String(r.note || '') }));
-            if (ilogSheet) state.investmentLogs = ilogSheet.filter((r) => r.investmentName && safeNum(r.amountTWD) > 0).map((r) => ({ id: r.id || uid('ilog'), investmentId: String(r.investmentId || ''), investmentName: String(r.investmentName), date: String(r.date || todayISO()), eventType: String(r.eventType || 'payout'), stageLabel: String(r.stageLabel || ''), ...(r.fundingSource ? { fundingSource: String(r.fundingSource) } : {}), ...(r.sourceInvestmentId ? { sourceInvestmentId: String(r.sourceInvestmentId) } : {}), amountTWD: safeNum(r.amountTWD), account: String(r.account || ''), applyMode: String(r.applyMode || 'history_only'), note: String(r.note || '') }));
-            if (fExpSheet) state.fixedExpenses = fExpSheet.filter((r) => r.name || r['項目名稱']).map((r) => ({ id: r.id || uid('fexp'), name: String(r.name || r['項目名稱']), category: String(r.category || r['類別'] || '固定支出'), currency: String(r.currency || r['幣別'] || 'TWD'), amount: safeNum(r.amount ?? r['單期金額']), cycleMonths: Math.max(1, safeNum(r.cycleMonths ?? r['扣款週期(月)'], 1)), payday: String(r.payday || r['扣款日'] || ''), account: String(r.account || r['扣款帳戶'] || ''), status: String(r.status || 'active') === 'inactive' ? 'inactive' : 'active', note: String(r.note || r['備註'] || '') }));
-            if (rExpSheet) state.randomExpenses = rExpSheet.filter((r) => r.title || r['支出項目']).map((r) => ({ id: r.id || uid('rexp'), date: String(r.date || r['日期'] || todayISO()), category: String(r.category || r['類別'] || '其他隨機支出'), title: String(r.title || r['支出項目']), currency: String(r.currency || r['幣別'] || 'TWD'), amount: safeNum(r.amount ?? r['原幣金額']), account: String(r.account || r['支付帳戶'] || ''), deductStatus: String(r.deductStatus || r['扣款狀態'] || 'unpaid'), note: String(r.note || r['備註'] || '') }));
-            if (fxTradeSheet) state.fxTrades = fxTradeSheet.filter((r) => r.date && safeNum(r.amount) > 0).map((r) => ({ id: r.id || uid('fx'), date: String(r.date), side: String(r.side || 'BUY').toUpperCase(), currency: String(r.currency || 'USD'), amount: safeNum(r.amount), rate: safeNum(r.rate), feeTWD: safeNum(r.feeTWD), account: String(r.account || ''), note: String(r.note || '') }));
-            if (snapSheet) state.snapshots = snapSheet.filter((r) => r.date).map((r) => { const c = safeNum(r.cashTWD), s = safeNum(r.stocksTWD), i = safeNum(r.investmentsTWD); return { id: r.id || uid('snap'), date: String(r.date), cashTWD: c, stocksTWD: s, investmentsTWD: i, totalTWD: safeNum(r.totalTWD, c + s + i), note: String(r.note || '') }; });
-            if (ledgerSheet) state.ledger = ledgerSheet.filter((r) => r.date && r.title).map((r) => ({ id: r.id || uid('led'), date: String(r.date), type: String(r.type || '其他收支'), title: String(r.title), amountTWD: safeNum(r.amountTWD), note: String(r.note || '') }));
-            if (fxSheet) fxSheet.forEach((r) => { if (r.currency && safeNum(r.rateToTWD) > 0) state.fx[String(r.currency)] = safeNum(r.rateToTWD); });
+            // 先解析到暫存物件，預覽確認後才寫入 state，避免誤匯入直接覆蓋帳本
+            const parsed = {};
+            if (stockSheet) parsed.stocks = stockSheet.filter((r) => r.symbol).map((r) => normalizeStockRecord({ id: r.id || uid('s'), symbol: String(r.symbol), name: String(r.name || r.symbol), market: String(r.market || 'US'), account: String(r.account || ''), currency: String(r.currency || 'USD'), shares: safeNum(r.shares), avgCost: safeNum(r.avgCost), currentPrice: safeNum(r.currentPrice), buyPrice: safeNum(r.buyPrice), stopPrice: safeNum(r.stopPrice), takeProfitPrice: safeNum(r.takeProfitPrice) }));
+            if (stTradeSheet) parsed.stockTrades = stTradeSheet.filter((r) => r.symbol).map((r) => ({ id: r.id || uid('strd'), date: String(r.date || todayISO()), tradeType: String(r.tradeType || 'BUY'), market: String(r.market || 'TW'), symbol: String(r.symbol).toUpperCase(), name: String(r.name || ''), currency: String(r.currency || 'TWD'), shares: safeNum(r.shares), price: safeNum(r.price), fee: safeNum(r.fee), tax: safeNum(r.tax), netAmount: safeNum(r.netAmount), realizedPnlTWD: safeNum(r.realizedPnlTWD), account: String(r.account || ''), applyMode: String(r.applyMode || 'history_only'), note: String(r.note || '') }));
+            if (cashSheet) parsed.cash = cashSheet.filter((r) => r.bank).map((r) => ({ id: r.id || uid('c'), bank: String(r.bank), currency: String(r.currency || 'TWD'), amount: safeNum(r.amount), note: String(r.note || '') }));
+            if (invSheet) parsed.investments = invSheet.filter((r) => r.name).map((r) => ({ id: r.id || uid('i'), name: String(r.name), status: ['active', 'paused', 'closed'].includes(String(r.status)) ? String(r.status) : getInvestmentStatus({ tags: normalizeInvTags(r.tags ?? r['標籤']) }), investKind: String(r.investKind) === 'one_time' ? 'one_time' : 'recurring', principal: safeNum(r.principal), cycleMonths: Math.max(1, safeNum(r.cycleMonths, 12)), minRate: safeNum(r.minRate), maxRate: safeNum(r.maxRate), principalRecoverable: false, ...(r.sourceInvestmentId ? { sourceInvestmentId: String(r.sourceInvestmentId) } : {}), tags: normalizeInvTags(r.tags ?? r['標籤']), note: String(r.note || '') }));
+            if (incSheet) parsed.fixedIncomes = incSheet.filter((r) => r.name || r['收入名稱']).map((r) => ({ id: r.id || uid('inc'), name: String(r.name || r['收入名稱']), category: String(r.category || r['類別'] || '固定收入'), currency: String(r.currency || r['幣別'] || 'TWD'), amount: safeNum(r.amount ?? r['單期金額']), cycleMonths: Math.max(1, safeNum(r.cycleMonths ?? r['發放週期(月)'], 1)), payday: String(r.payday || r['每月發放日'] || ''), account: String(r.account || r['入帳帳戶'] || ''), status: String(r.status || 'active') === 'inactive' ? 'inactive' : 'active', note: String(r.note || r['備註'] || '') }));
+            if (irecSheet) parsed.incomeReceipts = irecSheet.filter((r) => r.name && safeNum(r.actualAmount) > 0).map((r) => ({ id: r.id || uid('irec'), date: String(r.date || todayISO()), name: String(r.name), category: String(r.category || '固定收入'), currency: String(r.currency || 'TWD'), expectedAmount: safeNum(r.expectedAmount, safeNum(r.actualAmount)), actualAmount: safeNum(r.actualAmount), account: String(r.account || ''), depositMode: String(r.depositMode || 'new_deposit'), note: String(r.note || '') }));
+            if (ilogSheet) parsed.investmentLogs = ilogSheet.filter((r) => r.investmentName && safeNum(r.amountTWD) > 0).map((r) => ({ id: r.id || uid('ilog'), investmentId: String(r.investmentId || ''), investmentName: String(r.investmentName), date: String(r.date || todayISO()), eventType: String(r.eventType || 'payout'), stageLabel: String(r.stageLabel || ''), ...(r.fundingSource ? { fundingSource: String(r.fundingSource) } : {}), ...(r.sourceInvestmentId ? { sourceInvestmentId: String(r.sourceInvestmentId) } : {}), amountTWD: safeNum(r.amountTWD), account: String(r.account || ''), applyMode: String(r.applyMode || 'history_only'), note: String(r.note || '') }));
+            if (fExpSheet) parsed.fixedExpenses = fExpSheet.filter((r) => r.name || r['項目名稱']).map((r) => ({ id: r.id || uid('fexp'), name: String(r.name || r['項目名稱']), category: String(r.category || r['類別'] || '固定支出'), currency: String(r.currency || r['幣別'] || 'TWD'), amount: safeNum(r.amount ?? r['單期金額']), cycleMonths: Math.max(1, safeNum(r.cycleMonths ?? r['扣款週期(月)'], 1)), payday: String(r.payday || r['扣款日'] || ''), account: String(r.account || r['扣款帳戶'] || ''), status: String(r.status || 'active') === 'inactive' ? 'inactive' : 'active', note: String(r.note || r['備註'] || '') }));
+            if (rExpSheet) parsed.randomExpenses = rExpSheet.filter((r) => r.title || r['支出項目']).map((r) => ({ id: r.id || uid('rexp'), date: String(r.date || r['日期'] || todayISO()), category: String(r.category || r['類別'] || '其他隨機支出'), title: String(r.title || r['支出項目']), currency: String(r.currency || r['幣別'] || 'TWD'), amount: safeNum(r.amount ?? r['原幣金額']), account: String(r.account || r['支付帳戶'] || ''), deductStatus: String(r.deductStatus || r['扣款狀態'] || 'unpaid'), note: String(r.note || r['備註'] || '') }));
+            if (fxTradeSheet) parsed.fxTrades = fxTradeSheet.filter((r) => r.date && safeNum(r.amount) > 0).map((r) => ({ id: r.id || uid('fx'), date: String(r.date), side: String(r.side || 'BUY').toUpperCase(), currency: String(r.currency || 'USD'), amount: safeNum(r.amount), rate: safeNum(r.rate), feeTWD: safeNum(r.feeTWD), account: String(r.account || ''), note: String(r.note || '') }));
+            if (snapSheet) parsed.snapshots = snapSheet.filter((r) => r.date).map((r) => { const c = safeNum(r.cashTWD), s = safeNum(r.stocksTWD), i = safeNum(r.investmentsTWD); return { id: r.id || uid('snap'), date: String(r.date), cashTWD: c, stocksTWD: s, investmentsTWD: i, totalTWD: safeNum(r.totalTWD, c + s + i), note: String(r.note || '') }; });
+            if (ledgerSheet) parsed.ledger = ledgerSheet.filter((r) => r.date && r.title).map((r) => ({ id: r.id || uid('led'), date: String(r.date), type: String(r.type || '其他收支'), title: String(r.title), amountTWD: safeNum(r.amountTWD), note: String(r.note || '') }));
+            if (fxSheet) {
+              parsed.fx = { ...(state.fx || {}) };
+              fxSheet.forEach((r) => { if (r.currency && safeNum(r.rateToTWD) > 0) parsed.fx[String(r.currency)] = safeNum(r.rateToTWD); });
+            }
 
-            saveState();
-            renderAll();
-            showToast('成功從 Excel 匯入資料');
+            showImportPreview({
+              title: '匯入 Excel 預覽',
+              intro: '以下工作表的內容將覆蓋目前帳本的對應項目（未列出的工作表不受影響）：',
+              rows: [
+                { label: '股票持倉', count: (parsed.stocks || []).length, note: '含買進／停損／停利提醒價' },
+                { label: '股票交易紀錄', count: (parsed.stockTrades || []).length, note: '' },
+                { label: '銀行現金', count: (parsed.cash || []).length, note: '' },
+                { label: '實體投資', count: (parsed.investments || []).length, note: '' },
+                { label: '固定收入／支出', count: (parsed.fixedIncomes || []).length + (parsed.fixedExpenses || []).length, note: '' },
+                { label: '實際入帳紀錄', count: (parsed.incomeReceipts || []).length, note: '' },
+                { label: '實體投資異動紀錄', count: (parsed.investmentLogs || []).length, note: '' },
+                { label: '隨機支出', count: (parsed.randomExpenses || []).length, note: '' },
+                { label: '外幣交易', count: (parsed.fxTrades || []).length, note: '' },
+                { label: '歷史快照', count: (parsed.snapshots || []).length, note: '' },
+                { label: '收支流水', count: (parsed.ledger || []).length, note: '' },
+                { label: '匯率設定', count: parsed.fx ? Object.keys(parsed.fx).length : 0, note: '' }
+              ],
+              onConfirm: () => {
+                Object.keys(parsed).forEach((k) => { state[k] = parsed[k]; });
+                saveState();
+                renderAll();
+                showToast('成功從 Excel 匯入資料');
+              }
+            });
           } catch (err) {
             showToast('Excel 匯入失敗');
           }
@@ -9297,6 +9744,18 @@
       });
 
       document.getElementById('btn-add-stock').addEventListener('click', () => openStockModal(null));
+      document.getElementById('btn-clear-alert-events').addEventListener('click', () => {
+        openConfirmModal('清除提醒事件', '將清除全部價格提醒事件紀錄（持股的提醒價設定不受影響）。確定執行嗎？', () => {
+          state.alertEvents = [];
+          saveState();
+          renderAll();
+          showToast('已清除全部提醒事件');
+        });
+      });
+      document.getElementById('btn-close-stock-chart').addEventListener('click', closeStockChartModal);
+      document.getElementById('stock-chart-modal').addEventListener('click', (e) => {
+        if (e.target && e.target.id === 'stock-chart-modal') closeStockChartModal();
+      });
       document.getElementById('btn-add-cash').addEventListener('click', () => openCashModal(null));
       document.getElementById('btn-add-inv').addEventListener('click', () => openInvModal(null));
       document.getElementById('btn-add-inv-log').addEventListener('click', () => openInvLogModal(null, 0));
@@ -9917,12 +10376,38 @@
       });
 
       document.getElementById('btn-clear-blank').addEventListener('click', () => {
-        openConfirmModal('清空為空白帳本', '將移除目前畫面中的所有個人資產資料，方便建立全新帳本。確定執行嗎？', () => {
+        // 先自動下載一份 JSON 備份，再要求輸入「清空」兩字確認，避免誤觸與資料遺失
+        exportJSON();
+        const html = `
+          <p class="text-xs text-zinc-600">已先為你下載一份 JSON 備份檔（檔名 wealth_backup_當天日期.json），請確認已存好再繼續。</p>
+          <p class="text-xs text-zinc-600">此動作將移除目前畫面中的所有個人資產資料，方便建立全新帳本，且無法復原。</p>
+          <div>
+            <label class="block text-xs font-medium text-zinc-600 mb-1">請輸入「清空」以確認</label>
+            <input name="confirmText" type="text" placeholder="請輸入「清空」" class="w-full h-9 px-3 rounded-lg hairline text-sm" />
+          </div>
+        `;
+        openFormModal('清空為空白帳本', html, (fd) => {
+          if (String(fd.get('confirmText') || '').trim() !== '清空') {
+            showToast('確認文字不符，已取消清空');
+            return;
+          }
           state = createBlankData();
           saveState();
           renderAll();
           showToast('已清空為空白帳本');
         });
+        const submitBtn = document.querySelector('#modal-form button[type="submit"]');
+        if (submitBtn) {
+          submitBtn.textContent = '確認清空';
+          // 未輸入「清空」前按鈕保持停用，避免誤觸（輸入時即時啟用／停用）
+          submitBtn.disabled = true;
+          const confirmInput = document.querySelector('#modal-fields input[name="confirmText"]');
+          if (confirmInput) {
+            confirmInput.addEventListener('input', () => {
+              submitBtn.disabled = confirmInput.value.trim() !== '清空';
+            });
+          }
+        }
       });
 
 
@@ -9934,6 +10419,7 @@
         const id = btn.dataset.id;
 
         if (action === 'edit-stock') { const item = state.stocks.find((x) => x.id === id); if (item) openStockModal(item); }
+        else if (action === 'chart-stock') { const item = state.stocks.find((x) => x.id === id); if (item) openStockChartModal(item); }
         else if (action === 'del-stock') { openConfirmModal('刪除股票', '確定要刪除此筆股票持倉嗎？', () => { state.stocks = state.stocks.filter((x) => x.id !== id); saveState(); renderAll(); showToast('已刪除股票'); }); }
         else if (action === 'trade-stock-buy') { const s = state.stocks.find((x) => x.id === id); if (s) openStockTradeModal({ date: todayISO(), tradeType: 'BUY', market: s.market, symbol: s.symbol, name: s.name, currency: s.currency, shares: s.market === 'TW' ? 1000 : 1, price: s.currentPrice, account: s.account, applyMode: 'sync_live' }); }
         else if (action === 'trade-stock-sell') { const s = state.stocks.find((x) => x.id === id); if (s) openStockTradeModal({ date: todayISO(), tradeType: 'SELL', market: s.market, symbol: s.symbol, name: s.name, currency: s.currency, shares: s.shares, price: s.currentPrice, account: s.account, applyMode: 'sync_live' }); }
@@ -10412,9 +10898,259 @@
       };
       const aiKeyTestStates = {}; // { [id]: { status: 'idle'|'testing'|'ok'|'fail', msg: '' } }
 
+      // ============ API Key 加密保險庫（WebCrypto AES-GCM，瀏覽器內建）============
+      // 設計：PBKDF2（10 萬次迭代）由使用者自設的 passphrase 衍生金鑰，AES-GCM 加密後
+      // 以 enc1.<iv>.<ciphertext> 格式存放；衍生金鑰只保留於記憶體，關閉分頁即失效。
+      // 雲端同步副本與 JSON 備份只會看到密文；忘記密碼將無法取回已加密的 Key，需重新申請。
+      const AI_VAULT_SALT_KEY = 'wealth_ai_vault_salt_v1';
+      const AI_KEY_HEALTH_KEY = 'wealth_ai_key_health_v1';
+      // passphrase 與衍生金鑰只保留於記憶體，關閉分頁即失效；鹽值內嵌於每筆密文，
+      // 因此經雲端同步到其他裝置的加密 Key 也能用同一組密碼解開
+      let aiVaultPassphrase = null;
+      let aiVaultUnlocked = false;
+      const aiVaultKeyCache = {}; // { saltB64: CryptoKey }
+
+      function b64FromBytes(bytes) {
+        let s = '';
+        const chunk = 0x8000;
+        for (let i = 0; i < bytes.length; i += chunk) {
+          s += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+        }
+        return btoa(s);
+      }
+      function bytesFromB64(b64) {
+        const s = atob(b64);
+        const bytes = new Uint8Array(s.length);
+        for (let i = 0; i < s.length; i++) bytes[i] = s.charCodeAt(i);
+        return bytes;
+      }
+      function isEncryptedKeyValue(v) {
+        return typeof v === 'string' && v.startsWith('enc1.');
+      }
+      function getVaultSaltB64() {
+        try {
+          let salt = localStorage.getItem(AI_VAULT_SALT_KEY);
+          if (!salt) {
+            const bytes = new Uint8Array(16);
+            crypto.getRandomValues(bytes);
+            salt = b64FromBytes(bytes);
+            localStorage.setItem(AI_VAULT_SALT_KEY, salt);
+          }
+          return salt;
+        } catch (e) {
+          return '';
+        }
+      }
+      async function getVaultKeyForSalt(saltB64, passphrase) {
+        if (aiVaultKeyCache[saltB64]) return aiVaultKeyCache[saltB64];
+        const salt = bytesFromB64(saltB64);
+        const baseKey = await crypto.subtle.importKey('raw', new TextEncoder().encode(passphrase), 'PBKDF2', false, ['deriveKey']);
+        const key = await crypto.subtle.deriveKey(
+          { name: 'PBKDF2', salt, iterations: 100000, hash: 'SHA-256' },
+          baseKey,
+          { name: 'AES-GCM', length: 256 },
+          false,
+          ['encrypt', 'decrypt']
+        );
+        aiVaultKeyCache[saltB64] = key;
+        return key;
+      }
+      async function encryptVaultText(plain, passphrase) {
+        const saltB64 = getVaultSaltB64();
+        const key = await getVaultKeyForSalt(saltB64, passphrase);
+        const iv = new Uint8Array(12);
+        crypto.getRandomValues(iv);
+        const data = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, new TextEncoder().encode(plain));
+        return `enc1.${saltB64}.${b64FromBytes(iv)}.${b64FromBytes(new Uint8Array(data))}`;
+      }
+      async function decryptVaultText(enc, passphrase) {
+        const parts = String(enc).split('.');
+        if (parts.length !== 4 || parts[0] !== 'enc1') throw new Error('加密格式不符');
+        const key = await getVaultKeyForSalt(parts[1], passphrase);
+        const iv = bytesFromB64(parts[2]);
+        const data = bytesFromB64(parts[3]);
+        const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, data);
+        return new TextDecoder().decode(plain);
+      }
+      // 取用 Key 前的唯一解密入口：明文直接回傳；密文需保險庫已解鎖，否則拋出友善錯誤
+      async function getKeyPlaintext(k) {
+        const raw = (k && k.apiKey) || '';
+        if (!raw) return '';
+        if (!isEncryptedKeyValue(raw)) return raw;
+        if (!aiVaultPassphrase) throw new Error('API Key 已加密存放，請先在「設定 → AI 模型設定」輸入加密密碼解鎖保險庫');
+        return decryptVaultText(raw, aiVaultPassphrase);
+      }
+      function countPlaintextKeys() {
+        return ensureAiKeysPool().filter((k) => k.apiKey && !isEncryptedKeyValue(k.apiKey)).length;
+      }
+      function countEncryptedKeys() {
+        return ensureAiKeysPool().filter((k) => isEncryptedKeyValue(k.apiKey)).length;
+      }
+
+      // ---- Key 健康度（僅存本機 localStorage，不同步雲端、不寫入備份）----
+      function loadAiKeyHealth() {
+        try {
+          const raw = localStorage.getItem(AI_KEY_HEALTH_KEY);
+          const parsed = raw ? JSON.parse(raw) : {};
+          return parsed && typeof parsed === 'object' ? parsed : {};
+        } catch (e) { return {}; }
+      }
+      function saveAiKeyHealth(h) {
+        try { localStorage.setItem(AI_KEY_HEALTH_KEY, JSON.stringify(h)); } catch (e) {}
+      }
+      function recordAiKeyHealth(keyId, patch) {
+        if (!keyId || keyId === 'default' || keyId === 'cf_builtin') return;
+        const h = loadAiKeyHealth();
+        const cur = h[keyId] || { ok: 0, fail: 0, lastUsedAt: 0, lastError: '', lastMs: 0, failovers: [] };
+        if (patch.ok === true) cur.ok = (cur.ok || 0) + 1;
+        if (patch.ok === false) cur.fail = (cur.fail || 0) + 1;
+        if (patch.lastUsedAt) cur.lastUsedAt = patch.lastUsedAt;
+        if (patch.lastMs !== undefined) cur.lastMs = patch.lastMs;
+        if (patch.lastError !== undefined) cur.lastError = patch.lastError;
+        if (patch.failover) cur.failovers = [...(cur.failovers || []), patch.failover].slice(-5);
+        h[keyId] = cur;
+        saveAiKeyHealth(h);
+      }
+      function fmtHealthTime(ms) {
+        try {
+          const d = new Date(ms);
+          if (Number.isNaN(d.getTime())) return '—';
+          const mm = String(d.getMonth() + 1).padStart(2, '0');
+          const dd = String(d.getDate()).padStart(2, '0');
+          const hh = String(d.getHours()).padStart(2, '0');
+          const mi = String(d.getMinutes()).padStart(2, '0');
+          return `${mm}/${dd} ${hh}:${mi}`;
+        } catch (e) { return '—'; }
+      }
+      function renderAiKeyHealth() {
+        const el = document.getElementById('cfg-ai-key-health');
+        if (!el) return;
+        const keys = ensureAiKeysPool();
+        const h = loadAiKeyHealth();
+        const rows = keys.filter((k) => h[k.id]).map((k) => {
+          const s = h[k.id];
+          const lastFo = (s.failovers || [])[(s.failovers || []).length - 1];
+          return `<tr class="hover:bg-[#f7f7f5]">
+            <td class="py-2 px-2 font-medium text-zinc-900">${escapeHtml(k.label || k.provider)}</td>
+            <td class="py-2 px-2">${fmtHealthTime(s.lastUsedAt)}</td>
+            <td class="py-2 px-2"><span class="text-emerald-700">${safeNum(s.ok)} 成功</span>／<span class="text-rose-700">${safeNum(s.fail)} 失敗</span></td>
+            <td class="py-2 px-2">${s.lastMs ? (safeNum(s.lastMs) / 1000).toFixed(1) + 's' : '—'}</td>
+            <td class="py-2 px-2 max-w-[180px] truncate" title="${escapeHtml(s.lastError || '')}">${escapeHtml(s.lastError || '—')}</td>
+            <td class="py-2 px-2">${lastFo ? `${fmtHealthTime(lastFo.at)} 由「${escapeHtml(lastFo.from)}」切至「${escapeHtml(lastFo.to)}」` : '—'}</td>
+          </tr>`;
+        }).join('');
+        if (!rows) {
+          el.classList.add('hidden');
+          el.innerHTML = '';
+          return;
+        }
+        el.classList.remove('hidden');
+        el.innerHTML = `
+          <div class="text-xs font-semibold text-zinc-800">📊 Key 健康度 <span class="font-normal text-zinc-400">（僅存本機，不同步雲端、不寫入備份）</span></div>
+          <div class="rounded-lg overflow-hidden hairline mt-2">
+            <table class="w-full text-left text-xs">
+              <thead><tr class="bg-[#f7f7f5] text-zinc-500">
+                <th class="py-2 px-2 font-medium">Key</th>
+                <th class="py-2 px-2 font-medium">最後使用</th>
+                <th class="py-2 px-2 font-medium">成功／失敗</th>
+                <th class="py-2 px-2 font-medium">耗時</th>
+                <th class="py-2 px-2 font-medium">最後錯誤</th>
+                <th class="py-2 px-2 font-medium">最近自動切換</th>
+              </tr></thead>
+              <tbody class="divide-y divide-zinc-900/[0.06]">${rows}</tbody>
+            </table>
+          </div>`;
+      }
+
+      function renderAiVaultBanner() {
+        const el = document.getElementById('cfg-ai-vault-banner');
+        if (!el) return;
+        const plain = countPlaintextKeys();
+        const enc = countEncryptedKeys();
+        if (plain > 0) {
+          el.className = 'rounded-lg border border-amber-200 bg-amber-50 px-3.5 py-3 text-xs text-amber-900';
+          el.innerHTML = `<div class="flex flex-wrap items-center justify-between gap-2">
+            <span>🔓 偵測到 <strong>${plain} 組未加密 API Key</strong>（明文存在本機瀏覽器，雲端同步副本亦為明文）。建議設定加密密碼，遷移為 AES-GCM 加密存放。</span>
+            <button type="button" data-vault-act="setup" class="h-7 px-3 rounded-lg bg-zinc-900 text-white text-xs font-medium shrink-0">設定加密密碼並遷移</button>
+          </div>`;
+        } else if (enc > 0 && !aiVaultUnlocked) {
+          el.className = 'rounded-lg border border-zinc-200 bg-[#f7f7f5] px-3.5 py-3 text-xs text-zinc-700';
+          el.innerHTML = `<div class="flex flex-wrap items-center gap-2">
+            <span>🔒 金鑰保險庫已上鎖（${enc} 組 Key 以 AES-GCM 加密存放，密碼僅在本次瀏覽有效）。</span>
+            <input id="cfg-ai-vault-pw" type="password" autocomplete="current-password" placeholder="輸入加密密碼解鎖" class="h-7 px-2.5 rounded-lg hairline bg-white text-xs w-44" />
+            <button type="button" data-vault-act="unlock" class="h-7 px-3 rounded-lg bg-zinc-900 text-white text-xs font-medium">解鎖</button>
+          </div>`;
+        } else if (enc > 0 && aiVaultUnlocked) {
+          el.className = 'rounded-lg border border-emerald-200 bg-emerald-50 px-3.5 py-3 text-xs text-emerald-900';
+          el.innerHTML = `<div class="flex flex-wrap items-center justify-between gap-2">
+            <span>🔓 保險庫已解鎖（僅保留於本次瀏覽，關閉分頁即失效）。</span>
+            <button type="button" data-vault-act="lock" class="h-7 px-3 rounded-lg bg-white hairline text-xs font-medium">上鎖</button>
+          </div>`;
+        } else {
+          el.classList.add('hidden');
+          el.innerHTML = '';
+          return;
+        }
+        el.classList.remove('hidden');
+      }
+
+      async function handleVaultAction(act) {
+        if (act === 'setup') {
+          const plainCount = countPlaintextKeys();
+          openFormModal('設定金鑰加密密碼', `
+            <p class="text-xs text-zinc-600">設定後，現有 ${plainCount} 組明文 Key 將以 AES-GCM 加密存放；之後新增的 Key 也會自動加密。密碼只用來在本機解密，忘記密碼將無法取回已加密的 Key（需重新申請新的 Key）。</p>
+            <div><label class="block text-xs font-medium text-zinc-600 mb-1">加密密碼（至少 8 碼）</label><input name="pw1" type="password" autocomplete="new-password" class="w-full h-9 px-3 rounded-lg hairline text-sm" /></div>
+            <div><label class="block text-xs font-medium text-zinc-600 mb-1">再輸入一次</label><input name="pw2" type="password" autocomplete="new-password" class="w-full h-9 px-3 rounded-lg hairline text-sm" /></div>
+          `, async (fd) => {
+            const pw1 = String(fd.get('pw1') || '');
+            const pw2 = String(fd.get('pw2') || '');
+            if (pw1.length < 8) { showToast('加密密碼至少 8 碼'); return; }
+            if (pw1 !== pw2) { showToast('兩次輸入的密碼不一致'); return; }
+            try {
+              const keys = ensureAiKeysPool();
+              for (const k of keys) {
+                if (k.apiKey && !isEncryptedKeyValue(k.apiKey)) {
+                  k.apiKey = await encryptVaultText(k.apiKey, pw1);
+                }
+              }
+              aiVaultPassphrase = pw1;
+              aiVaultUnlocked = true;
+              markAiKeysDirtyAndSync();
+              syncAiConfigUI();
+              showToast('已完成加密遷移，保險庫已解鎖');
+            } catch (err) {
+              showToast('加密遷移失敗：' + (err.message || err));
+            }
+          });
+          const sb = document.querySelector('#modal-form button[type="submit"]');
+          if (sb) sb.textContent = '設定並遷移';
+        } else if (act === 'unlock') {
+          const pw = (document.getElementById('cfg-ai-vault-pw') || {}).value || '';
+          if (!pw) { showToast('請輸入加密密碼'); return; }
+          try {
+            const keys = ensureAiKeysPool();
+            const encKey = keys.find((k) => isEncryptedKeyValue(k.apiKey));
+            if (encKey) await decryptVaultText(encKey.apiKey, pw);
+            aiVaultPassphrase = pw;
+            aiVaultUnlocked = true;
+            syncAiConfigUI();
+            showToast('保險庫已解鎖');
+          } catch (err) {
+            showToast('密碼錯誤，解鎖失敗');
+          }
+        } else if (act === 'lock') {
+          aiVaultPassphrase = null;
+          Object.keys(aiVaultKeyCache).forEach((k) => delete aiVaultKeyCache[k]);
+          aiVaultUnlocked = false;
+          syncAiConfigUI();
+          showToast('保險庫已上鎖');
+        }
+      }
+
       function maskApiKey(k) {
         const s = String(k || '').trim();
         if (!s) return '（伺服器內建／免填）';
+        if (isEncryptedKeyValue(s)) return '🔒 已加密存放（AES-GCM）';
         if (s.length <= 8) return '••••' + s.slice(-2);
         return s.slice(0, 4) + '••••' + s.slice(-4);
       }
@@ -10585,6 +11321,8 @@
         if (syncChk) syncChk.checked = appConfig.syncAiKeysToCloud !== false;
         updateAiProviderGuide(curProv);
         renderAiKeyPool();
+        renderAiVaultBanner();
+        renderAiKeyHealth();
 
         const serverHasAny = Object.entries(aiServerKeyStatus).some(([k, v]) => Boolean(v) && (k !== 'cloudflare' || Boolean(cfAiAccessState && cfAiAccessState.allowed)));
         const hasKey = enabledKeys.length > 0 || serverHasAny;
@@ -10986,6 +11724,15 @@
         return { items, skippedTransfers };
       }
 
+      // 收據／單據 OCR 信心度：0~100 整數；模型未回傳時為 null（顯示「未提供」）。
+      // 信心度 < 60 視為低信心度，預覽時預設不勾選，需人工確認後才能匯入。
+      function clampConfidence(v) {
+        if (v === null || v === undefined || v === '') return null;
+        const n = Math.round(Number(v));
+        if (!Number.isFinite(n)) return null;
+        return Math.min(100, Math.max(0, n));
+      }
+
       function normalizeAiExtractedPayload(rawObj, existingState) {
         const { expKeys, incKeys, stockKeys, cashKeys } = buildDuplicateKeySet(existingState);
         const items = [];
@@ -11022,7 +11769,9 @@
           });
           const dupKey = `${date}|${Math.round(amount)}|${title.toLowerCase()}`;
           const isDuplicate = expKeys.has(dupKey);
-          items.push({ ...expItem, isDuplicate, checked: !isDuplicate });
+          const confidence = clampConfidence(e.confidence);
+          const lowConfidence = confidence !== null && confidence < 60;
+          items.push({ ...expItem, confidence, lowConfidence, isDuplicate, checked: !isDuplicate && !lowConfidence });
         });
 
         (Array.isArray(obj.incomes) ? obj.incomes : []).forEach((r) => {
@@ -11035,7 +11784,9 @@
           const currency = /^[A-Z]{3}$/.test(String(r.currency || 'TWD').toUpperCase()) ? String(r.currency || 'TWD').toUpperCase() : 'TWD';
           const dupKey = `${date}|${Math.round(amount)}|${title.toLowerCase()}`;
           const isDuplicate = incKeys.has(dupKey);
-          items.push({ kind: 'income', date, time, category, title, amount: Number(amount.toFixed(2)), currency, account: String(r.account || '').trim(), note: String(r.note || '').trim(), isDuplicate, checked: !isDuplicate });
+          const confidence = clampConfidence(r.confidence);
+          const lowConfidence = confidence !== null && confidence < 60;
+          items.push({ kind: 'income', date, time, category, title, amount: Number(amount.toFixed(2)), currency, account: String(r.account || '').trim(), note: String(r.note || '').trim(), confidence, lowConfidence, isDuplicate, checked: !isDuplicate && !lowConfidence });
         });
 
         (Array.isArray(obj.stocks) ? obj.stocks : []).forEach((s) => {
@@ -11115,6 +11866,13 @@
 
       async function callAiSingleKey(keyEntry, { systemPrompt, prompt, attachments = [], expectJson = true }) {
         const kId = (keyEntry && keyEntry.id) || 'default';
+        // 加密存放的 Key 在此唯一解密點還原為明文後才送出（不經過 localStorage 以外的儲存）
+        let plainKey = '';
+        try {
+          plainKey = await getKeyPlaintext(keyEntry);
+        } catch (err) {
+          throw err;
+        }
         return withAiKeyConcurrencyGate(kId, async () => {
           const provider = (keyEntry && keyEntry.provider) || appConfig.aiProvider || 'gemini';
           const idToken = provider === 'cloudflare' ? await getCurrentFirebaseIdToken() : '';
@@ -11126,7 +11884,7 @@
             },
             body: JSON.stringify({
               provider,
-              apiKey: (keyEntry && keyEntry.apiKey) || '',
+              apiKey: plainKey,
               model: (keyEntry && keyEntry.model) || AI_PROVIDER_DEFAULTS[provider] || '',
               baseUrl: (keyEntry && keyEntry.baseUrl) || '',
               userEmail: (currentUser && currentUser.email) || '',
@@ -11231,7 +11989,13 @@
             if (k.id && k.id !== 'default') {
               delete aiKeyCooldownMap[k.id];
               aiKeyTestStates[k.id] = { status: 'ok', msg: sec };
+              const healthPatch = { ok: true, lastUsedAt: Date.now(), lastMs: Math.round(performance.now() - t0), lastError: '' };
+              if (i > 0 && errors.length > 0) {
+                healthPatch.failover = { at: Date.now(), from: (candidates[i - 1] && (candidates[i - 1].label || candidates[i - 1].provider)) || '', to: label, reason: String(errors[errors.length - 1]).slice(0, 80) };
+              }
+              recordAiKeyHealth(k.id, healthPatch);
               renderAiKeyPool();
+              renderAiKeyHealth();
             }
             return {
               ...data,
@@ -11247,7 +12011,9 @@
             if (k.id && k.id !== 'default') {
               markAiKeyCooldown(k.id, errMsg);
               aiKeyTestStates[k.id] = { status: 'fail', msg: errMsg };
+              recordAiKeyHealth(k.id, { ok: false, lastUsedAt: Date.now(), lastError: errMsg.slice(0, 80) });
               renderAiKeyPool();
+              renderAiKeyHealth();
             }
             const nextMsg = i + 1 < candidates.length
               ? `第 ${i + 1} 組「${label}」失敗（已暫入冷卻），自動切換第 ${i + 2}/${candidates.length} 組…`
@@ -11379,6 +12145,14 @@
 
       let migrateBatchesMeta = []; // [{ batchIdx, imgs, target, userHint, usedKeyId, usedKeyLabel, model, count }]
 
+      function confidenceBadgeHtml(it) {
+        if (it.kind !== 'expense' && it.kind !== 'income') return '';
+        if (it.confidence === null || it.confidence === undefined) return '<span class="ml-1 px-1.5 py-0.5 rounded bg-zinc-100 text-zinc-500 text-[10px] font-sans">信心度未提供</span>';
+        if (it.confidence >= 80) return `<span class="ml-1 px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 text-[10px] font-sans">信心度 ${it.confidence}%</span>`;
+        if (it.confidence >= 60) return `<span class="ml-1 px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 text-[10px] font-sans">信心度 ${it.confidence}%</span>`;
+        return `<span class="ml-1 px-1.5 py-0.5 rounded bg-rose-50 text-rose-700 text-[10px] font-sans">信心度 ${it.confidence}% · 低信心度，需人工確認</span>`;
+      }
+
       function renderMigratePreview() {
         const sec = document.getElementById('migrate-preview-section');
         const sumEl = document.getElementById('migrate-preview-summary');
@@ -11397,6 +12171,7 @@
         const stockItems = checked.filter((x) => x.kind === 'stock');
         const cashItems = checked.filter((x) => x.kind === 'cash');
         const dupCount = migratePreviewItems.filter((x) => x.isDuplicate).length;
+        const lowConfCount = migratePreviewItems.filter((x) => x.lowConfidence).length;
         const fx = state.fx || { TWD: 1, USD: 33.022, HKD: 4.2097, CNY: 4.9525 };
         const rateOf = (c) => (c === 'TWD' ? 1 : safeNum(fx[c], 1));
         const expSumTWD = expItems.reduce((s, x) => s + safeNum(x.amount) * rateOf(x.currency), 0);
@@ -11432,6 +12207,7 @@
 
         sumEl.innerHTML = `
           ${batchBarHtml}
+          ${lowConfCount > 0 ? `<div class="col-span-full rounded-lg bg-rose-50 border border-rose-200/80 px-3.5 py-2 text-xs text-rose-800">⚠️ 其中 ${lowConfCount} 筆為低信心度辨識（信心度 &lt; 60%），已預設不勾選，請逐筆確認金額與品項無誤後再手動勾選匯入；金額與品項可直接在下方表格中修改。</div>` : ''}
           <div class="p-3 rounded-lg bg-[#f7f7f5] hairline">
             <div class="text-[11px] text-zinc-500">待匯入支出</div>
             <div class="mt-0.5 text-sm font-semibold font-mono-num text-emerald-700">${expItems.length} 筆 · ${fmtTWD(expSumTWD)}</div>
@@ -11463,8 +12239,8 @@
                 <td class="py-2 px-2 font-sans"><span class="px-1.5 py-0.5 rounded text-[10px] font-medium ${isInc ? 'bg-rose-50 text-rose-700' : 'bg-emerald-50 text-emerald-700'}">${isInc ? '收入' : '支出'}</span></td>
                 <td class="py-2 px-2 text-zinc-700 whitespace-nowrap">${escapeHtml(it.date)}</td>
                 <td class="py-2 px-2 font-sans text-zinc-700">${escapeHtml(it.category)}</td>
-                <td class="py-2 px-2 font-sans text-zinc-900">${escapeHtml(it.title)}${modBadge}${dupBadge}</td>
-                <td class="py-2 px-2 text-right font-semibold ${isInc ? 'text-rose-700' : 'text-emerald-700'}">${it.currency !== 'TWD' ? `${escapeHtml(it.currency)} ` : ''}${fmtNum(it.amount, it.currency === 'TWD' ? 0 : 2)}</td>
+                <td class="py-2 px-2 font-sans text-zinc-900"><input data-mig-edit-title="${idx}" value="${escapeHtml(it.title)}" class="w-full h-7 px-2 rounded hairline text-xs bg-white" />${modBadge}${dupBadge}${confidenceBadgeHtml(it)}</td>
+                <td class="py-2 px-2 text-right font-semibold ${isInc ? 'text-rose-700' : 'text-emerald-700'}"><span class="mr-1 text-[11px] font-normal">${it.currency !== 'TWD' ? escapeHtml(it.currency) : ''}</span><input data-mig-edit-amount="${idx}" type="number" step="0.01" min="0" value="${it.amount}" class="w-24 h-7 px-2 rounded hairline text-xs text-right font-mono-num bg-white" /></td>
                 <td class="py-2 px-2 font-sans text-zinc-500">${escapeHtml(it.account || it.note || '')}</td>
               </tr>
             `;
@@ -11665,6 +12441,9 @@
       }
 
       function markAiKeysDirtyAndSync() {
+        // 先把 aiApiKey 等舊版單一 Key 欄位同步為池子裡的首組 Key（加密遷移後即為密文），
+        // 避免 saveConfig 把遷移前的明文殘留寫回 localStorage
+        ensureAiKeysPool();
         appConfig.aiKeysUpdatedAtMs = Date.now();
         saveConfig();
         if (currentUser && fbDb && appConfig.syncAiKeysToCloud !== false) {
@@ -11687,7 +12466,7 @@
 
       const btnSaveAiCfg = document.getElementById('btn-save-ai-cfg');
       if (btnSaveAiCfg) {
-        btnSaveAiCfg.addEventListener('click', () => {
+        btnSaveAiCfg.addEventListener('click', async () => {
           const provider = (document.getElementById('cfg-ai-provider').value || 'groq').trim();
           const model = (document.getElementById('cfg-ai-model').value || AI_PROVIDER_DEFAULTS[provider] || '').trim();
           const apiKey = (document.getElementById('cfg-ai-key').value || '').trim();
@@ -11701,6 +12480,22 @@
             showToast('自訂模式請填寫 API Base URL');
             return;
           }
+          // 保險庫已建立但未解鎖時，先解鎖再新增；已解鎖時新 Key 自動加密存放
+          let storedKey = apiKey;
+          if (apiKey) {
+            if (countEncryptedKeys() > 0 && !aiVaultUnlocked) {
+              showToast('保險庫已上鎖，請先在上方輸入加密密碼解鎖後再新增 Key');
+              return;
+            }
+            if (aiVaultUnlocked && aiVaultPassphrase) {
+              try {
+                storedKey = await encryptVaultText(apiKey, aiVaultPassphrase);
+              } catch (err) {
+                showToast('加密新 Key 失敗：' + (err.message || err));
+                return;
+              }
+            }
+          }
           const keys = ensureAiKeysPool();
           const label = rawLabel || `${AI_PROV_NAMES[provider] || provider} #${keys.length + 1}`;
           keys.push({
@@ -11708,7 +12503,7 @@
             label,
             provider,
             model,
-            apiKey,
+            apiKey: storedKey,
             baseUrl,
             enabled: true,
             _updatedAt: Date.now()
@@ -11720,6 +12515,17 @@
           if (lblEl) lblEl.value = '';
           syncAiConfigUI();
           showToast(`已加入「${label}」至輪替清單（共 ${keys.length} 組${currentUser && appConfig.syncAiKeysToCloud !== false ? '，已同步雲端' : ''}）`);
+        });
+      }
+
+      const vaultBannerEl = document.getElementById('cfg-ai-vault-banner');
+      if (vaultBannerEl) {
+        vaultBannerEl.addEventListener('click', (e) => {
+          const btn = e.target.closest('[data-vault-act]');
+          if (btn) handleVaultAction(btn.dataset.vaultAct);
+        });
+        vaultBannerEl.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' && e.target && e.target.id === 'cfg-ai-vault-pw') handleVaultAction('unlock');
         });
       }
 
@@ -11762,12 +12568,19 @@
           }
           const keys = ensureAiKeysPool();
           const label = `OpenRouter（一鍵授權）`;
+          // 保險庫已解鎖時自動加密存放；已上鎖時先以明文暫存並提醒遷移（橫幅會持續提示）
+          let storedKey = data.key;
+          if (countEncryptedKeys() > 0 && !aiVaultUnlocked) {
+            showToast('保險庫已上鎖：OpenRouter Key 將以明文暫存，請解鎖保險庫後重新設定加密密碼遷移');
+          } else if (aiVaultUnlocked && aiVaultPassphrase) {
+            try { storedKey = await encryptVaultText(data.key, aiVaultPassphrase); } catch (err) { /* 加密失敗時退回明文暫存 */ }
+          }
           keys.unshift({
             id: uid('aikey'),
             label,
             provider: 'openrouter',
             model: AI_PROVIDER_DEFAULTS.openrouter || 'openrouter/free',
-            apiKey: data.key,
+            apiKey: storedKey,
             baseUrl: '',
             enabled: true,
             _updatedAt: Date.now()
@@ -12418,8 +13231,8 @@
         return [
           `今天日期為 ${todayISO()}。請${focusMap[targetType] || focusMap.auto}，並只回傳純 JSON 物件（不要其他解釋文字）：`,
           `{`,
-          `  "expenses": [{ "date": "YYYY-MM-DD", "time": "HH:MM（若圖片有顯示時間，無則空字串）", "category": "類別", "title": "品項", "amount": 數字, "currency": "TWD", "account": "帳戶", "note": "" }],`,
-          `  "incomes": [{ "date": "YYYY-MM-DD", "time": "HH:MM（無則空字串）", "category": "薪資收入|獎金|分潤|其他收入", "title": "項目", "amount": 數字, "currency": "TWD", "account": "帳戶", "note": "" }],`,
+          `  "expenses": [{ "date": "YYYY-MM-DD", "time": "HH:MM（若圖片有顯示時間，無則空字串）", "category": "類別", "title": "品項", "amount": 數字, "currency": "TWD", "account": "帳戶", "note": "", "confidence": 0~100整數（你對本筆金額與品項辨識的信心度，字跡模糊或金額不確定時請誠實給低分） }],`,
+          `  "incomes": [{ "date": "YYYY-MM-DD", "time": "HH:MM（無則空字串）", "category": "薪資收入|獎金|分潤|其他收入", "title": "項目", "amount": 數字, "currency": "TWD", "account": "帳戶", "note": "", "confidence": 0~100整數 }],`,
           `  "stocks": [{ "market": "TW|US|HK", "symbol": "代號", "name": "名稱", "shares": 股數, "avgCost": 均價, "currentPrice": 現價, "currency": "TWD|USD|HKD", "broker": "券商" }],`,
           `  "cash": [{ "bank": "銀行或券商名", "currency": "TWD|USD|JPY|HKD|CNY", "amount": 餘額, "note": "" }]`,
           `}`,
@@ -12795,6 +13608,22 @@
       const migPreviewTbody = document.getElementById('migrate-preview-tbody');
       if (migPreviewTbody) {
         migPreviewTbody.addEventListener('change', (e) => {
+          const editTitleIdx = e.target.dataset.migEditTitle;
+          if (editTitleIdx !== undefined) {
+            const item = migratePreviewItems[Number(editTitleIdx)];
+            if (item) { item.title = e.target.value.trim() || item.title; renderMigratePreview(); }
+            return;
+          }
+          const editAmtIdx = e.target.dataset.migEditAmount;
+          if (editAmtIdx !== undefined) {
+            const item = migratePreviewItems[Number(editAmtIdx)];
+            if (item) {
+              const v = safeNum(e.target.value, item.amount);
+              if (v > 0) item.amount = Number(v.toFixed(2));
+              renderMigratePreview();
+            }
+            return;
+          }
           const idx = e.target.dataset.migIdx;
           if (idx === undefined) return;
           const item = migratePreviewItems[Number(idx)];
@@ -15671,9 +16500,9 @@
           '你是精準的繁體中文單據、訂單截圖與金融畫面視覺辨識專家。',
           '你必須**只回傳合法 JSON 物件**，格式如下（不要加任何 JSON 以外的解釋文字）：',
           '{ "reply": "簡短列出本張圖片辨識到的明細摘要", "actions": [ ... ] }',
-          '每筆支出請放入 actions：{"type":"add_expense","date":"YYYY-MM-DD","time":"HH:MM或空字串","title":"圖片中的實際商品或店家名稱","category":"15類擇一","currency":"TWD|CNY|USD|JPY|HKD","amount":純數字,"account":"","deductNow":false,"note":""}',
-          '若圖片明確為薪資／入帳收入，請用：{"type":"add_income","date":"YYYY-MM-DD","name":"收入項目名","category":"薪資收入|獎金|分潤|其他收入","currency":"TWD","amount":純數字,"account":"","depositNow":false,"note":""}',
-          '若圖片為銀行餘額畫面，請用：{"type":"update_cash","bank":"銀行名","currency":"TWD","amount":純數字,"note":""}',
+          '每筆支出請放入 actions：{"type":"add_expense","date":"YYYY-MM-DD","time":"HH:MM或空字串","title":"圖片中的實際商品或店家名稱","category":"15類擇一","currency":"TWD|CNY|USD|JPY|HKD","amount":純數字,"account":"","deductNow":false,"note":"","confidence":0~100整數（你對本筆金額與品項辨識的信心度，字跡模糊或金額不確定時請誠實給低分）}',
+          '若圖片明確為薪資／入帳收入，請用：{"type":"add_income","date":"YYYY-MM-DD","name":"收入項目名","category":"薪資收入|獎金|分潤|其他收入","currency":"TWD","amount":純數字,"account":"","depositNow":false,"note":"","confidence":0~100整數}',
+          '若圖片為銀行餘額畫面，請用：{"type":"update_cash","bank":"銀行名","currency":"TWD","amount":純數字,"note":"","confidence":0~100整數}',
           `支出 category 必須從以下 15 類擇一：${ALL_EXPENSE_CATEGORIES.join('、')}。`,
           '【最高優先防幻覺規則】：每一次請求皆為完全獨立的單張圖片辨識！只能擷取「本次附圖中肉眼實際可見」的文字、品項與金額，嚴禁編造、猜測或輸出任何不在這張圖片中的項目。若圖片中沒有明確金額或明細，actions 必須回傳空陣列 []。'
         ].join('\n');
@@ -15681,7 +16510,7 @@
 
       function buildAiCopilotVisionPrompt(userText = '') {
         const accounts = [...new Set((state.cash || []).map((c) => c.bank).filter(Boolean))];
-        const defaultImgInstruction = '請只根據這張附圖中實際可見的內容，辨識所有購物訂單、發票、收據或帳單明細（含商品/店家名稱、金額、幣別如 CNY/TWD/USD/JPY、日期與分類），在 reply 列出本圖辨識摘要，並在 actions 產生對應的 add_expense / add_income 操作（amount 填正數純數字）。若圖片顯示 ¥ / RMB / 淘寶 / 拼多多 / 京東，currency 請填 CNY；若無顯示年份或日期則預設填今天日期。';
+        const defaultImgInstruction = '請只根據這張附圖中實際可見的內容，辨識所有購物訂單、發票、收據或帳單明細（含商品/店家名稱、金額、幣別如 CNY/TWD/USD/JPY、日期與分類），在 reply 列出本圖辨識摘要，並在 actions 產生對應的 add_expense / add_income 操作（amount 填正數純數字）。若圖片顯示 ¥ / RMB / 淘寶 / 拼多多 / 京東，currency 請填 CNY；若無顯示年份或日期則預設填今天日期。每筆操作請附上 confidence（0~100 整數，代表你對金額與品項辨識的信心度，字跡模糊或金額不確定時請誠實給低分）。';
         return [
           `今天日期：${todayISO()}。`,
           accounts.length ? `使用者現有帳戶清單（僅在圖片明確出現該銀行／支付名稱時填入 account，否則留空字串）：${accounts.join('、')}。` : '',
@@ -15727,7 +16556,8 @@
             amount: Number(amt.toFixed(2)),
             account: String(item.account || item.payment || item.payment_method || '').trim(),
             deductNow: false,
-            note: String(item.note || item.store || item.shop || item.merchant || '').trim()
+            note: String(item.note || item.store || item.shop || item.merchant || '').trim(),
+            confidence: clampConfidence(item.confidence)
           });
         };
 
@@ -15745,7 +16575,8 @@
             amount: Number(amt.toFixed(2)),
             account: String(item.account || '').trim(),
             depositNow: false,
-            note: String(item.note || '').trim()
+            note: String(item.note || '').trim(),
+            confidence: clampConfidence(item.confidence)
           };
         };
 
