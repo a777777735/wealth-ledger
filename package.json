@@ -8,12 +8,17 @@
     "cap:add:ios": "cap add ios",
     "cap:sync": "cap sync",
     "cap:open:android": "cap open android",
-    "cap:open:ios": "cap open ios"
+    "cap:open:ios": "cap open ios",
+    "test": "npm run test:syntax && npm run test:e2e",
+    "test:e2e": "playwright test",
+    "test:syntax": "node --check worker.js && node scripts/check-inline-scripts.mjs"
   },
   "devDependencies": {
     "@capacitor/android": "^6.2.0",
     "@capacitor/cli": "^6.2.0",
     "@capacitor/core": "^6.2.0",
-    "@capacitor/ios": "^6.2.0"
+    "@capacitor/ios": "^6.2.0",
+    "@playwright/test": "^1.49.0",
+    "wrangler": "^3.99.0"
   }
 }
