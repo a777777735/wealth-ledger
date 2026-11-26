@@ -697,3 +697,69 @@ test('19. 切換分頁：捲動位置回到最上方', async ({
   expect(overviewScrollable).toBe(true);
   expect(errors).toEqual([]);
 });
+
+test('20. NVIDIA / Kimi：選 NVIDIA 供應商、模型自動帶入 kimi-k3.1-pro，mock Key 加密存放無明文，mock /api/ai 回應顯示 ✓', async ({
+  page,
+}) => {
+  const mockKey = 'nvapi-test-kimi-k3.1-pro-9f8e7d6c5b4a';
+  const passphrase = 'playwright-test-passphrase';
+  const errors = trackPageErrors(page);
+  await gotoApp(page, { seed: blankState() });
+  await goToTab(page, 'settings');
+
+  // 攔截單測發出的 /api/ai（helpers.js 的 mockApiRoutes 只攔 fx/quotes/history，不攔 /api/ai），
+  // 記錄請求 JSON 並回固定成功回應
+  let capturedAiRequest = null;
+  await page.route('**/api/ai', async (route) => {
+    capturedAiRequest = await route.request().postDataJSON();
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        ok: true,
+        provider: 'nvidia',
+        model: 'moonshotai/kimi-k3.1-pro',
+        text: '{"status":"ok"}',
+      }),
+    });
+  });
+
+  // 選 NVIDIA 供應商：模型自動帶入預設、申請連結指向 NVIDIA Build
+  await page.locator('#cfg-ai-provider').selectOption('nvidia');
+  await expect(page.locator('#cfg-ai-model')).toHaveValue('moonshotai/kimi-k3.1-pro');
+  await expect(page.locator('#cfg-ai-guide-link')).toHaveAttribute(
+    'href',
+    'https://build.nvidia.com/moonshotai/kimi-k3.1-pro',
+  );
+
+  // 加入一組 mock Key（此時還是明文存放）
+  await page.locator('#cfg-ai-key').fill(mockKey);
+  await page.locator('#btn-save-ai-cfg').click();
+  await expect(page.locator('#cfg-ai-key-list')).toContainText('NVIDIA / Kimi');
+  await expect(page.locator('#cfg-ai-key-list')).toContainText('📷 支援圖片');
+  await expect(page.locator('#cfg-ai-key-list')).toContainText('moonshotai/kimi-k3.1-pro');
+
+  // 設定加密密碼並遷移（流程同 test 8）
+  await page.locator('#cfg-ai-vault-banner button[data-vault-act="setup"]').click();
+  await expect(page.locator('#modal-title')).toHaveText('設定金鑰加密密碼');
+  await page.locator('#modal-form input[name="pw1"]').fill(passphrase);
+  await page.locator('#modal-form input[name="pw2"]').fill(passphrase);
+  await page.locator('#modal-form button[type="submit"]').click();
+  await expect(page.locator('#cfg-ai-vault-banner')).toContainText('保險庫已解鎖');
+
+  // localStorage 裡不得出現 mock Key 明文，只能看到 enc1. 密文
+  const rawCfg = await readRawConfig(page);
+  expect(rawCfg).not.toContain(mockKey);
+  expect(rawCfg).toContain('enc1.');
+
+  // 單測該組 Key：mock /api/ai 回成功，列表顯示 ✓ 與模型名稱
+  await page.locator('#cfg-ai-key-list button[data-aikey-act="test"]').click();
+  await expect(page.locator('#cfg-ai-key-list')).toContainText('✓');
+  await expect(page.locator('#cfg-ai-key-list')).toContainText('moonshotai/kimi-k3.1-pro');
+
+  // 攔截到的請求確實走 nvidia 與 kimi-k3.1-pro
+  expect(capturedAiRequest).not.toBeNull();
+  expect(capturedAiRequest.provider).toBe('nvidia');
+  expect(capturedAiRequest.model).toBe('moonshotai/kimi-k3.1-pro');
+  expect(errors).toEqual([]);
+});
