@@ -38,9 +38,9 @@ npm install
 npx playwright install --with-deps chromium
 npm run test:e2e        # 會自動用 wrangler dev 在 8787 啟動本專案再跑測試
 ```
-測試在 `tests/e2e.spec.js`（共 18 個案例），全部用 JavaScript 撰寫，不依賴即時市場價格：
+測試在 `tests/e2e.spec.js`（共 20 個案例），全部用 JavaScript 撰寫，不依賴即時市場價格：
 - 測試用的 `/api/fx`、`/api/quotes`、`/api/history` 都在瀏覽器端攔截，回固定假資料（AAPL 固定 200 美元、匯率固定、走勢 60 筆固定收盤價），斷言只圍繞畫面行為。
-- 覆蓋：儀表板載入（無未捕捉 JS 錯誤、總淨資產、持股列表）、UI 新增持股（含重整後還在）、提醒價設定與觸發徽章／事件、三條線走勢圖（canvas 渲染＋圖表設定含三條虛線＋Y 軸範圍）、報價來源與收盤日期、匯入預覽（取消不寫入／確認才寫入）、清空帳本（確認文字＋按鈕停用）、API Key 加密存放（localStorage 無明文）、芒格式策略推導（IV 與安全邊際算出建議價、套用後儲存、無停損價、走勢圖只畫兩條線）、策略持久化（重整後策略與芒格式欄位仍存在、編輯表單正確回填）、手機版排版（390×844 下總覽／持股／現金頁無橫向溢出，並輸出截圖供人工檢查）、照片上傳（AI 助理、搬家、拍照批次、記帳照片四處點 label 都會開出檔案選擇器）、加密入口常駐（0 組 Key 也能先設加密密碼、設好後新增的 Key 自動加密）、雲端同步預設不勾（未設定過預設不勾選、明確勾選後才持久化）、預設模型一致（無 Key 時助理預設走 Groq，與設定頁預設供應商一致）、總覽圖表（圓環圖例顯示百分比、淨值線以最近快照延伸）、上傳入口同類修復（搬家 CSV／PDF、備份 JSON／Excel 四處點 label 都會開出檔案選擇器）。
+- 覆蓋：儀表板載入（無未捕捉 JS 錯誤、總淨資產、持股列表）、UI 新增持股（含重整後還在）、提醒價設定與觸發徽章／事件、三條線走勢圖（canvas 渲染＋圖表設定含三條虛線＋Y 軸範圍）、報價來源與收盤日期、匯入預覽（取消不寫入／確認才寫入）、清空帳本（確認文字＋按鈕停用）、API Key 加密存放（localStorage 無明文）、芒格式策略推導（IV 與安全邊際算出建議價、套用後儲存、無停損價、走勢圖只畫兩條線）、策略持久化（重整後策略與芒格式欄位仍存在、編輯表單正確回填）、手機版排版（390×844 下總覽／持股／現金頁無橫向溢出，並輸出截圖供人工檢查）、照片上傳（AI 助理、搬家、拍照批次、記帳照片四處點 label 都會開出檔案選擇器）、加密入口常駐（0 組 Key 也能先設加密密碼、設好後新增的 Key 自動加密）、雲端同步預設不勾（未設定過預設不勾選、明確勾選後才持久化）、預設模型一致（無 Key 時助理預設走 Groq，與設定頁預設供應商一致）、總覽圖表（圓環圖例顯示百分比、淨值線以最近快照延伸）、上傳入口同類修復（搬家 CSV／PDF、備份 JSON／Excel 四處點 label 都會開出檔案選擇器）、NVIDIA 供應商（選 NVIDIA 自動帶入 moonshotai/kimi-k3.1-pro、mock Key 加密存放無明文、mock /api/ai 回應顯示 ✓）。
 
 ### CI（GitHub Actions）
 `.github/workflows/test.yml`：push 到 main、pull_request 到 main、或手動 workflow_dispatch 都會觸發；先跑語法檢查，通過後在背景啟動 `npx wrangler dev --port 8787`，先做首頁 200 與 `/api/fx` 回 JSON 的冒煙檢查，再跑 Playwright。**不需要任何 secret。**
@@ -81,6 +81,11 @@ npm run test:e2e        # 會自動用 wrangler dev 在 8787 啟動本專案再�
 - 加密密碼設定入口常駐顯示：即使是 0 組 Key，也能先設密碼再輸 Key；已設密碼但尚無加密 Key 時顯示「保險庫已就緒」。
 - 「同步多組 API Key 至我的私人 Google 雲端」預設為**不勾選**（未設定過的使用者預設不同步）；已明確勾選過的使用者維持其選擇。
 - 新增 **Key 健康度面板**（僅存本機）：每組 Key 的最後使用時間、成功／失敗次數、耗時、最後錯誤與最近自動切換紀錄。
+
+### AI 供應商：NVIDIA / Kimi K3.1 Pro（新增）
+- 設定頁「AI 供應商」新增 **NVIDIA / Kimi**：預設模型 `moonshotai/kimi-k3.1-pro`（Moonshot 2.8T 參數多模態模型，1M 上下文，支援圖片），走 OpenAI 相容格式，後端 Worker 代理到 `https://integrate.api.nvidia.com/v1`。
+- Key 格式為 `nvapi-` 開頭，照現有流程加入輪替清單，可設加密密碼以 AES-GCM 加密存放；免費試用層約 40 RPM，僅適合測試。
+- 預設供應商仍是 Groq，不變；NVIDIA 只是多一個可選項。設定方式：到「匯率與備份 → AI 模型設定」選 NVIDIA / Kimi，貼上自己在 [NVIDIA Build](https://build.nvidia.com/moonshotai/kimi-k3.1-pro) 申請的免費 Key，按「＋ 加入輪替清單」。
 
 ### 匯入預覽與清空保護
 - JSON／Excel 匯入前先顯示預覽（各項目筆數與說明），確認後才寫入；匯入將完整覆蓋對應項目。
