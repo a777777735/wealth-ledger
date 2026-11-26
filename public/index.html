@@ -1616,6 +1616,7 @@
                   <option value="gemini">Google Gemini（免費額度・支援圖片＋PDF・尖峰易忙）</option>
                   <option value="openai">OpenAI（GPT-4o mini / GPT-4.1・付費穩定）</option>
                   <option value="anthropic">Anthropic Claude（支援圖片＋PDF・付費）</option>
+                  <option value="nvidia">NVIDIA / Kimi K3.1 Pro（免費試用・1M 上下文・支援圖片）</option>
                   <option value="custom">自訂 OpenAI 相容 API（DeepSeek / Ollama 等）</option>
                 </select>
               </div>
@@ -1653,6 +1654,7 @@
                 <a href="https://openrouter.ai/keys" target="_blank" rel="noopener noreferrer" class="underline hover:text-zinc-900">OpenRouter</a>
                 <a href="https://console.mistral.ai/api-keys" target="_blank" rel="noopener noreferrer" class="underline hover:text-zinc-900">Mistral</a>
                 <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" class="underline hover:text-zinc-900">Google AI Studio</a>
+                <a href="https://build.nvidia.com/moonshotai/kimi-k3.1-pro" target="_blank" rel="noopener noreferrer" class="underline hover:text-zinc-900">NVIDIA Build</a>
               </div>
               <div class="flex flex-wrap items-center gap-2">
                 <button id="btn-openrouter-oauth" type="button" class="btn-focus h-8 px-3 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-medium">⚡ 一鍵連結 OpenRouter</button>
@@ -10998,6 +11000,7 @@
         gemini: 'gemini-3.8-flash',
         openai: 'gpt-4o-mini',
         anthropic: 'claude-sonnet-4-20250514',
+        nvidia: 'moonshotai/kimi-k3.1-pro',
         custom: ''
       };
       // 預設 AI 供應商唯一來源：設定頁與無 Key 時的 AI 呼叫 fallback 共用，勿在各處寫死 'groq' 或 'gemini'
@@ -11045,6 +11048,12 @@
           url: 'https://console.anthropic.com/settings/keys',
           linkText: '前往 Anthropic 申請 API Key ↗'
         },
+        nvidia: {
+          name: 'NVIDIA / Kimi',
+          text: '免費試用：Moonshot Kimi K3.1 Pro（2.8T 參數多模態，1M 上下文，支援圖片），免費層約 40 RPM，適合測試。',
+          url: 'https://build.nvidia.com/moonshotai/kimi-k3.1-pro',
+          linkText: '前往 NVIDIA Build 申請免費 API Key ↗'
+        },
         custom: {
           name: '自訂 OpenAI 相容',
           text: '可接 DeepSeek、SiliconFlow、Ollama 等任何 OpenAI 相容端點，請填寫下方 Base URL 與 Model ID。',
@@ -11052,7 +11061,7 @@
           linkText: ''
         }
       };
-      let aiServerKeyStatus = { cloudflare: false, groq: false, openrouter: false, mistral: false, gemini: false, openai: false, anthropic: false, custom: false };
+      let aiServerKeyStatus = { cloudflare: false, groq: false, openrouter: false, mistral: false, gemini: false, openai: false, anthropic: false, nvidia: false, custom: false };
       let migrateTableWorkbook = null;
       let migrateTableHeaders = [];
       let migrateTableRows = [];
@@ -11086,6 +11095,7 @@
         gemini: 'Google Gemini',
         openai: 'OpenAI',
         anthropic: 'Anthropic Claude',
+        nvidia: 'NVIDIA / Kimi',
         custom: '自訂 OpenAI 相容'
       };
       const aiKeyTestStates = {}; // { [id]: { status: 'idle'|'testing'|'ok'|'fail', msg: '' } }
@@ -11412,7 +11422,7 @@
         const p = String(k.provider || '').toLowerCase();
         const m = String(k.model || '').toLowerCase();
         // Providers whose backend auto-promotes to a vision model when attachments are present
-        if (p === 'gemini' || p === 'anthropic' || p === 'cloudflare' || p === 'mistral' || p === 'groq' || (p === 'openrouter' && (!m || m === 'openrouter/free'))) return true;
+        if (p === 'gemini' || p === 'anthropic' || p === 'cloudflare' || p === 'mistral' || p === 'groq' || p === 'nvidia' || (p === 'openrouter' && (!m || m === 'openrouter/free'))) return true;
         // Block known text-only models on OpenRouter / OpenAI / Custom
         if (/gpt-oss|llama-3\.[13]|deepseek|qwq|qwen3-32b|qwen-2\.5-72b-instruct$|qwen2\.5-coder|codestral|mistral-nemo|kimi|phi-3|gemma-7b|gemma-2-/i.test(m) && !/vl|vision|pixtral|scout|maverick|qwen3\.8|gemini|gpt-4o|gpt-4\.1|gpt-5|claude-3|claude-sonnet|claude-opus/i.test(m)) {
           return false;
