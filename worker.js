@@ -328,6 +328,7 @@ function handleAiStatus(env) {
       gemini: Boolean(env && env.GEMINI_API_KEY),
       openai: Boolean(env && env.OPENAI_API_KEY),
       anthropic: Boolean(env && env.ANTHROPIC_API_KEY),
+      nvidia: Boolean(env && env.NVIDIA_API_KEY),
       custom: Boolean(env && env.CUSTOM_AI_API_KEY)
     }
   });
@@ -367,6 +368,7 @@ async function handleAiProxy(request, env) {
     gemini: env && env.GEMINI_API_KEY,
     openai: env && env.OPENAI_API_KEY,
     anthropic: env && env.ANTHROPIC_API_KEY,
+    nvidia: env && env.NVIDIA_API_KEY,
     custom: env && env.CUSTOM_AI_API_KEY
   };
   const apiKey = userKey || String(envKeyMap[provider] || '').trim();
@@ -405,26 +407,30 @@ async function handleAiProxy(request, env) {
     } else if (provider === 'anthropic') {
       usedModel = String(body.model || 'claude-sonnet-4-20250514').trim();
       text = await callAnthropic({ apiKey, model: usedModel, systemPrompt, prompt, attachments });
-    } else if (['openai', 'groq', 'openrouter', 'mistral', 'custom'].includes(provider)) {
+    } else if (['openai', 'groq', 'openrouter', 'mistral', 'nvidia', 'custom'].includes(provider)) {
       const presetBaseUrls = {
         openai: 'https://api.openai.com/v1',
         groq: 'https://api.groq.com/openai/v1',
         openrouter: 'https://openrouter.ai/api/v1',
-        mistral: 'https://api.mistral.ai/v1'
+        mistral: 'https://api.mistral.ai/v1',
+        nvidia: 'https://integrate.api.nvidia.com/v1'
       };
       const hasImg = attachments.some((a) => String(a && a.mimeType || '').startsWith('image/'));
       const presetDefaults = {
         openai: 'gpt-4o-mini',
         groq: hasImg ? 'qwen/qwen3.8-27b' : 'llama-3.3-70b-versatile',
         openrouter: hasImg ? 'nvidia/nemotron-3.5-super-vl:free' : 'meta-llama/llama-3.3-70b-instruct:free',
-        mistral: hasImg ? 'pixtral-12b-2409' : 'mistral-small-latest'
+        mistral: hasImg ? 'pixtral-12b-2409' : 'mistral-small-latest',
+        nvidia: 'moonshotai/kimi-k3.1-pro'
       };
       const presetFallbacks = {
         groq: hasImg ? [] : ['openai/gpt-oss-120b', 'openai/gpt-oss-20b', 'qwen/qwen3.8-27b'],
         openrouter: hasImg
           ? ['google/gemma-3-27b-it:free', 'mistralai/mistral-small-3.1-24b-instruct:free', 'qwen/qwen2.5-vl-32b-instruct:free']
           : ['google/gemma-3-27b-it:free', 'mistralai/mistral-small-3.1-24b-instruct:free', 'openrouter/free'],
-        mistral: ['pixtral-12b-2409']
+        mistral: ['pixtral-12b-2409'],
+        // NVIDIA 目前只有已驗證的 K3.1 Pro，未接備援模型
+        nvidia: []
       };
       const baseUrl = provider === 'custom'
         ? String(body.baseUrl || (env && env.CUSTOM_AI_BASE_URL) || '').trim()
@@ -734,6 +740,7 @@ async function handleAiModels(request, env) {
     gemini: env && env.GEMINI_API_KEY,
     openai: env && env.OPENAI_API_KEY,
     anthropic: env && env.ANTHROPIC_API_KEY,
+    nvidia: env && env.NVIDIA_API_KEY,
     custom: env && env.CUSTOM_AI_API_KEY
   };
   const apiKey = String(body.apiKey || envKeyMap[provider] || '').trim();
@@ -810,7 +817,8 @@ async function handleAiModels(request, env) {
       const presetBaseUrls = {
         groq: 'https://api.groq.com/openai/v1',
         mistral: 'https://api.mistral.ai/v1',
-        openai: 'https://api.openai.com/v1'
+        openai: 'https://api.openai.com/v1',
+        nvidia: 'https://integrate.api.nvidia.com/v1'
       };
       const baseUrl = provider === 'custom' ? customBaseUrl : presetBaseUrls[provider];
       if (!baseUrl) return jsonResp({ ok: false, error: '請先填寫 API Base URL' }, 400);
@@ -837,6 +845,9 @@ async function handleAiModels(request, env) {
           } else if (provider === 'openai') {
             if (/gpt-4o-mini|gpt-4\.1-mini|gpt-5-mini/i.test(id)) score += 40;
             if (/gpt-4\.1|gpt-4o|gpt-5/i.test(id)) score += 20;
+          } else if (provider === 'nvidia') {
+            if (/kimi-k3/i.test(id)) score += 40;
+            if (/kimi-k2/i.test(id)) score += 20;
           }
           return { id, label: id, score };
         })
