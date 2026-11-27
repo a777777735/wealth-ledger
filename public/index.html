@@ -460,6 +460,41 @@
             </div>
           </div>
 
+          <!-- Cash Wallet Card (current location) -->
+          <div class="bg-white rounded-xl p-5 hairline space-y-3">
+            <div class="flex flex-wrap items-baseline justify-between gap-2">
+              <div class="flex items-center gap-2">
+                <span class="text-xs font-semibold text-zinc-900">手頭現金 · <span id="cashcard-location-label">台灣</span></span>
+                <span id="cashcard-low-badge" class="hidden text-[11px] px-1.5 py-0.5 rounded bg-rose-50 text-rose-700 border border-rose-200/70">低於門檻，記得提領</span>
+              </div>
+              <div class="flex items-center gap-2">
+                <select id="cashcard-location-select" class="h-7 px-2 rounded-lg hairline bg-white text-xs text-zinc-700">
+                  <option value="TW">台灣</option>
+                  <option value="CN">中國大陸</option>
+                  <option value="HK">香港</option>
+                  <option value="US">美國</option>
+                  <option value="OTHER">其他</option>
+                </select>
+                <button id="btn-cashcard-withdraw" type="button" class="btn-focus h-7 px-3 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-medium">提領現金 →</button>
+              </div>
+            </div>
+            <div class="grid grid-cols-3 gap-3 text-xs">
+              <div>
+                <div class="text-zinc-500">手頭現金餘額</div>
+                <div id="cashcard-balance" class="mt-1 text-lg font-semibold text-zinc-900 font-mono-num">--</div>
+              </div>
+              <div>
+                <div class="text-zinc-500">本月現金支出</div>
+                <div id="cashcard-spent" class="mt-1 text-lg font-semibold text-rose-700 font-mono-num">--</div>
+              </div>
+              <div>
+                <div class="text-zinc-500">剩餘現金</div>
+                <div id="cashcard-remaining" class="mt-1 text-lg font-semibold text-emerald-700 font-mono-num">--</div>
+              </div>
+            </div>
+            <div id="cashcard-note" class="text-[11px] text-zinc-500">尚未建立手頭現金帳戶</div>
+          </div>
+
           <!-- Asymmetric Visual Hierarchy: Hero Trend Chart (8 cols) + Allocation Breakdown List (4 cols) -->
           <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
             <div class="lg:col-span-8 bg-white rounded-xl p-6 hairline flex flex-col justify-between gap-3">
@@ -639,6 +674,7 @@
                 <p class="text-xs text-zinc-500 mt-0.5">跨台幣、美金、港幣、人民幣即時換算折合台幣</p>
               </div>
               <div class="flex flex-wrap items-center gap-2">
+                <button id="btn-cash-withdraw" type="button" class="btn-focus h-8 px-3.5 rounded-lg bg-white hover:bg-zinc-50 text-zinc-800 hairline text-xs font-medium transition-colors duration-150">提領現金</button>
                 <button id="btn-cash-transfer" type="button" class="btn-focus h-8 px-3.5 rounded-lg bg-white hover:bg-zinc-50 text-zinc-800 hairline text-xs font-medium transition-colors duration-150">帳戶轉帳</button>
                 <button id="btn-add-cash" type="button" class="btn-focus h-8 px-3.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-medium transition-colors duration-150">新增現金帳戶</button>
               </div>
@@ -1596,6 +1632,35 @@
 
         <!-- TAB 8: SETTINGS, CLOUD SYNC & BACKUP -->
         <section id="tab-settings" class="tab-panel hidden space-y-6">
+          <!-- Location & Cash Wallet -->
+          <div class="bg-white rounded-xl p-6 hairline space-y-4">
+            <div>
+              <h2 class="text-base font-semibold text-zinc-900">所在地與手頭現金</h2>
+              <p class="text-xs text-zinc-500 mt-0.5">所在地決定新增支出的預設幣別與預設扣款帳戶；在台灣以現金為主時，請建立手頭現金帳戶並提領現金備用（非大陸地區時，CNY 帳戶不會被設為預設）</p>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div class="space-y-1.5">
+                <label for="cfg-location" class="block text-xs font-medium text-zinc-700">當前所在地</label>
+                <select id="cfg-location" class="w-full h-9 px-3 rounded-lg hairline bg-white text-xs font-medium text-zinc-800">
+                  <option value="TW">台灣（TWD）</option>
+                  <option value="CN">中國大陸（CNY）</option>
+                  <option value="HK">香港（HKD）</option>
+                  <option value="US">美國（USD）</option>
+                  <option value="OTHER">其他（TWD）</option>
+                </select>
+              </div>
+              <div class="space-y-1.5">
+                <label for="cfg-cash-low-threshold" class="block text-xs font-medium text-zinc-700">手頭現金低額提醒門檻（所在地幣別）</label>
+                <input id="cfg-cash-low-threshold" type="number" step="1" min="0" value="5000" class="w-full h-9 px-3 rounded-lg hairline bg-white text-xs font-mono-num" />
+              </div>
+              <div class="space-y-1.5">
+                <label class="block text-xs font-medium text-zinc-700">儲存</label>
+                <button id="btn-save-location-cfg" type="button" class="btn-focus h-9 px-3.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-white text-xs font-medium">儲存所在地設定</button>
+              </div>
+            </div>
+            <p class="text-[11px] text-zinc-500">切換所在地後，新增隨機／固定支出的幣別預設會跟著變；手頭現金餘額低於門檻時，總覽頁的手頭現金卡會提醒提領。設定隨 JSON 備份一起匯出匯入。</p>
+          </div>
+
           <!-- AI Provider Settings (Multi-Key Failover Pool) -->
           <div class="bg-white rounded-xl p-6 hairline space-y-4">
             <div class="flex flex-wrap items-start justify-between gap-2">
@@ -2055,6 +2120,9 @@
       function createBlankData() {
         return {
           version: '1.5',
+          // 所在地（預設台灣）與手頭現金低額提醒門檻（所在地幣別，預設 5000）
+          currentLocation: 'TW',
+          cashLowThreshold: 5000,
           fx: { TWD: 1, USD: 33.022, JPY: 0.2069, HKD: 4.2097, CNY: 4.9525 },
           cash: [],
           stocks: [],
@@ -2098,6 +2166,70 @@
         { value: 'management', label: '管理層誠信問題' },
         { value: 'opportunity', label: '出現更好機會' }
       ];
+
+      // 所在地（currentLocation）：決定新增支出的預設幣別與預設扣款帳戶。
+      // 存在 state.currentLocation（隨 JSON 備份匯出匯入），舊備份沒有此欄位時預設台灣。
+      const LOCATION_OPTIONS = [
+        { value: 'TW', label: '台灣', currency: 'TWD' },
+        { value: 'CN', label: '中國大陸', currency: 'CNY' },
+        { value: 'HK', label: '香港', currency: 'HKD' },
+        { value: 'US', label: '美國', currency: 'USD' },
+        { value: 'OTHER', label: '其他', currency: 'TWD' }
+      ];
+      const LOCATION_VALUES = LOCATION_OPTIONS.map((o) => o.value);
+      function getCurrentLocation() {
+        return LOCATION_VALUES.includes(state.currentLocation) ? state.currentLocation : 'TW';
+      }
+      function getLocationCurrency(loc) {
+        const opt = LOCATION_OPTIONS.find((o) => o.value === (loc || getCurrentLocation()));
+        return opt ? opt.currency : 'TWD';
+      }
+      function getLocationLabel(loc) {
+        const opt = LOCATION_OPTIONS.find((o) => o.value === (loc || getCurrentLocation()));
+        return opt ? opt.label : '台灣';
+      }
+      function setCurrentLocation(loc) {
+        const next = LOCATION_VALUES.includes(loc) ? loc : 'TW';
+        state.currentLocation = next;
+        saveState();
+        renderAll();
+        showToast(`所在地已切換為${getLocationLabel(next)}，新增支出預設幣別 ${getLocationCurrency(next)}`);
+      }
+      // 現金帳戶種類：'cash' 手頭現金／'bank' 銀行帳戶；舊資料沒有 kind 一律視為銀行
+      function normalizeCashRecord(c) {
+        if (!c || typeof c !== 'object') return c;
+        c.kind = (c.kind === 'cash' || c.kind === 'bank') ? c.kind : 'bank';
+        return c;
+      }
+      function getCashKind(c) {
+        return (c && c.kind === 'cash') ? 'cash' : 'bank';
+      }
+      // 非大陸地區時，CNY 帳戶不做為預設扣款帳戶（帳戶清單不排在前面、不標 ⭐）
+      function isEffectiveDefaultDebit(c) {
+        if (!c || !c.isDefaultDebit) return false;
+        if (String(c.currency || 'TWD').toUpperCase() === 'CNY' && getCurrentLocation() !== 'CN') return false;
+        return true;
+      }
+      // 當前所在地手頭現金統計：錢包餘額、本月現金支出、剩餘現金（餘額－本月未扣款現金支出）
+      function getCashWalletStats() {
+        const loc = getCurrentLocation();
+        const cur = getLocationCurrency(loc);
+        const wallets = (state.cash || []).filter((c) => getCashKind(c) === 'cash' && String(c.currency || 'TWD').toUpperCase() === cur);
+        const balance = wallets.reduce((s, c) => s + safeNum(c.amount), 0);
+        const walletNames = new Set(wallets.map((c) => c.bank));
+        const ym = todayISO().slice(0, 7);
+        let spent = 0;
+        let unpaid = 0;
+        (state.randomExpenses || []).forEach((e) => {
+          if (String(e.date || '').slice(0, 7) !== ym) return;
+          if (String(e.currency || 'TWD').toUpperCase() !== cur) return;
+          const isCashAcc = walletNames.has(e.account) || e.account === `現金（${cur}）`;
+          if (!isCashAcc) return;
+          spent += safeNum(e.amount);
+          if ((e.deductStatus || 'unpaid') !== 'paid') unpaid += safeNum(e.amount);
+        });
+        return { loc, cur, balance, spent, unpaid, remaining: balance - unpaid, wallets };
+      }
 
       // 持股提醒價／報價詮釋資料正規化（舊資料、JSON／Excel 匯入皆走這裡補預設值）
       // buyPrice/stopPrice/takeProfitPrice：0 代表未設定；quoteSource：yahoo/twse/csv/finnhub/manual；
@@ -2738,6 +2870,10 @@
         if (!s.fx.JPY) s.fx.JPY = 0.2069;
         if (!s.budgets || typeof s.budgets !== 'object') s.budgets = {};
         if (!s._deletedIds || typeof s._deletedIds !== 'object') s._deletedIds = {};
+        // 所在地與現金門檻：舊資料沒有時補預設值；舊現金帳戶沒有 kind 一律視為銀行
+        if (!LOCATION_VALUES.includes(s.currentLocation)) s.currentLocation = 'TW';
+        s.cashLowThreshold = Math.max(0, safeNum(s.cashLowThreshold, 5000));
+        if (Array.isArray(s.cash)) s.cash.forEach(normalizeCashRecord);
         return s;
       }
 
@@ -3722,6 +3858,34 @@
       }
 
       // Overview Rendering
+      // 手頭現金卡（總覽頁）：當前所在地幣別的手頭現金錢包餘額、本月現金支出、剩餘現金
+      function renderCashCard() {
+        const stats = getCashWalletStats();
+        const labelEl = document.getElementById('cashcard-location-label');
+        if (labelEl) labelEl.textContent = getLocationLabel(stats.loc);
+        const selEl = document.getElementById('cashcard-location-select');
+        if (selEl) selEl.value = stats.loc;
+        const balEl = document.getElementById('cashcard-balance');
+        if (balEl) balEl.textContent = `${stats.cur} ${stats.balance.toLocaleString('zh-TW', { maximumFractionDigits: 2 })}`;
+        const spentEl = document.getElementById('cashcard-spent');
+        if (spentEl) spentEl.textContent = `${stats.cur} ${stats.spent.toLocaleString('zh-TW', { maximumFractionDigits: 2 })}`;
+        const remEl = document.getElementById('cashcard-remaining');
+        if (remEl) remEl.textContent = `${stats.cur} ${stats.remaining.toLocaleString('zh-TW', { maximumFractionDigits: 2 })}`;
+        const threshold = Math.max(0, safeNum(state.cashLowThreshold, 5000));
+        const badgeEl = document.getElementById('cashcard-low-badge');
+        if (badgeEl) badgeEl.classList.toggle('hidden', !(stats.wallets.length > 0 && stats.balance < threshold));
+        const noteEl = document.getElementById('cashcard-note');
+        if (noteEl) {
+          if (stats.wallets.length === 0) {
+            noteEl.textContent = `尚未建立${getLocationLabel(stats.loc)}的手頭現金帳戶（現金頁「新增現金帳戶」→種類選「手頭現金」）`;
+          } else if (stats.balance < threshold) {
+            noteEl.textContent = `手頭現金低於門檻 ${stats.cur} ${threshold.toLocaleString('zh-TW')}，建議從銀行提領現金補充。剩餘現金＝餘額－本月未扣款現金支出。`;
+          } else {
+            noteEl.textContent = `剩餘現金＝手頭現金餘額－本月未扣款現金支出（${stats.cur} ${stats.unpaid.toLocaleString('zh-TW', { maximumFractionDigits: 2 })}）。`;
+          }
+        }
+      }
+
       function renderOverview(totals) {
         const nw = totals.netWorthTWD || 1;
         const fxBaseText = `USD ${safeNum(state.fx.USD).toFixed(2)} · HKD ${safeNum(state.fx.HKD).toFixed(2)} · CNY ${safeNum(state.fx.CNY).toFixed(2)}${state.fx.JPY ? ` · JPY ${safeNum(state.fx.JPY).toFixed(4)}` : ''}`;
@@ -3782,6 +3946,8 @@
         if (expFootEl) {
           expFootEl.textContent = `本月實際已記帳 ${fmtTWD(totals.randomExpenseThisMonthTWD)} ｜ 預估月淨結餘（低標）${netSurplusMin >= 0 ? '+' : ''}${fmtTWD(netSurplusMin)}`;
         }
+
+        renderCashCard();
 
         // Ranked Horizontal Bars for Allocation (Liquid Net Worth: Cash + Stocks)
         const allocItems = [
@@ -4383,15 +4549,18 @@
           const amt = safeNum(c.amount);
           const twd = amt * rateOf(c.currency);
           const pct = (twd / totalCash) * 100;
-          const defBadge = c.isDefaultDebit
+          const defBadge = isEffectiveDefaultDebit(c)
             ? `<span class="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 text-[10px] font-medium align-middle">⭐ ${escapeHtml(c.currency)} 預設扣款</span>`
+            : '';
+          const kindBadge = getCashKind(c) === 'cash'
+            ? `<span class="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded bg-sky-50 text-sky-700 text-[10px] font-medium align-middle">💵 手頭現金</span>`
             : '';
           const defBtn = c.isDefaultDebit
             ? `<button type="button" data-action="unset-default-cash" data-id="${escapeHtml(c.id)}" class="text-emerald-700 hover:text-zinc-600 text-xs font-medium mr-2.5">取消預設</button>`
             : `<button type="button" data-action="set-default-cash" data-id="${escapeHtml(c.id)}" class="text-zinc-500 hover:text-emerald-700 text-xs font-medium mr-2.5">設為預設扣款</button>`;
           return `
             <tr class="hover:bg-[#f7f7f5] transition-colors duration-150">
-              <td class="py-3 px-2 font-sans font-medium text-zinc-900">${escapeHtml(c.bank)}${defBadge}</td>
+              <td class="py-3 px-2 font-sans font-medium text-zinc-900">${escapeHtml(c.bank)}${defBadge}${kindBadge}</td>
               <td class="py-3 px-2 text-xs text-zinc-500">${escapeHtml(c.currency)}</td>
               <td class="py-3 px-2 text-right text-zinc-800">${amt.toLocaleString('zh-TW', { maximumFractionDigits: 2 })}</td>
               <td class="py-3 px-2 text-right font-medium text-zinc-900">${fmtTWD(twd)}</td>
@@ -5989,6 +6158,10 @@
         document.getElementById('cfg-firebase-json').value = appConfig.firebaseConfigText || '';
         document.getElementById('cfg-auto-refresh').checked = appConfig.autoRefresh !== false;
         document.getElementById('cfg-refresh-interval').value = String(safeNum(appConfig.refreshIntervalMin, 5));
+        const locSel = document.getElementById('cfg-location');
+        if (locSel) locSel.value = getCurrentLocation();
+        const thrInput = document.getElementById('cfg-cash-low-threshold');
+        if (thrInput) thrInput.value = String(Math.max(0, safeNum(state.cashLowThreshold, 5000)));
         if (typeof syncAiConfigUI === 'function') syncAiConfigUI();
         updateCloudStatusUI();
       }
@@ -7153,7 +7326,7 @@
         const cur = String(currency || 'TWD').toUpperCase();
         const list = (state.cash || []).filter((c) => String(c.currency || 'TWD').toUpperCase() === cur && c.bank);
         if (!list.length) return null;
-        const explicit = list.find((c) => Boolean(c.isDefaultDebit));
+        const explicit = list.find((c) => isEffectiveDefaultDebit(c));
         if (explicit) return explicit;
         return allowFallback ? list[0] : null;
       }
@@ -7194,7 +7367,7 @@
             matchingBanks.push(c);
           }
         });
-        matchingBanks.sort((a, b) => (b.isDefaultDebit ? 1 : 0) - (a.isDefaultDebit ? 1 : 0));
+        matchingBanks.sort((a, b) => (isEffectiveDefaultDebit(b) ? 1 : 0) - (isEffectiveDefaultDebit(a) ? 1 : 0));
         const cashOpt = `現金（${cur}）`;
         const creditOpt = `信用卡（${cur}）`;
         const validValues = new Set([
@@ -7211,8 +7384,8 @@
           html += `<optgroup label="${escapeHtml(cur)} 銀行卡／帳戶（可自動扣款）">` +
             matchingBanks.map((b) => {
               const balStr = safeNum(b.amount).toLocaleString('zh-TW', { maximumFractionDigits: 2 });
-              const prefix = b.isDefaultDebit ? '⭐ ' : '';
-              const defTag = b.isDefaultDebit ? '預設扣款 · ' : '';
+              const prefix = isEffectiveDefaultDebit(b) ? '⭐ ' : '';
+              const defTag = isEffectiveDefaultDebit(b) ? '預設扣款 · ' : '';
               return `<option value="${escapeHtml(b.bank)}" ${targetVal === b.bank ? 'selected' : ''}>${prefix}${escapeHtml(b.bank)}（${defTag}餘額 ${escapeHtml(cur)} ${balStr}）</option>`;
             }).join('') +
             '</optgroup>';
@@ -7799,13 +7972,17 @@
 
       function openCashModal(item = null) {
         const isEdit = Boolean(item);
-        const c = item || { bank: '', currency: 'TWD', amount: 0, isDefaultDebit: false, note: '' };
+        const c = item || { bank: '', currency: 'TWD', amount: 0, kind: 'bank', isDefaultDebit: false, note: '' };
         const html = `
           <div><label class="block text-xs font-medium text-zinc-600 mb-1">銀行 / 帳戶名稱</label><input name="bank" required value="${escapeHtml(c.bank)}" class="w-full h-9 px-3 rounded-lg hairline text-sm" /></div>
           <div class="grid grid-cols-2 gap-3">
             <div><label class="block text-xs font-medium text-zinc-600 mb-1">幣別</label><select name="currency" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white">${buildCurrencyOptionsHtml(c.currency, true)}</select></div>
             <div><label class="block text-xs font-medium text-zinc-600 mb-1">原幣餘額</label><input name="amount" type="number" step="0.01" required value="${safeNum(c.amount)}" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" /></div>
           </div>
+          <div><label class="block text-xs font-medium text-zinc-600 mb-1">帳戶種類</label><select name="kind" class="w-full h-9 px-2.5 rounded-lg hairline text-sm bg-white">
+            <option value="bank" ${getCashKind(c) === 'bank' ? 'selected' : ''}>銀行帳戶（銀行／券商存款）</option>
+            <option value="cash" ${getCashKind(c) === 'cash' ? 'selected' : ''}>手頭現金（皮夾／家中現金，例：台灣現金）</option>
+          </select></div>
           <label class="flex items-start gap-2 rounded-lg bg-[#f7f7f5] hairline px-3 py-2.5 text-xs text-zinc-700 cursor-pointer select-none">
             <input name="isDefaultDebit" type="checkbox" value="1" ${c.isDefaultDebit ? 'checked' : ''} class="mt-0.5 rounded border-zinc-300 text-zinc-900" />
             <span>
@@ -7823,6 +8000,7 @@
             bank: String(fd.get('bank')).trim(),
             currency: cur,
             amount: safeNum(fd.get('amount')),
+            kind: (fd.get('kind') === 'cash' ? 'cash' : 'bank'),
             isDefaultDebit: isDef,
             note: String(fd.get('note')).trim()
           };
@@ -8949,7 +9127,7 @@
 
       function openFixedExpenseModal(item = null) {
         const isEdit = Boolean(item);
-        const e = item || { name: '', category: '居住與房貸', currency: 'TWD', amount: 0, cycleMonths: 1, payday: '每月 1 號', account: '', status: 'active', note: '' };
+        const e = item || { name: '', category: '居住與房貸', currency: getLocationCurrency(), amount: 0, cycleMonths: 1, payday: '每月 1 號', account: '', status: 'active', note: '' };
         const initStatus = e.status === 'inactive' ? 'inactive' : 'active';
         const html = `
           <p class="text-[11px] text-zinc-500 bg-[#f7f7f5] hairline rounded-lg px-3 py-2">此處僅建立固定支出名目與月均／年化預估（不會立即扣款）；實際扣款請點「登記扣款」，補登過去月份請點「批次補登多筆歷史」。</p>
@@ -9003,7 +9181,9 @@
 
       function openRandomExpenseModal(item = null) {
         const isEdit = Boolean(item && item.id);
-        const r = item || { date: todayISO(), category: '餐飲美食', title: '', currency: 'TWD', amount: 0, account: getDefaultDebitAccountForCurrency('TWD'), deductStatus: 'unpaid', note: '' };
+        // 新增時幣別與帳戶預設跟著所在地走（台灣→TWD、中國大陸→CNY、香港→HKD、美國→USD）
+        const locCur = getLocationCurrency();
+        const r = item || { date: todayISO(), category: '餐飲美食', title: '', currency: locCur, amount: 0, account: getDefaultDebitAccountForCurrency(locCur), deductStatus: 'unpaid', note: '' };
         const html = `
           ${buildPhotoAutofillBarHtml('拍收據／發票／消費截圖 AI 自動填單')}
           <div class="grid grid-cols-2 gap-3">
@@ -9675,8 +9855,11 @@
             }
             const next = {
               version: parsed.version || '1.5',
+              // 所在地與現金門檻隨備份一起還原；舊備份沒有時預設台灣／5000
+              currentLocation: LOCATION_VALUES.includes(parsed.currentLocation) ? parsed.currentLocation : 'TW',
+              cashLowThreshold: Math.max(0, safeNum(parsed.cashLowThreshold, 5000)),
               fx: parsed.fx || { TWD: 1, USD: 33.022, HKD: 4.2097, CNY: 4.9525 },
-              cash: parsed.cash,
+              cash: (parsed.cash || []).map(normalizeCashRecord),
               stocks: parsed.stocks.map(normalizeStockRecord),
               investments: parsed.investments,
               fixedIncomes: Array.isArray(parsed.fixedIncomes) ? parsed.fixedIncomes : [],
@@ -9699,6 +9882,7 @@
                 { label: '股票持倉', count: next.stocks.length, note: '含提醒策略、買進／停損／停利提醒價' },
                 { label: '價格提醒事件', count: next.alertEvents.length, note: '隨備份一起還原' },
                 { label: '銀行現金', count: next.cash.length, note: '' },
+                { label: '所在地與現金門檻', count: 1, note: `所在地 ${getLocationLabel(next.currentLocation)} · 手頭現金低額提醒 ${next.cashLowThreshold}` },
                 { label: '實體投資', count: next.investments.length, note: '' },
                 { label: '固定收入／支出', count: next.fixedIncomes.length + next.fixedExpenses.length, note: '' },
                 { label: '隨機支出', count: next.randomExpenses.length, note: '' },
@@ -9743,8 +9927,8 @@
         const stTrRows = (state.stockTrades || []).map((t) => ({ id: t.id, date: t.date, tradeType: t.tradeType, market: t.market, symbol: t.symbol, name: t.name || '', currency: t.currency || 'TWD', shares: t.shares, price: t.price, fee: t.fee || 0, tax: t.tax || 0, netAmount: t.netAmount || 0, realizedPnlTWD: t.realizedPnlTWD || 0, account: t.account || '', applyMode: t.applyMode || 'history_only', note: t.note || '' }));
         XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(stTrRows.length ? stTrRows : [{ id: '', date: '', tradeType: 'BUY', market: 'TW', symbol: '', name: '', currency: 'TWD', shares: 0, price: 0, fee: 0, tax: 0, netAmount: 0, realizedPnlTWD: 0, account: '', applyMode: 'history_only', note: '' }]), '股票交易紀錄');
 
-        const cRows = state.cash.map((c) => ({ id: c.id, bank: c.bank, currency: c.currency, amount: c.amount, note: c.note || '' }));
-        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(cRows.length ? cRows : [{ id: '', bank: '', currency: 'TWD', amount: 0, note: '' }]), '銀行現金');
+        const cRows = state.cash.map((c) => ({ id: c.id, bank: c.bank, currency: c.currency, amount: c.amount, kind: getCashKind(c), note: c.note || '' }));
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(cRows.length ? cRows : [{ id: '', bank: '', currency: 'TWD', amount: 0, kind: 'bank', note: '' }]), '銀行現金');
 
         const iRows = state.investments.map((i) => ({ id: i.id, name: i.name, status: getInvestmentStatus(i), investKind: getInvestmentKind(i), principal: i.principal, cycleMonths: i.cycleMonths, minRate: i.minRate, maxRate: i.maxRate, sourceInvestmentId: i.sourceInvestmentId || '', tags: normalizeInvTags(i.tags).join(', '), note: i.note || '' }));
         XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(iRows.length ? iRows : [{ id: '', name: '', status: 'active', investKind: 'recurring', principal: 0, cycleMonths: 12, minRate: 0, maxRate: 0, sourceInvestmentId: '', tags: '', note: '' }]), '實體投資');
@@ -9818,7 +10002,7 @@
             const parsed = {};
             if (stockSheet) parsed.stocks = stockSheet.filter((r) => r.symbol).map((r) => normalizeStockRecord({ id: r.id || uid('s'), symbol: String(r.symbol), name: String(r.name || r.symbol), market: String(r.market || 'US'), account: String(r.account || ''), currency: String(r.currency || 'USD'), shares: safeNum(r.shares), avgCost: safeNum(r.avgCost), currentPrice: safeNum(r.currentPrice), buyPrice: safeNum(r.buyPrice), stopPrice: safeNum(r.stopPrice), takeProfitPrice: safeNum(r.takeProfitPrice) }));
             if (stTradeSheet) parsed.stockTrades = stTradeSheet.filter((r) => r.symbol).map((r) => ({ id: r.id || uid('strd'), date: String(r.date || todayISO()), tradeType: String(r.tradeType || 'BUY'), market: String(r.market || 'TW'), symbol: String(r.symbol).toUpperCase(), name: String(r.name || ''), currency: String(r.currency || 'TWD'), shares: safeNum(r.shares), price: safeNum(r.price), fee: safeNum(r.fee), tax: safeNum(r.tax), netAmount: safeNum(r.netAmount), realizedPnlTWD: safeNum(r.realizedPnlTWD), account: String(r.account || ''), applyMode: String(r.applyMode || 'history_only'), note: String(r.note || '') }));
-            if (cashSheet) parsed.cash = cashSheet.filter((r) => r.bank).map((r) => ({ id: r.id || uid('c'), bank: String(r.bank), currency: String(r.currency || 'TWD'), amount: safeNum(r.amount), note: String(r.note || '') }));
+            if (cashSheet) parsed.cash = cashSheet.filter((r) => r.bank).map((r) => ({ id: r.id || uid('c'), bank: String(r.bank), currency: String(r.currency || 'TWD'), amount: safeNum(r.amount), kind: (r.kind === 'cash' || r.kind === 'bank') ? r.kind : 'bank', note: String(r.note || '') }));
             if (invSheet) parsed.investments = invSheet.filter((r) => r.name).map((r) => ({ id: r.id || uid('i'), name: String(r.name), status: ['active', 'paused', 'closed'].includes(String(r.status)) ? String(r.status) : getInvestmentStatus({ tags: normalizeInvTags(r.tags ?? r['標籤']) }), investKind: String(r.investKind) === 'one_time' ? 'one_time' : 'recurring', principal: safeNum(r.principal), cycleMonths: Math.max(1, safeNum(r.cycleMonths, 12)), minRate: safeNum(r.minRate), maxRate: safeNum(r.maxRate), principalRecoverable: false, ...(r.sourceInvestmentId ? { sourceInvestmentId: String(r.sourceInvestmentId) } : {}), tags: normalizeInvTags(r.tags ?? r['標籤']), note: String(r.note || '') }));
             if (incSheet) parsed.fixedIncomes = incSheet.filter((r) => r.name || r['收入名稱']).map((r) => ({ id: r.id || uid('inc'), name: String(r.name || r['收入名稱']), category: String(r.category || r['類別'] || '固定收入'), currency: String(r.currency || r['幣別'] || 'TWD'), amount: safeNum(r.amount ?? r['單期金額']), cycleMonths: Math.max(1, safeNum(r.cycleMonths ?? r['發放週期(月)'], 1)), payday: String(r.payday || r['每月發放日'] || ''), account: String(r.account || r['入帳帳戶'] || ''), status: String(r.status || 'active') === 'inactive' ? 'inactive' : 'active', note: String(r.note || r['備註'] || '') }));
             if (irecSheet) parsed.incomeReceipts = irecSheet.filter((r) => r.name && safeNum(r.actualAmount) > 0).map((r) => ({ id: r.id || uid('irec'), date: String(r.date || todayISO()), name: String(r.name), category: String(r.category || '固定收入'), currency: String(r.currency || 'TWD'), expectedAmount: safeNum(r.expectedAmount, safeNum(r.actualAmount)), actualAmount: safeNum(r.actualAmount), account: String(r.account || ''), depositMode: String(r.depositMode || 'new_deposit'), note: String(r.note || '') }));
@@ -9900,6 +10084,18 @@
         saveState();
         scheduleAutoRefresh();
         showToast('已儲存報價來源與自動更新設定（已同步雲端）');
+      });
+
+      document.getElementById('btn-save-location-cfg').addEventListener('click', () => {
+        const locSel = document.getElementById('cfg-location');
+        const thrInput = document.getElementById('cfg-cash-low-threshold');
+        const nextLoc = locSel ? locSel.value : 'TW';
+        const nextThr = thrInput ? Math.max(0, safeNum(thrInput.value, 5000)) : 5000;
+        state.currentLocation = LOCATION_VALUES.includes(nextLoc) ? nextLoc : 'TW';
+        state.cashLowThreshold = nextThr;
+        saveState();
+        renderAll();
+        showToast(`已儲存所在地設定：${getLocationLabel(state.currentLocation)}，手頭現金低額提醒 ${state.cashLowThreshold}`);
       });
 
       document.getElementById('btn-save-firebase').addEventListener('click', () => {
@@ -10435,20 +10631,31 @@
       }
 
       // --- Account Transfer Modal (Does NOT distort Income/Expense) ---
-      function openCashTransferModal() {
+      // 提領現金：沿用帳戶轉帳機制（mode='withdraw'），轉出限銀行帳戶、轉入限手頭現金帳戶
+      function openCashTransferModal(mode) {
+        const isWithdraw = mode === 'withdraw';
         const list = state.cash || [];
         if (list.length < 2) {
           showToast('請先至少建立 2 個現金帳戶再使用帳戶轉帳功能');
           return;
         }
-        const opts = (selId) => list.map((c) => `<option value="${escapeHtml(c.id)}" ${c.id === selId ? 'selected' : ''}>${escapeHtml(c.bank)} (${escapeHtml(c.currency)} · 餘額 ${fmtNum(c.amount, c.currency === 'TWD' ? 0 : 2)})</option>`).join('');
+        if (isWithdraw && (!list.some((c) => getCashKind(c) === 'bank') || !list.some((c) => getCashKind(c) === 'cash'))) {
+          showToast('提領現金需要至少一個銀行帳戶與一個手頭現金帳戶');
+          return;
+        }
+        const fromPool = isWithdraw ? list.filter((c) => getCashKind(c) === 'bank') : list;
+        const toPool = isWithdraw ? list.filter((c) => getCashKind(c) === 'cash') : list;
+        const locCur = getLocationCurrency();
+        const defFrom = fromPool.find((c) => String(c.currency || 'TWD').toUpperCase() === locCur) || fromPool[0];
+        const defTo = toPool.find((c) => String(c.currency || 'TWD').toUpperCase() === String(defFrom.currency || 'TWD').toUpperCase()) || toPool[0];
+        const opts = (selId, pool) => pool.map((c) => `<option value="${escapeHtml(c.id)}" ${c.id === selId ? 'selected' : ''}>${escapeHtml(c.bank)} (${escapeHtml(c.currency)} · 餘額 ${fmtNum(c.amount, c.currency === 'TWD' ? 0 : 2)})</option>`).join('');
         const html = `
           <div class="rounded-lg bg-[#f7f7f5] hairline px-3 py-2 text-[11px] text-zinc-600">
-            帳戶間轉帳會同時調整兩邊帳戶餘額，<strong>不會</strong>被計入收入或支出（避免重複計算）。
+            ${isWithdraw ? '提領現金是把銀行存款搬到手頭現金錢包，<strong>不會</strong>被計入收入或支出。' : '帳戶間轉帳會同時調整兩邊帳戶餘額，<strong>不會</strong>被計入收入或支出（避免重複計算）。'}
           </div>
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div><label class="block text-xs font-medium text-zinc-600 mb-1">轉出帳戶</label><select id="trf-from" name="fromId" class="w-full h-9 px-2.5 rounded-lg hairline text-xs bg-white">${opts(list[0].id)}</select></div>
-            <div><label class="block text-xs font-medium text-zinc-600 mb-1">轉入帳戶</label><select id="trf-to" name="toId" class="w-full h-9 px-2.5 rounded-lg hairline text-xs bg-white">${opts(list[1].id)}</select></div>
+            <div><label class="block text-xs font-medium text-zinc-600 mb-1">${isWithdraw ? '轉出銀行帳戶' : '轉出帳戶'}</label><select id="trf-from" name="fromId" class="w-full h-9 px-2.5 rounded-lg hairline text-xs bg-white">${opts(defFrom.id, fromPool)}</select></div>
+            <div><label class="block text-xs font-medium text-zinc-600 mb-1">${isWithdraw ? '轉入手頭現金' : '轉入帳戶'}</label><select id="trf-to" name="toId" class="w-full h-9 px-2.5 rounded-lg hairline text-xs bg-white">${opts(defTo.id, toPool)}</select></div>
           </div>
           <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div><label class="block text-xs font-medium text-zinc-600 mb-1">轉帳日期</label><input name="date" type="date" required value="${todayISO()}" class="w-full h-9 px-2.5 rounded-lg hairline text-xs font-mono-num" /></div>
@@ -10457,10 +10664,10 @@
           </div>
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div><label class="block text-xs font-medium text-zinc-600 mb-1">轉帳手續費（選填，由轉出帳戶扣除）</label><input name="fee" type="number" step="0.01" min="0" value="0" class="w-full h-9 px-3 rounded-lg hairline text-sm font-mono-num" /></div>
-            <div><label class="block text-xs font-medium text-zinc-600 mb-1">備註</label><input name="note" placeholder="例如：交割款調度、繳卡費" class="w-full h-9 px-3 rounded-lg hairline text-sm" /></div>
+            <div><label class="block text-xs font-medium text-zinc-600 mb-1">備註</label><input name="note" placeholder="${isWithdraw ? '例如：本週生活費' : '例如：交割款調度、繳卡費'}" class="w-full h-9 px-3 rounded-lg hairline text-sm" /></div>
           </div>
         `;
-        openFormModal('銀行與券商帳戶轉帳', html, (fd) => {
+        openFormModal(isWithdraw ? '提領現金' : '銀行與券商帳戶轉帳', html, (fd) => {
           const fromId = String(fd.get('fromId'));
           const toId = String(fd.get('toId'));
           if (fromId === toId) { showToast('轉出與轉入帳戶不能相同'); return; }
@@ -10483,7 +10690,7 @@
             id: uid('led'),
             date,
             type: '帳戶轉帳',
-            title: `${fromAcc.bank} → ${toAcc.bank}`,
+            title: isWithdraw ? `提領現金：${fromAcc.bank} → ${toAcc.bank}` : `${fromAcc.bank} → ${toAcc.bank}`,
             amountTWD: 0,
             note: `${fromAcc.currency} ${outAmt} → ${toAcc.currency} ${inAmt}${fee > 0 ? `（手續費 ${fromAcc.currency} ${fee}）` : ''}${note ? ` · ${note}` : ''}`
           });
@@ -10505,12 +10712,19 @@
 
           saveState();
           renderAll();
-          showToast(`已完成轉帳：${fromAcc.bank} → ${toAcc.bank}（${fromAcc.currency} ${outAmt}）`);
+          showToast(isWithdraw ? `已提領現金：${fromAcc.bank} → ${toAcc.bank}（${fromAcc.currency} ${outAmt}）` : `已完成轉帳：${fromAcc.bank} → ${toAcc.bank}（${fromAcc.currency} ${outAmt}）`);
         });
       }
 
       const btnCashTransfer = document.getElementById('btn-cash-transfer');
       if (btnCashTransfer) btnCashTransfer.addEventListener('click', openCashTransferModal);
+
+      const btnCashWithdraw = document.getElementById('btn-cash-withdraw');
+      if (btnCashWithdraw) btnCashWithdraw.addEventListener('click', () => openCashTransferModal('withdraw'));
+      const btnCashCardWithdraw = document.getElementById('btn-cashcard-withdraw');
+      if (btnCashCardWithdraw) btnCashCardWithdraw.addEventListener('click', () => openCashTransferModal('withdraw'));
+      const cashCardLocSel = document.getElementById('cashcard-location-select');
+      if (cashCardLocSel) cashCardLocSel.addEventListener('change', (e) => setCurrentLocation(e.target.value));
 
       document.getElementById('btn-fetch-fx').addEventListener('click', async () => {
         const fxBtn = document.getElementById('btn-fetch-fx');
