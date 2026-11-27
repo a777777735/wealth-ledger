@@ -765,3 +765,150 @@ test('20. NVIDIA / Kimi：選 NVIDIA 供應商、模型自動帶入 kimi-k3.1-pr
   expect(capturedAiRequest.model).toBe('moonshotai/kimi-k3.1-pro');
   expect(errors).toEqual([]);
 });
+
+test('21. 所在地：切到中國大陸後新增支出預設幣別 CNY；切回台灣變 TWD', async ({ page }) => {
+  const errors = trackPageErrors(page);
+  await gotoApp(page, {
+    seed: blankState({
+      currentLocation: 'TW',
+      cash: [
+        { id: 'c-twd', bank: '國泰世華', currency: 'TWD', amount: 100000, kind: 'bank', isDefaultDebit: true, note: '' },
+        { id: 'c-cny', bank: '中國工商', currency: 'CNY', amount: 50000, kind: 'bank', isDefaultDebit: true, note: '' },
+      ],
+    }),
+  });
+
+  // 台灣：新增支出預設 TWD + 國泰世華
+  await goToTab(page, 'expenses');
+  await page.locator('#btn-add-random-exp').click();
+  await expect(page.locator('#modal-title')).toHaveText('新增隨機支出');
+  const form = page.locator('#modal-form');
+  await expect(form.locator('select[name="currency"]')).toHaveValue('TWD');
+  await expect(form.locator('select[name="accountSelect"]')).toHaveValue('國泰世華');
+  await page.locator('#btn-modal-cancel').click();
+  await expect(page.locator('#form-modal')).toBeHidden();
+
+  // 切到中國大陸：預設變 CNY + 中國工商
+  await goToTab(page, 'settings');
+  await page.locator('#cfg-location').selectOption('CN');
+  await page.locator('#btn-save-location-cfg').click();
+  await expect(page.locator('#cfg-location')).toHaveValue('CN');
+  await goToTab(page, 'expenses');
+  await page.locator('#btn-add-random-exp').click();
+  await expect(form.locator('select[name="currency"]')).toHaveValue('CNY');
+  await expect(form.locator('select[name="accountSelect"]')).toHaveValue('中國工商');
+  await page.locator('#btn-modal-cancel').click();
+  await expect(page.locator('#form-modal')).toBeHidden();
+
+  // 切回台灣：預設回到 TWD，localStorage 也寫回 TW
+  await goToTab(page, 'settings');
+  await page.locator('#cfg-location').selectOption('TW');
+  await page.locator('#btn-save-location-cfg').click();
+  const state = await readState(page);
+  expect(state.currentLocation).toBe('TW');
+  await goToTab(page, 'expenses');
+  await page.locator('#btn-add-random-exp').click();
+  await expect(form.locator('select[name="currency"]')).toHaveValue('TWD');
+  expect(errors).toEqual([]);
+});
+
+test('22. 手頭現金：支出執行扣款後，現金錢包餘額正確減少，現金卡同步更新', async ({
+  page,
+}) => {
+  const errors = trackPageErrors(page);
+  await gotoApp(page, {
+    seed: blankState({
+      currentLocation: 'TW',
+      cash: [
+        { id: 'c-wallet', bank: '台灣現金', currency: 'TWD', amount: 10000, kind: 'cash', isDefaultDebit: false, note: '' },
+        { id: 'c-bank', bank: '國泰世華', currency: 'TWD', amount: 500000, kind: 'bank', isDefaultDebit: true, note: '' },
+      ],
+      randomExpenses: [
+        { id: 'rexp-e2e-1', date: todayISODate(), category: '餐飲美食', title: '午餐', currency: 'TWD', amount: 350, account: '台灣現金', deductStatus: 'unpaid', note: '' },
+      ],
+    }),
+  });
+
+  await goToTab(page, 'expenses');
+  await page.locator('button[data-action="pay-random-exp"][data-id="rexp-e2e-1"]').click();
+
+  let state = await readState(page);
+  expect(state.cash.find((c) => c.id === 'c-wallet').amount).toBe(9650);
+  expect(state.cash.find((c) => c.id === 'c-bank').amount).toBe(500000);
+  expect(state.randomExpenses.find((r) => r.id === 'rexp-e2e-1').deductStatus).toBe('paid');
+
+  // 總覽現金卡：餘額 9,650、本月現金支出 350、剩餘現金 9,650（已無未扣款）
+  await goToTab(page, 'overview');
+  await expect(page.locator('#cashcard-balance')).toContainText('9,650');
+  await expect(page.locator('#cashcard-spent')).toContainText('350');
+  await expect(page.locator('#cashcard-remaining')).toContainText('9,650');
+  expect(errors).toEqual([]);
+});
+
+test('23. 提領現金：銀行搬到現金錢包，兩邊餘額正確且不產生支出紀錄', async ({ page }) => {
+  const errors = trackPageErrors(page);
+  await gotoApp(page, {
+    seed: blankState({
+      currentLocation: 'TW',
+      cash: [
+        { id: 'c-bank', bank: '國泰世華', currency: 'TWD', amount: 500000, kind: 'bank', isDefaultDebit: true, note: '' },
+        { id: 'c-wallet', bank: '台灣現金', currency: 'TWD', amount: 2000, kind: 'cash', isDefaultDebit: false, note: '' },
+      ],
+    }),
+  });
+
+  await goToTab(page, 'cash');
+  await page.locator('#btn-cash-withdraw').click();
+  await expect(page.locator('#modal-title')).toHaveText('提領現金');
+  const form = page.locator('#modal-form');
+  // 轉出預設為銀行、轉入預設為現金錢包
+  await expect(form.locator('select[name="fromId"]')).toHaveValue('c-bank');
+  await expect(form.locator('select[name="toId"]')).toHaveValue('c-wallet');
+  await form.locator('input[name="outAmount"]').fill('20000');
+  await form.locator('button[type="submit"]').click();
+  await expect(page.locator('#form-modal')).toBeHidden();
+
+  const state = await readState(page);
+  expect(state.cash.find((c) => c.id === 'c-bank').amount).toBe(480000);
+  expect(state.cash.find((c) => c.id === 'c-wallet').amount).toBe(22000);
+  // 搬錢不是支出：不產生隨機支出紀錄
+  expect(state.randomExpenses).toEqual([]);
+  // 流水有轉帳紀錄，但金額為 0（不計入收支）
+  const trf = state.ledger.find((l) => l.type === '帳戶轉帳');
+  expect(trf).toBeTruthy();
+  expect(trf.amountTWD).toBe(0);
+  expect(trf.title).toContain('提領現金');
+  expect(errors).toEqual([]);
+});
+
+test('24. 舊資料相容：無 kind 欄位的現金帳戶載入後視為銀行，不報錯', async ({ page }) => {
+  const errors = trackPageErrors(page);
+  await gotoApp(page, {
+    // 故意不給 currentLocation / cashLowThreshold / kind，模擬舊備份
+    seed: blankState({
+      cash: [
+        { id: 'c-old', bank: '中國工商', currency: 'CNY', amount: 10000, isDefaultDebit: true, note: '' },
+      ],
+    }),
+  });
+
+  // 畫面：所在地預設台灣、現金列無手頭現金徽章、現金卡提示尚未建立錢包
+  await goToTab(page, 'settings');
+  await expect(page.locator('#cfg-location')).toHaveValue('TW');
+  await expect(page.locator('#cfg-cash-low-threshold')).toHaveValue('5000');
+  await goToTab(page, 'cash');
+  await expect(page.locator('#cash-tbody')).toContainText('中國工商');
+  await expect(page.locator('#cash-tbody')).not.toContainText('手頭現金');
+  await goToTab(page, 'overview');
+  await expect(page.locator('#cashcard-note')).toContainText('尚未建立');
+
+  // 觸發一次儲存後，localStorage 也補上預設值（舊帳戶 kind 為 bank）
+  await goToTab(page, 'settings');
+  await page.locator('#cfg-location').selectOption('CN');
+  await page.locator('#btn-save-location-cfg').click();
+  const state = await readState(page);
+  expect(state.currentLocation).toBe('CN');
+  expect(state.cashLowThreshold).toBe(5000);
+  expect(state.cash[0].kind).toBe('bank');
+  expect(errors).toEqual([]);
+});
